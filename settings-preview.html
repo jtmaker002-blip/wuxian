@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设置方案预览 · TwitCanva</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #050505; color: #e5e5e5; font-family: 'Inter', -apple-system, sans-serif; padding: 24px; min-height: 100vh; }
+  h1 { font-size: 14px; color: #666; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 24px; text-align: center; }
+  .preview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1200px; margin: 0 auto; }
+  @media (max-width: 1000px) { .preview-grid { grid-template-columns: 1fr; } }
+  .preview-card { background: #0f0f0f; border: 1px solid #222; border-radius: 12px; overflow: hidden; }
+  .preview-label { padding: 12px 16px; border-bottom: 1px solid #1a1a1a; display: flex; align-items: center; gap: 8px; }
+  .preview-label span { font-size: 12px; font-weight: 600; color: #888; }
+  .badge { background: #1a3a2a; color: #4ade80; font-size: 10px; padding: 2px 8px; border-radius: 20px; border: 1px solid #2a5a3a; }
+  .preview-content { padding: 16px; }
+
+  /* ── 登录页共用 ── */
+  .login-screen { background: #050505; border-radius: 8px; padding: 20px; text-align: center; border: 1px solid #1a1a1a; }
+  .login-logo { width: 36px; height: 36px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 8px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .login-title { font-size: 15px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+  .login-sub { font-size: 11px; color: #555; margin-bottom: 16px; }
+  .input-row { background: #111; border: 1px solid #222; border-radius: 6px; padding: 8px 10px; text-align: left; margin-bottom: 8px; }
+  .input-label { font-size: 9px; color: #555; margin-bottom: 2px; }
+  .input-val { font-size: 11px; color: #888; }
+  .btn-primary { background: #6366f1; color: #fff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 12px; width: 100%; cursor: pointer; margin-top: 8px; transition: background 0.2s; }
+  .btn-primary:hover { background: #5558e0; }
+
+  /* ── 方案一：Tab弹窗 ── */
+  .modal-overlay { background: rgba(0,0,0,0.7); border-radius: 8px; padding: 16px; }
+  .modal-box { background: #111; border: 1px solid #2a2a2a; border-radius: 10px; overflow: hidden; }
+  .modal-header { padding: 12px 14px; border-bottom: 1px solid #1e1e1e; display: flex; justify-content: space-between; align-items: center; }
+  .modal-title { font-size: 13px; font-weight: 600; color: #fff; }
+  .modal-close { color: #555; font-size: 16px; cursor: pointer; }
+  .tabs { display: flex; border-bottom: 1px solid #1e1e1e; }
+  .tab { padding: 8px 14px; font-size: 11px; color: #666; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+  .tab:hover { color: #999; }
+  .tab.active { color: #6366f1; border-bottom-color: #6366f1; }
+  .tab-content { padding: 12px 14px; }
+  .section-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .user-row { display: flex; align-items: center; gap: 8px; background: #0d0d0d; padding: 8px 10px; border-radius: 6px; border: 1px solid #1e1e1e; margin-bottom: 10px; }
+  .avatar { width: 28px; height: 28px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .user-info { flex: 1; }
+  .user-name { font-size: 11px; font-weight: 600; color: #ddd; }
+  .user-email { font-size: 9px; color: #555; }
+  .btn-sm { background: #1a1a1a; border: 1px solid #2a2a2a; color: #888; border-radius: 5px; padding: 4px 10px; font-size: 10px; cursor: pointer; transition: all 0.2s; }
+  .btn-sm:hover { background: #252525; color: #bbb; }
+  .model-row { display: flex; align-items: center; gap: 6px; padding: 5px 0; border-bottom: 1px solid #141414; }
+  .model-row:last-child { border-bottom: none; }
+  .model-name { font-size: 10px; color: #bbb; flex: 1; }
+  .model-tag { font-size: 9px; background: #1a2a3a; color: #60a5fa; padding: 1px 5px; border-radius: 3px; }
+  .checkbox { width: 12px; height: 12px; background: #6366f1; border-radius: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 8px; }
+  .checkbox.off { background: #1e1e1e; border: 1px solid #333; }
+  .token-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+  .token-select { flex: 1; background: #0d0d0d; border: 1px solid #2a2a2a; border-radius: 5px; padding: 6px 8px; font-size: 10px; color: #999; }
+  .cat-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px; margin: 8px 0 4px; }
+
+  /* ── 方案二：滚动面板 ── */
+  .scroll-box { background: #111; border: 1px solid #2a2a2a; border-radius: 10px; overflow: hidden; }
+  .scroll-header { padding: 10px 14px; border-bottom: 1px solid #1e1e1e; display: flex; justify-content: space-between; align-items: center; }
+  .section-block { border-bottom: 1px solid #141414; }
+  .section-toggle { padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
+  .section-toggle:hover { background: #151515; }
+  .section-toggle-title { font-size: 11px; font-weight: 600; color: #ccc; }
+  .chevron { font-size: 10px; color: #555; }
+  .section-inner { padding: 8px 14px 10px; background: #0d0d0d; }
+
+  /* ── 方案三：抽屉 ── */
+  .drawer-wrap { display: flex; gap: 0; background: #111; border: 1px solid #2a2a2a; border-radius: 10px; overflow: hidden; height: 280px; }
+  .drawer-nav { width: 90px; background: #0a0a0a; border-right: 1px solid #1e1e1e; padding: 12px 0; display: flex; flex-direction: column; }
+  .nav-item { padding: 8px 12px; font-size: 10px; color: #666; cursor: pointer; border-left: 2px solid transparent; transition: all 0.2s; }
+  .nav-item:hover { color: #999; background: rgba(255,255,255,0.02); }
+  .nav-item.active { color: #6366f1; border-left-color: #6366f1; background: rgba(99,102,241,0.05); }
+  .nav-section { padding: 8px 12px 4px; font-size: 9px; color: #333; text-transform: uppercase; letter-spacing: 1px; }
+  .drawer-content { flex: 1; padding: 14px; overflow-y: auto; }
+  .drawer-title { font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 12px; }
+
+  .arrow { color: #333; font-size: 20px; text-align: center; margin: 4px 0; }
+  .mini-canvas { background: #030303; border-radius: 6px; height: 28px; display: flex; align-items: center; padding: 0 10px; gap: 6px; margin-bottom: 8px; border: 1px solid #1a1a1a; }
+  .mini-node { width: 40px; height: 18px; background: #1a1a2e; border: 1px solid #2a2a4a; border-radius: 4px; }
+  .mini-conn { flex: 1; height: 1px; background: #222; }
+  .mini-topbar { background: #0d0d0d; border-radius: 4px; height: 20px; display: flex; align-items: center; padding: 0 8px; justify-content: space-between; margin-bottom: 6px; border: 1px solid #1a1a1a; }
+  .mini-icon { width: 14px; height: 14px; background: #1e1e1e; border-radius: 3px; }
+
+  /* 底部详细展示 */
+  .detail-section { max-width: 1200px; margin: 32px auto 0; }
+  .detail-title { font-size: 11px; color: #444; text-align: center; margin-bottom: 16px; }
+  .detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 1000px) { .detail-grid { grid-template-columns: 1fr; } }
+  .detail-card { background: #111; border: 1px solid #2a2a2a; border-radius: 10px; overflow: hidden; }
+  .detail-card-header { padding: 6px 12px; background: #0d0d0d; border-bottom: 1px solid #1e1e1e; font-size: 10px; }
+  .detail-card-body { padding: 12px; }
+</style>
+</head>
+<body>
+
+<h1>方案预览 · TwitCanva 设置集成</h1>
+
+<div class="preview-grid">
+
+  <!-- ===== 方案一 ===== -->
+  <div class="preview-card">
+    <div class="preview-label">
+      <span>方案一 · 三 Tab 弹窗</span>
+      <span class="badge">推荐</span>
+    </div>
+    <div class="preview-content">
+      <!-- 登录页 -->
+      <div class="login-screen" style="margin-bottom:10px">
+        <div class="login-logo">🎬</div>
+        <div class="login-title">登录 OpenAiTeach</div>
+        <div class="login-sub">登录后可使用完整功能</div>
+        <div class="input-row"><div class="input-label">账号</div><div class="input-val">user@example.com</div></div>
+        <div class="input-row"><div class="input-label">密码</div><div class="input-val">••••••••</div></div>
+        <button class="btn-primary">登录</button>
+      </div>
+      <div class="arrow">↓</div>
+      <!-- 设置弹窗 -->
+      <div class="modal-overlay">
+        <div class="modal-box">
+          <div class="modal-header">
+            <span class="modal-title">⚙️ 设置</span>
+            <span class="modal-close">✕</span>
+          </div>
+          <div class="tabs">
+            <div class="tab active">账号</div>
+            <div class="tab">Token</div>
+            <div class="tab">模型</div>
+          </div>
+          <div class="tab-content">
+            <div class="user-row">
+              <div class="avatar">👤</div>
+              <div class="user-info">
+                <div class="user-name">张三</div>
+                <div class="user-email">zhang@example.com</div>
+              </div>
+              <button class="btn-sm">退出</button>
+            </div>
+            <div class="section-label">账户余额</div>
+            <div style="font-size:20px;font-weight:700;color:#4ade80;margin-bottom:6px">¥ 128.50</div>
+            <div style="font-size:9px;color:#555">剩余额度 · 上次刷新 刚刚</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 方案二 ===== -->
+  <div class="preview-card">
+    <div class="preview-label">
+      <span>方案二 · 滚动面板</span>
+    </div>
+    <div class="preview-content">
+      <div class="login-screen" style="margin-bottom:10px">
+        <div class="login-logo">🎬</div>
+        <div class="login-title">登录 OpenAiTeach</div>
+        <div class="login-sub">统一管理你的 AI 访问</div>
+        <div class="input-row"><div class="input-label">账号</div><div class="input-val">user@example.com</div></div>
+        <div class="input-row"><div class="input-label">密码</div><div class="input-val">••••••••</div></div>
+        <button class="btn-primary">登录</button>
+      </div>
+      <div class="arrow">↓</div>
+      <div class="scroll-box">
+        <div class="scroll-header">
+          <span style="font-size:12px;font-weight:600;color:#fff">⚙️ 设置</span>
+          <span style="font-size:10px;color:#555">✕</span>
+        </div>
+        <div class="section-block">
+          <div class="section-toggle">
+            <span class="section-toggle-title">👤 账号</span>
+            <span class="chevron">▲</span>
+          </div>
+          <div class="section-inner">
+            <div class="user-row" style="margin:0">
+              <div class="avatar">👤</div>
+              <div class="user-info"><div class="user-name">张三</div><div class="user-email">zhang@example.com</div></div>
+              <button class="btn-sm">退出</button>
+            </div>
+          </div>
+        </div>
+        <div class="section-block">
+          <div class="section-toggle">
+            <span class="section-toggle-title">🔑 Token</span>
+            <span class="chevron">▲</span>
+          </div>
+          <div class="section-inner">
+            <div class="token-row">
+              <div class="token-select">openaiteach的初始令牌</div>
+              <button class="btn-sm">刷新</button>
+            </div>
+          </div>
+        </div>
+        <div class="section-block">
+          <div class="section-toggle">
+            <span class="section-toggle-title">🤖 模型选择</span>
+            <span class="chevron">▼</span>
+          </div>
+        </div>
+        <div class="section-block" style="border:none">
+          <div class="section-toggle">
+            <span class="section-toggle-title">🎬 视频模型</span>
+            <span class="chevron">▼</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 方案三 ===== -->
+  <div class="preview-card">
+    <div class="preview-label">
+      <span>方案三 · 右侧抽屉</span>
+    </div>
+    <div class="preview-content">
+      <div class="login-screen" style="margin-bottom:10px">
+        <div class="login-logo">🎬</div>
+        <div class="login-title">登录 OpenAiTeach</div>
+        <div class="login-sub">统一管理你的 AI 访问</div>
+        <div class="input-row"><div class="input-label">账号</div><div class="input-val">user@example.com</div></div>
+        <div class="input-row"><div class="input-label">密码</div><div class="input-val">••••••••</div></div>
+        <button class="btn-primary">登录</button>
+      </div>
+      <div class="arrow">↓</div>
+      <!-- 抽屉示意 -->
+      <div style="background:#030303;border-radius:6px;overflow:hidden;border:1px solid #1a1a1a">
+        <div class="mini-topbar">
+          <span style="font-size:9px;color:#666">TwitCanva 🎬</span>
+          <div style="display:flex;gap:4px">
+            <div class="mini-icon"></div>
+            <div class="mini-icon" style="background:#1a1a2e"></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:0;height:160px">
+          <div style="flex:1;padding:8px;opacity:0.4">
+            <div class="mini-canvas"><div class="mini-node"></div><div class="mini-conn"></div><div class="mini-node"></div></div>
+            <div class="mini-canvas"><div class="mini-node"></div><div class="mini-conn"></div><div class="mini-node"></div></div>
+          </div>
+          <div class="drawer-wrap" style="width:200px;height:160px;border-radius:0;border-top:none;border-bottom:none;border-right:none">
+            <div class="drawer-nav">
+              <div class="nav-section">账号</div>
+              <div class="nav-item active">👤 账号</div>
+              <div class="nav-item">🔑 Token</div>
+              <div class="nav-section">模型</div>
+              <div class="nav-item">💬 LLM</div>
+              <div class="nav-item">🖼️ 图像</div>
+              <div class="nav-item">🎬 视频</div>
+              <div class="nav-item">🔊 语音</div>
+            </div>
+            <div class="drawer-content">
+              <div class="drawer-title">账号</div>
+              <div class="user-row" style="margin-bottom:8px">
+                <div class="avatar" style="width:22px;height:22px;font-size:10px">👤</div>
+                <div class="user-info"><div class="user-name" style="font-size:10px">张三</div><div class="user-email">已登录</div></div>
+              </div>
+              <div style="font-size:9px;color:#555;margin-bottom:4px">余额</div>
+              <div style="font-size:14px;font-weight:700;color:#4ade80">¥128.50</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- 下方 Tab 内容切换演示 -->
+<div class="detail-section">
+  <div class="detail-title">方案一 · Tab 内容展开预览</div>
+  <div class="detail-grid">
+    <!-- Token Tab -->
+    <div class="detail-card">
+      <div class="detail-card-header" style="color:#6366f1">🔑 Token Tab</div>
+      <div class="detail-card-body">
+        <div class="section-label">从账号获取</div>
+        <div class="token-row" style="margin-bottom:8px">
+          <div class="token-select">openaiteach的初始令牌</div>
+          <button class="btn-sm">刷新</button>
+        </div>
+        <div class="section-label" style="margin-top:8px">手动输入</div>
+        <div style="display:flex;gap:6px">
+          <div class="token-select" style="font-size:10px;color:#555">sk-xxxxxxxxxx...</div>
+          <button class="btn-sm">保存</button>
+        </div>
+      </div>
+    </div>
+    <!-- 模型 Tab -->
+    <div class="detail-card">
+      <div class="detail-card-header" style="color:#6366f1">🤖 模型 Tab</div>
+      <div class="detail-card-body">
+        <div class="cat-label">LLM 语言模型</div>
+        <div class="model-row"><div class="checkbox">✓</div><div class="model-name">gpt-4o</div><div class="model-tag">HOT</div></div>
+        <div class="model-row"><div class="checkbox">✓</div><div class="model-name">claude-3-5-sonnet</div><div class="model-tag">HOT</div></div>
+        <div class="model-row"><div class="checkbox off"></div><div class="model-name">gemini-1.5-pro</div></div>
+        <div class="cat-label" style="margin-top:6px">Image 图像</div>
+        <div class="model-row"><div class="checkbox">✓</div><div class="model-name">dall-e-3</div><div class="model-tag">HOT</div></div>
+        <div class="model-row"><div class="checkbox off"></div><div class="model-name">stable-diffusion-xl</div></div>
+      </div>
+    </div>
+    <!-- 画布中的效果 -->
+    <div class="detail-card">
+      <div class="detail-card-header" style="color:#4ade80">✅ 效果 · 节点下拉框</div>
+      <div class="detail-card-body">
+        <div class="section-label">节点选择模型</div>
+        <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;padding:8px;margin-bottom:8px">
+          <div style="font-size:9px;color:#555;margin-bottom:4px">LLM 节点</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="token-select">gpt-4o ▾</div>
+          </div>
+        </div>
+        <div style="background:#0d0d0d;border:1px solid #2a2a2a;border-radius:6px;padding:8px">
+          <div style="font-size:9px;color:#555;margin-bottom:4px">Image 节点</div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="token-select">dall-e-3 ▾</div>
+          </div>
+        </div>
+        <div style="margin-top:8px;font-size:9px;color:#555">只显示你勾选的模型 ✓</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="text-align:center;margin-top:32px;padding:16px;border-top:1px solid #1a1a1a">
+  <div style="font-size:11px;color:#444;margin-bottom:8px">选择你喜欢的方案</div>
+  <div style="font-size:13px;color:#888">方案一（推荐）| 方案二 | 方案三</div>
+</div>
+
+</body>
+</html>

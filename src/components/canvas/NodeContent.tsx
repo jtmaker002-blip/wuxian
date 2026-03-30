@@ -8,6 +8,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
+import { useTranslation } from 'react-i18next';
 
 interface NodeContentProps {
     data: NodeData;
@@ -53,6 +54,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     onUpdate,
     onPostToX
 }) => {
+    const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Local state for text node textarea to prevent lag
@@ -137,7 +139,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     {isLoading && (
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-20">
                             <Loader2 size={40} className="animate-spin text-blue-400" />
-                            <span className="mt-3 text-sm text-white font-medium">Regenerating...</span>
+                            <span className="mt-3 text-sm text-white font-medium">{t('nodeContent.regenerating')}</span>
                         </div>
                     )}
                 </div>
@@ -161,7 +163,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                         onUpdate?.(data.id, { prompt: localPrompt });
                                     }
                                 }}
-                                placeholder="Write your text content here..."
+                                placeholder={t('nodeContent.writeTextHere')}
                                 className="w-full bg-transparent text-white text-sm resize-none outline-none placeholder:text-neutral-600"
                                 style={{ minHeight: data.isPromptExpanded ? '300px' : '150px' }}
                                 autoFocus
@@ -172,10 +174,10 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                     onClick={() => onUpdate?.(data.id, { isPromptExpanded: !data.isPromptExpanded })}
                                     onPointerDown={(e) => e.stopPropagation()}
                                     className="flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-neutral-500 hover:text-white hover:bg-neutral-700 rounded transition-colors"
-                                    title={data.isPromptExpanded ? 'Shrink text area' : 'Expand text area'}
+                                    title={data.isPromptExpanded ? t('nodeContent.shrinkPrompt') : t('nodeContent.expandPrompt')}
                                 >
                                     {data.isPromptExpanded ? <Shrink size={12} /> : <Expand size={12} />}
-                                    <span>{data.isPromptExpanded ? 'Shrink' : 'Expand'}</span>
+                                    <span>{data.isPromptExpanded ? t('nodeContent.shrink') : t('nodeContent.expand')}</span>
                                 </button>
                             </div>
                         </div>
@@ -184,24 +186,24 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                         <div className="p-5 flex flex-col gap-4">
                             {/* Header */}
                             <div className="text-neutral-500 text-sm font-medium">
-                                Try to:
+                                {t('nodeContent.tryTo')}
                             </div>
 
                             {/* Menu Options */}
                             <div className="flex flex-col gap-1">
                                 <TextNodeMenuItem
                                     icon={<Pencil size={16} />}
-                                    label="Write your own content"
+                                    label={t('nodeContent.writeOwnContent')}
                                     onClick={() => onWriteContent?.(data.id)}
                                 />
                                 <TextNodeMenuItem
                                     icon={<Video size={16} />}
-                                    label="Text to Video"
+                                    label={t('nodeContent.textToVideo')}
                                     onClick={() => onTextToVideo?.(data.id)}
                                 />
                                 <TextNodeMenuItem
                                     icon={<ImageIcon size={16} />}
-                                    label="Text to Image"
+                                    label={t('nodeContent.textToImage')}
                                     onClick={() => onTextToImage?.(data.id)}
                                 />
                             </div>
@@ -221,7 +223,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             <div className="absolute inset-0 bg-black/40" />
                             <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white font-medium flex items-center gap-1">
                                 <ImageIcon size={10} />
-                                Input Frame
+                                {t('nodeContent.inputFrame')}
                             </div>
                         </div>
                     )}
@@ -229,7 +231,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     {isLoading ? (
                         <div className="relative z-10 flex flex-col items-center gap-2">
                             <Loader2 size={32} className="animate-spin text-blue-400" />
-                            <span className="text-xs text-neutral-500 font-medium">Generating...</span>
+                            <span className="text-xs text-neutral-500 font-medium">{t('nodeContent.generating')}</span>
                         </div>
                     ) : (
                         <div className="relative z-10 flex flex-col items-center gap-3">
@@ -249,7 +251,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                         className="flex items-center gap-2 px-4 py-2 bg-neutral-800/80 hover:bg-neutral-700 rounded-lg text-white text-sm font-medium transition-colors"
                                     >
                                         <Upload size={16} />
-                                        Upload
+                                        {t('nodeContent.upload')}
                                     </button>
                                 </>
                             )}
@@ -265,24 +267,24 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                 <>
                                     <div className="text-neutral-500 text-sm font-medium">
                                         {isVideoType && inputUrl
-                                            ? "Ready to animate"
+                                            ? t('nodeContent.readyToAnimate')
                                             : isVideoType
-                                                ? "Waiting for input..."
+                                                ? t('nodeContent.waitingForInput')
                                                 : isLocalModel
-                                                    ? "Select a model and enter prompt"
-                                                    : "Try to:"
+                                                    ? t('nodeContent.selectModelAndPrompt')
+                                                    : t('nodeContent.tryTo')
                                         }
                                     </div>
                                     {!isVideoType && !isLocalModel && (
                                         <div className="flex flex-col gap-1 w-full px-2">
                                             <TextNodeMenuItem
                                                 icon={<ImageIcon size={16} />}
-                                                label="Image to Image"
+                                                label={t('nodeContent.imageToImage')}
                                                 onClick={() => onImageToImage?.(data.id)}
                                             />
                                             <TextNodeMenuItem
                                                 icon={<Film size={16} />}
-                                                label="Image to Video"
+                                                label={t('nodeContent.imageToVideo')}
                                                 onClick={() => onImageToVideo?.(data.id)}
                                             />
                                         </div>

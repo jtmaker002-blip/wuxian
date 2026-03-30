@@ -10,6 +10,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, Trash2, Maximize2, Image as ImageIcon, Video } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // ============================================================================
 // CONSTANTS
@@ -50,6 +51,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
     panelY = 200,
     canvasTheme = 'dark'
 }) => {
+    const { t } = useTranslation();
     // --- State ---
     const [activeTab, setActiveTab] = useState<'images' | 'videos'>('images');
     const [assets, setAssets] = useState<AssetMetadata[]>([]);
@@ -237,7 +239,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                             onClick={() => setActiveTab('images')}
                         >
                             <ImageIcon size={16} />
-                            Image History ({imageTotalCount})
+                            {t('historyPanel.imageHistory', { count: imageTotalCount })}
                         </button>
                         <button
                             className={`text-sm font-medium transition-colors pb-1 flex items-center gap-2 ${activeTab === 'videos'
@@ -247,7 +249,7 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                             onClick={() => setActiveTab('videos')}
                         >
                             <Video size={16} />
-                            Video History ({videoTotalCount})
+                            {t('historyPanel.videoHistory', { count: videoTotalCount })}
                         </button>
                     </div>
                     <button
@@ -276,8 +278,8 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
                             <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-3 ${isDark ? 'bg-neutral-800' : 'bg-neutral-100'}`}>
                                 {activeTab === 'images' ? <ImageIcon size={24} /> : <Video size={24} />}
                             </div>
-                            <p>No {activeTab} found</p>
-                            <p className="text-xs mt-1">Generated {activeTab} will appear here</p>
+                            <p>{t('historyPanel.noFound', { type: activeTab === 'images' ? t('historyPanel.images') : t('historyPanel.videos') })}</p>
+                            <p className="text-xs mt-1">{t('historyPanel.willAppearHere', { type: activeTab === 'images' ? t('historyPanel.images') : t('historyPanel.videos') })}</p>
                         </div>
                     ) : (
                         <div className="space-y-6">
@@ -347,22 +349,22 @@ export const HistoryPanel: React.FC<HistoryPanelProps> = ({
             {deleteConfirm && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className={`border rounded-2xl p-6 w-[340px] shadow-2xl ${isDark ? 'bg-[#1a1a1a] border-neutral-700' : 'bg-white border-neutral-200'}`}>
-                        <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-neutral-900'}`}>Delete Asset</h3>
+                        <h3 className={`text-lg font-semibold mb-2 ${isDark ? 'text-white' : 'text-neutral-900'}`}>{t('historyPanel.deleteTitle')}</h3>
                         <p className={`text-sm mb-6 ${isDark ? 'text-neutral-400' : 'text-neutral-600'}`}>
-                            Are you sure you want to delete this {activeTab === 'images' ? 'image' : 'video'}? This action cannot be undone.
+                            {activeTab === 'images' ? t('historyPanel.deleteConfirmImage') : t('historyPanel.deleteConfirmVideo')}
                         </p>
                         <div className="flex gap-3 justify-end">
                             <button
                                 onClick={() => setDeleteConfirm(null)}
                                 className={`px-4 py-2 rounded-lg text-sm transition-colors ${isDark ? 'bg-neutral-800 hover:bg-neutral-700 text-white' : 'bg-neutral-100 hover:bg-neutral-200 text-neutral-900'}`}
                             >
-                                Cancel
+                                {t('historyPanel.cancel')}
                             </button>
                             <button
                                 onClick={() => handleDelete(deleteConfirm)}
                                 className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-500 text-white text-sm transition-colors"
                             >
-                                Delete
+                                {t('historyPanel.delete')}
                             </button>
                         </div>
                     </div>

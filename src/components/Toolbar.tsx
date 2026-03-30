@@ -9,6 +9,7 @@ import {
   Plus,
   Film
 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // ============================================================================
 // TIKTOK ICON COMPONENT
@@ -55,6 +56,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onToolsOpen,
   canvasTheme = 'dark'
 }) => {
+  const { t } = useTranslation();
   const [isToolsOpen, setIsToolsOpen] = useState(false);
   const toolsRef = useRef<HTMLDivElement>(null);
 
@@ -99,14 +101,14 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           className={`hover:scale-125 transition-all duration-200 ${isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-500 hover:text-neutral-900'
             }`}
           onClick={onWorkflowsClick}
-          title="My Workflows"
+          title={t('toolbar.myWorkflows')}
         >
           <LayoutGrid size={20} />
         </button>
         <button
           className={`hover:scale-125 transition-all duration-200 ${isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-500 hover:text-neutral-900'
             }`}
-          title="Assets"
+          title={t('toolbar.assets')}
           onClick={onAssetsClick}
         >
           <ImageIcon size={20} />
@@ -115,7 +117,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           className={`hover:scale-125 transition-all duration-200 ${isDark ? 'text-neutral-400 hover:text-white' : 'text-neutral-500 hover:text-neutral-900'
             }`}
           onClick={onHistoryClick}
-          title="History"
+          title={t('toolbar.history')}
         >
           <History size={20} />
         </button>
@@ -133,7 +135,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
               }
               setIsToolsOpen(!isToolsOpen);
             }}
-            title="Tools"
+            title={t('toolbar.tools')}
           >
             <Wrench size={20} />
           </button>
@@ -151,8 +153,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   <TikTokIcon size={16} className={isDark ? 'text-white' : 'text-neutral-700'} />
                 </div>
                 <div className="text-left">
-                  <p className={`text-sm ${isDark ? 'text-neutral-200 group-hover:text-white' : 'text-neutral-700 group-hover:text-neutral-900'}`}>Import TikTok</p>
-                  <p className={`text-xs ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>Download without watermark</p>
+                  <p className={`text-sm ${isDark ? 'text-neutral-200 group-hover:text-white' : 'text-neutral-700 group-hover:text-neutral-900'}`}>{t('toolbar.importTikTok')}</p>
+                  <p className={`text-xs ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>{t('toolbar.importTikTokDesc')}</p>
                 </div>
               </button>
 
@@ -166,8 +168,8 @@ export const Toolbar: React.FC<ToolbarProps> = ({
                   <Film size={16} className={isDark ? 'text-white' : 'text-neutral-700'} />
                 </div>
                 <div className="text-left">
-                  <p className={`text-sm ${isDark ? 'text-neutral-200 group-hover:text-white' : 'text-neutral-700 group-hover:text-neutral-900'}`}>Storyboard Generator</p>
-                  <p className={`text-xs ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>Create scenes with AI</p>
+                  <p className={`text-sm ${isDark ? 'text-neutral-200 group-hover:text-white' : 'text-neutral-700 group-hover:text-neutral-900'}`}>{t('toolbar.storyboardGenerator')}</p>
+                  <p className={`text-xs ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>{t('toolbar.storyboardGeneratorDesc')}</p>
                 </div>
               </button>
             </div>

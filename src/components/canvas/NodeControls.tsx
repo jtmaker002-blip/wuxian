@@ -8,11 +8,38 @@
 
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { Sparkles, Banana, Settings2, Check, ChevronDown, ChevronUp, GripVertical, Image as ImageIcon, Film, Clock, Expand, Shrink, Monitor, Crop, HardDrive } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { OpenAIIcon, GoogleIcon, KlingIcon, HailuoIcon } from '../icons/BrandIcons';
 import { useFaceDetection } from '../../hooks/useFaceDetection';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { LocalModel, getLocalModels } from '../../services/localModelService';
+import { API_SETTINGS_CHANGED_EVENT } from '../../hooks/useApiSettings';
+
+// 读取 API 设置中已启用的模型 ID 集合
+const readEnabledModelIds = (): Set<string> | null => {
+    try {
+        const raw = localStorage.getItem('twitcanva_api_settings');
+        if (raw) {
+            const parsed = JSON.parse(raw);
+            if (parsed.enabledModelIds && Array.isArray(parsed.enabledModelIds)) {
+                return new Set(parsed.enabledModelIds);
+            }
+        }
+    } catch { /* 读取失败用默认 */ }
+    return null; // null = 没有设置过，全部显示
+};
+
+// 用于触发重新渲染的 hook
+const useEnabledModelIds = (): Set<string> | null => {
+    const [ids, setIds] = React.useState<Set<string> | null>(() => readEnabledModelIds());
+    React.useEffect(() => {
+        const handler = () => setIds(readEnabledModelIds());
+        window.addEventListener(API_SETTINGS_CHANGED_EVENT, handler);
+        return () => window.removeEventListener(API_SETTINGS_CHANGED_EVENT, handler);
+    }, []);
+    return ids;
+};
 
 interface NodeControlsProps {
     data: NodeData;
@@ -175,6 +202,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     zoom,
     canvasTheme = 'dark'
 }) => {
+    const { t } = useTranslation();
+    const enabledIds = useEnabledModelIds();
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [showSizeDropdown, setShowSizeDropdown] = useState(false);
     const [showAspectRatioDropdown, setShowAspectRatioDropdown] = useState(false);
@@ -386,8 +415,10 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             : (inputUrl || imageInputCount > 0) ? 'image-to-video'
                 : 'text-to-video';
 
-    // Filter video models based on mode
+    // Filter video models based on mode + API settings
     const availableVideoModels = VIDEO_MODELS.filter(model => {
+        // 先按 API 设置过滤（如果有设置的话）
+        if (enabledIds && !enabledIds.has(model.id)) return false;
         if (videoGenerationMode === 'motion-control') return model.id === 'kling-v2-6'; // Only Kling 2.6 for now
         if (videoGenerationMode === 'text-to-video') return model.supportsTextToVideo;
         if (videoGenerationMode === 'image-to-video') return model.supportsImageToVideo;
@@ -465,10 +496,12 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     // Image model selection logic
     const currentImageModel = IMAGE_MODELS.find(m => m.id === data.imageModel) || IMAGE_MODELS[0];
 
-    // Filter image models based on connected inputs
+    // Filter image models based on connected inputs + API settings
     // 0 inputs = all models, 1 input = needs supportsImageToImage, 2+ inputs = needs supportsMultiImage
     const inputCount = connectedImageNodes.length;
     const availableImageModels = IMAGE_MODELS.filter(model => {
+        // 先按 API 设置过滤（如果有设置的话）
+        if (enabledIds && !enabledIds.has(model.id)) return false;
         if (inputCount === 0) return true; // Text-to-image: all models work
         if (inputCount === 1) return model.supportsImageToImage; // Single ref: filter out V2.1
         return model.supportsMultiImage; // Multi-ref: filter out V1, V1.5, V2 New
@@ -606,10 +639,10 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         className={`w-full bg-transparent text-sm outline-none resize-none font-light ${isDark ? 'text-white placeholder-neutral-600' : 'text-neutral-900 placeholder-neutral-400'}`}
                         placeholder={
                             data.type === NodeType.VIDEO && isFrameToFrame && currentVideoModel.provider === 'kling'
-                                ? "Prompt optional for Kling frame-to-frame..."
+                                ? t('nodeControls.promptOptionalKling')
                                 : data.type === NodeType.VIDEO && inputUrl
-                                    ? "Describe how to animate this frame..."
-                                    : "Describe what you want to generate..."
+                                    ? t('nodeControls.describeAnimation')
+                                    : t('nodeControls.describeGeneration')
                         }
                         rows={data.isPromptExpanded ? 12 : 4}
                         value={localPrompt}
@@ -652,7 +685,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                     </svg>
                     <span>
-                        <strong>Motion Control</strong> requires a character image. Please connect an Image node to define the character appearance.
+                        {t('nodeControls.motionControlRequiresCharacter')}
                     </span>
                 </div>
             )}
@@ -669,7 +702,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     className="flex items-center gap-1.5 text-xs font-medium bg-[#252525] hover:bg-[#333] border border-neutral-700 text-white px-2.5 py-1.5 rounded-lg transition-colors"
                                 >
                                     <HardDrive size={12} className="text-purple-400" />
-                                    <span className="font-medium">{selectedLocalModel?.name || 'Select Model'}</span>
+                                    <span className="font-medium">{selectedLocalModel?.name || t('nodeControls.selectModel')}</span>
                                     <ChevronDown size={12} className="ml-0.5 opacity-50" />
                                 </button>
 
@@ -683,11 +716,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         </div>
 
                                         {isLoadingLocalModels ? (
-                                            <div className="px-3 py-4 text-xs text-neutral-500 text-center">Loading models...</div>
+                                            <div className="px-3 py-4 text-xs text-neutral-500 text-center">{t('nodeControls.loadingModels')}</div>
                                         ) : localModels.length === 0 ? (
                                             <div className="px-3 py-4 text-xs text-neutral-500 text-center">
-                                                <p>No models found</p>
-                                                <p className="text-[10px] mt-1">Add .safetensors files to models/</p>
+                                                <p>{t('nodeControls.noModelsFound')}</p>
+                                                <p className="text-[10px] mt-1">{t('nodeControls.addSafetensors')}</p>
                                             </div>
                                         ) : (
                                             localModels.map(model => (
@@ -1100,7 +1133,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             ? 'bg-white text-neutral-900 hover:bg-neutral-100 active:scale-95'
                                             : 'bg-neutral-900 text-white hover:bg-neutral-800 active:scale-95'
                                         }`}
-                                    title={isFaceModeBlocked ? 'Cannot generate: No face detected in reference image' : 'Generate'}
+                                    title={isFaceModeBlocked ? t('nodeControls.cannotGenerateNoFace') : t('nodeControls.generate')}
                                 >
                                     <svg
                                         viewBox="0 0 24 24"
@@ -1119,7 +1152,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             {/* Kling V1.5 Reference Settings - For Image nodes with connected input */}
             {!isVideoNode && data.imageModel === 'kling-v1-5' && connectedImageNodes.length > 0 && (
                 <div className="mt-3 pt-3 border-t border-neutral-800">
-                    <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">Reference Settings</div>
+                    <div className="text-[10px] text-neutral-500 uppercase tracking-wider mb-2">{t('nodeControls.referenceSettings')}</div>
 
                     {/* Mode Tabs */}
                     <div className="flex gap-1 mb-3 p-1 bg-neutral-800/50 rounded-lg">
@@ -1183,7 +1216,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     {/* Loading indicator */}
                                     {data.klingReferenceMode === 'face' && data.faceDetectionStatus === 'loading' && (
                                         <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                                            <div className="text-xs text-white">Detecting faces...</div>
+                                            <div className="text-xs text-white">{t('nodeControls.detectingFaces')}</div>
                                         </div>
                                     )}
                                 </div>
@@ -1215,7 +1248,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
-                                <span>No face detected. Please use a reference image with a clearer face.</span>
+                                <span>{t('nodeControls.noFaceDetected')}</span>
                             </div>
                         </div>
                     )}
@@ -1225,7 +1258,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         <>
                             <div className="space-y-1 mb-3">
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-neutral-400">Face Reference</span>
+                                    <span className="text-neutral-400">{t('nodeControls.faceReference')}</span>
                                     <span className="text-white font-medium">{data.klingFaceIntensity ?? 65}</span>
                                 </div>
                                 <input
@@ -1239,7 +1272,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             </div>
                             <div className="space-y-1">
                                 <div className="flex justify-between text-[10px]">
-                                    <span className="text-neutral-400">Subject Reference</span>
+                                    <span className="text-neutral-400">{t('nodeControls.subjectReference')}</span>
                                     <span className="text-white font-medium">{data.klingSubjectIntensity ?? 50}</span>
                                 </div>
                                 <input
@@ -1258,7 +1291,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                     {data.klingReferenceMode === 'face' && data.faceDetectionStatus === 'success' && (
                         <div className="space-y-1">
                             <div className="flex justify-between text-[10px]">
-                                <span className="text-neutral-400">Reference Strength</span>
+                                <span className="text-neutral-400">{t('nodeControls.referenceStrength')}</span>
                                 <span className="text-white font-medium">{data.klingFaceIntensity ?? 42}</span>
                             </div>
                             <input
@@ -1283,7 +1316,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             className="w-full flex items-center justify-center gap-1 cursor-pointer"
                         >
                             <span className="text-[10px] text-neutral-600 uppercase tracking-widest hover:text-neutral-400">
-                                Advanced Settings
+                                {t('nodeControls.advancedSettings')}
                             </span>
                             {showAdvanced ? (
                                 <ChevronUp size={12} className="text-neutral-600" />
@@ -1301,7 +1334,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
                                         </svg>
-                                        <span className="text-[11px] text-neutral-300">Audio</span>
+                                        <span className="text-[11px] text-neutral-300">{t('nodeControls.audio')}</span>
                                         <button
                                             onClick={() => onUpdate(data.id, { generateAudio: !(data.generateAudio !== false) })}
                                             className={`relative w-8 h-4 rounded-full transition-colors ${data.generateAudio !== false ? 'bg-cyan-600' : 'bg-neutral-700'}`}
@@ -1317,8 +1350,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 {connectedImageNodes.length >= 2 && (
                                     <div className="space-y-2">
                                         <label className="text-[10px] text-neutral-500 uppercase tracking-wider">
-                                            {videoGenerationMode === 'motion-control' ? 'Input References' : 'Connected Frames'}
-                                            {videoGenerationMode !== 'motion-control' && <span className="text-neutral-600"> (drag to reorder)</span>}
+                                            {videoGenerationMode === 'motion-control' ? t('nodeControls.inputReferences') : t('nodeControls.connectedFrames')}
                                         </label>
 
                                         {frameInputsWithUrls.length === 0 ? (
@@ -1337,11 +1369,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                             {input.url ? (
                                                                 <img
                                                                     src={input.url}
-                                                                    alt={input.type === NodeType.VIDEO ? 'Motion Ref' : 'Character Ref'}
+                                                                    alt={input.type === NodeType.VIDEO ? t('nodeControls.motionRef') : t('nodeControls.characterRef')}
                                                                     className="w-full h-full object-contain"
                                                                 />
                                                             ) : (
-                                                                <div className="text-[10px] text-neutral-600">No Preview</div>
+                                                                <div className="text-[10px] text-neutral-600">{t('nodeControls.noPreview')}</div>
                                                             )}
                                                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                                                             <div className="absolute bottom-1 left-1 right-1">
@@ -1349,7 +1381,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                                     ? 'bg-purple-600/80 text-white'
                                                                     : 'bg-blue-600/80 text-white'
                                                                     }`}>
-                                                                    {input.type === NodeType.VIDEO ? 'MOTION REF' : 'CHARACTER REF'}
+                                                                    {input.type === NodeType.VIDEO ? t('nodeControls.motionRef').toUpperCase() : t('nodeControls.characterRef').toUpperCase()}
                                                                 </span>
                                                             </div>
                                                         </div>
@@ -1386,7 +1418,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                                 ? 'bg-green-600/30 text-green-400'
                                                                 : 'bg-orange-600/30 text-orange-400'
                                                                 }`}>
-                                                                {input.order === 'start' ? 'START' : 'END'}
+                                                                {input.order === 'start' ? t('nodeControls.start').toUpperCase() : t('nodeControls.end').toUpperCase()}
                                                             </span>
                                                         </div>
                                                     </div>
@@ -1396,7 +1428,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
                                         {connectedImageNodes.length > frameInputsWithUrls.length && (
                                             <div className="text-xs text-neutral-500 mt-1">
-                                                {connectedImageNodes.length - frameInputsWithUrls.length} more input(s) available
+                                                {t('nodeControls.moreInputsAvailable')}
                                             </div>
                                         )}
                                     </div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronDown, Check } from 'lucide-react';
 import { NodeData } from '../../types';
+import { useTranslation } from 'react-i18next';
 
 interface CreateAssetModalProps {
     isOpen: boolean;
@@ -24,6 +25,18 @@ export const CreateAssetModal: React.FC<CreateAssetModalProps> = ({
     nodeToSnapshot,
     onSave
 }) => {
+    const { t } = useTranslation();
+
+    // 分类名称中文映射（保留英文 value 用于服务端，显示用中文）
+    const categoryLabel: Record<string, string> = {
+        'Character': t('createAsset.character'),
+        'Scene': t('createAsset.scene'),
+        'Item': t('createAsset.item'),
+        'Style': t('createAsset.style'),
+        'Sound Effect': t('createAsset.soundEffect'),
+        'Others': t('createAsset.others'),
+    };
+
     const [name, setName] = useState('My Assets');
     const [category, setCategory] = useState(CATEGORIES[0]);
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -63,15 +76,15 @@ export const CreateAssetModal: React.FC<CreateAssetModalProps> = ({
                 {/* Header */}
                 <div className="px-6 pt-6 pb-2">
                     <div className="flex items-center gap-6 border-b border-neutral-700 pb-2">
-                        <button className="text-white font-medium border-b-2 border-white pb-2 -mb-2.5">Create Asset</button>
-                        <button className="text-neutral-500 font-medium pb-2 hover:text-neutral-300 transition-colors">Add to Existing</button>
+                        <button className="text-white font-medium border-b-2 border-white pb-2 -mb-2.5">{t('createAsset.createAsset')}</button>
+                        <button className="text-neutral-500 font-medium pb-2 hover:text-neutral-300 transition-colors">{t('createAsset.addToExisting')}</button>
                     </div>
                 </div>
 
                 <div className="p-6 flex gap-6">
                     {/* Left: Cover Image */}
                     <div className="w-1/2 flex flex-col gap-2">
-                        <label className="text-sm font-medium text-neutral-200">Cover <span className="text-red-400">*</span></label>
+                        <label className="text-sm font-medium text-neutral-200">{t('createAsset.cover')} <span className="text-red-400">*</span></label>
                         <div className="aspect-[3/4] rounded-lg overflow-hidden border border-neutral-800 bg-neutral-900 relative group">
                             <img
                                 src={nodeToSnapshot.resultUrl || ''}
@@ -89,24 +102,24 @@ export const CreateAssetModal: React.FC<CreateAssetModalProps> = ({
 
                         {/* Name Input */}
                         <div className="flex flex-col gap-2">
-                            <label className="text-sm font-medium text-neutral-200">Name <span className="text-red-400">*</span></label>
+                            <label className="text-sm font-medium text-neutral-200">{t('createAsset.name')} <span className="text-red-400">*</span></label>
                             <input
                                 type="text"
                                 value={name}
                                 onChange={(e) => setName(e.target.value)}
                                 className="w-full bg-[#1a1a1a] border border-neutral-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-blue-500 transition-colors"
-                                placeholder="Asset Name"
+                                placeholder={t('createAsset.namePlaceholder')}
                             />
                         </div>
 
                         {/* Category Dropdown */}
                         <div className="flex flex-col gap-2 relative">
-                            <label className="text-sm font-medium text-neutral-200">Category <span className="text-red-400">*</span></label>
+                            <label className="text-sm font-medium text-neutral-200">{t('createAsset.category')} <span className="text-red-400">*</span></label>
                             <button
                                 onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                                 className="w-full bg-[#1a1a1a] border border-neutral-700 rounded-lg px-3 py-2 text-white focus:outline-none flex items-center justify-between hover:bg-[#252525] transition-colors"
                             >
-                                <span>{category}</span>
+                                <span>{categoryLabel[category] || category}</span>
                                 <ChevronDown size={16} className="text-neutral-400" />
                             </button>
 
@@ -121,7 +134,7 @@ export const CreateAssetModal: React.FC<CreateAssetModalProps> = ({
                                             }}
                                             className="w-full px-3 py-2 text-left hover:bg-[#252525] flex items-center justify-between group"
                                         >
-                                            <span className="text-neutral-300 group-hover:text-white">{cat}</span>
+                                            <span className="text-neutral-300 group-hover:text-white">{categoryLabel[cat] || cat}</span>
                                             {category === cat && <Check size={14} className="text-white" />}
                                         </button>
                                     ))}
@@ -138,7 +151,7 @@ export const CreateAssetModal: React.FC<CreateAssetModalProps> = ({
                         onClick={onClose}
                         className="px-4 py-2 text-neutral-400 hover:text-white transition-colors"
                     >
-                        Cancel
+                        {t('createAsset.cancel')}
                     </button>
                     <button
                         onClick={handleSubmit}
@@ -151,10 +164,10 @@ export const CreateAssetModal: React.FC<CreateAssetModalProps> = ({
                     >
                         {status === 'saving' && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
                         {status === 'success' && <Check size={16} />}
-                        {status === 'idle' && 'Create'}
-                        {status === 'saving' && 'Saving...'}
-                        {status === 'success' && 'Saved!'}
-                        {status === 'error' && 'Failed'}
+                        {status === 'idle' && t('createAsset.create')}
+                        {status === 'saving' && t('createAsset.saving')}
+                        {status === 'success' && t('createAsset.saved')}
+                        {status === 'error' && t('createAsset.failed')}
                     </button>
                 </div>
 

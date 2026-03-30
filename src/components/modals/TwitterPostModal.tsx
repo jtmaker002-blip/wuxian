@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Loader2, CheckCircle, AlertCircle, Send, ExternalLink, LogOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // ============================================================================
 // TYPES
@@ -50,6 +51,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
     mediaUrl,
     mediaType
 }) => {
+    const { t } = useTranslation();
     // --- State ---
     const [tweetText, setTweetText] = useState('');
     const [status, setStatus] = useState<PostStatus>('idle');
@@ -255,7 +257,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                             <XIcon />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-white">Post to X</h2>
+                            <h2 className="text-lg font-semibold text-white">{t('twitterModal.title')}</h2>
                             {user && (
                                 <p className="text-xs text-neutral-400">@{user.username}</p>
                             )}
@@ -279,9 +281,9 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                 <XIcon />
                             </div>
                             <div className="text-center">
-                                <h3 className="text-lg font-semibold text-white">Connect your X account</h3>
+                                <h3 className="text-lg font-semibold text-white">{t('twitterModal.connectAccount')}</h3>
                                 <p className="text-sm text-neutral-400 mt-1">
-                                    Sign in to post directly from TwitCanva
+                                    {t('twitterModal.signInDesc')}
                                 </p>
                             </div>
                             <button
@@ -289,7 +291,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                 className="flex items-center gap-2 px-6 py-3 bg-white text-black font-semibold rounded-full hover:bg-neutral-200 transition-colors"
                             >
                                 <XIcon />
-                                Sign in with X
+                                {t('twitterModal.signInWithX')}
                             </button>
                             {error && (
                                 <p className="text-sm text-red-400 mt-2">{error}</p>
@@ -301,8 +303,8 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                     {status === 'authenticating' && (
                         <div className="flex flex-col items-center gap-4 py-8">
                             <Loader2 size={40} className="text-white animate-spin" />
-                            <p className="text-neutral-400">Waiting for authorization...</p>
-                            <p className="text-xs text-neutral-500">Complete sign-in in the popup window</p>
+                            <p className="text-neutral-400">{t('twitterModal.waitingAuth')}</p>
+                            <p className="text-xs text-neutral-500">{t('twitterModal.completeSignIn')}</p>
                         </div>
                     )}
 
@@ -333,14 +335,14 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                     ref={textareaRef}
                                     value={tweetText}
                                     onChange={(e) => setTweetText(e.target.value)}
-                                    placeholder="What's happening?"
+                                    placeholder={t('twitterModal.whatsHappening')}
                                     disabled={status === 'posting'}
                                     className="w-full bg-[#1a1a1a] border border-neutral-700 rounded-xl p-4 text-white placeholder-neutral-500 focus:outline-none focus:border-blue-500 transition-colors resize-none disabled:opacity-50"
                                     rows={3}
                                 />
                                 <div className="flex justify-between items-center text-sm">
                                     <span className="text-neutral-500">
-                                        Optional caption for your post
+                                        {t('twitterModal.optionalCaption')}
                                     </span>
                                     <span className={`${isOverLimit ? 'text-red-400' : charsRemaining <= 20 ? 'text-yellow-400' : 'text-neutral-500'}`}>
                                         {charsRemaining}
@@ -361,7 +363,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                             }}
                                             className="text-xs text-red-400/70 hover:text-red-400 mt-1 underline"
                                         >
-                                            Try again
+                                            {t('twitterModal.tryAgain')}
                                         </button>
                                     </div>
                                 </div>
@@ -373,7 +375,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                 className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
                             >
                                 <LogOut size={12} />
-                                Sign out of @{user.username}
+                                {t('twitterModal.signOut', { username: user.username })}
                             </button>
                         </div>
                     )}
@@ -385,9 +387,9 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                 <CheckCircle size={40} className="text-green-400" />
                             </div>
                             <div className="text-center">
-                                <h3 className="text-lg font-semibold text-white">Posted successfully!</h3>
+                                <h3 className="text-lg font-semibold text-white">{t('twitterModal.postedSuccessfully')}</h3>
                                 <p className="text-sm text-neutral-400 mt-1">
-                                    Your post is now live on X
+                                    {t('twitterModal.postIsLive')}
                                 </p>
                             </div>
                             <a
@@ -397,7 +399,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                 className="flex items-center gap-2 px-6 py-3 bg-white text-black font-semibold rounded-full hover:bg-neutral-200 transition-colors"
                             >
                                 <ExternalLink size={18} />
-                                View on X
+                                {t('twitterModal.viewOnX')}
                             </a>
                         </div>
                     )}
@@ -410,7 +412,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                         disabled={status === 'posting'}
                         className="px-4 py-2 text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
                     >
-                        {status === 'success' ? 'Close' : 'Cancel'}
+                        {status === 'success' ? t('twitterModal.close') : t('twitterModal.cancel')}
                     </button>
 
                     {user && status !== 'success' && (
@@ -421,7 +423,7 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                 className="flex items-center gap-2 px-4 py-2 bg-neutral-700 text-white font-medium rounded-full hover:bg-neutral-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                                 title="Post text only without the image"
                             >
-                                Text Only
+                                {t('twitterModal.textOnly')}
                             </button>
                             <button
                                 onClick={() => handlePost(false)}
@@ -431,12 +433,12 @@ export const TwitterPostModal: React.FC<TwitterPostModalProps> = ({
                                 {status === 'posting' ? (
                                     <>
                                         <Loader2 size={18} className="animate-spin" />
-                                        Posting...
+                                        {t('twitterModal.post')}...
                                     </>
                                 ) : (
                                     <>
                                         <Send size={18} />
-                                        Post
+                                        {t('twitterModal.post')}
                                     </>
                                 )}
                             </button>

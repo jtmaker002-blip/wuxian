@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Loader2, CheckCircle, AlertCircle, Send, LogOut } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 // ============================================================================
 // TYPES
@@ -59,6 +60,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
     onClose,
     mediaUrl
 }) => {
+    const { t } = useTranslation();
     // --- State ---
     const [captionText, setCaptionText] = useState('');
     const [privacyLevel, setPrivacyLevel] = useState<PrivacyLevel>('SELF_ONLY');
@@ -255,7 +257,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                             <TikTokIcon />
                         </div>
                         <div>
-                            <h2 className="text-lg font-semibold text-white">Post to TikTok</h2>
+                            <h2 className="text-lg font-semibold text-white">{t('tiktokModal.title')}</h2>
                             {user && (
                                 <p className="text-xs text-neutral-400">{user.displayName || user.username}</p>
                             )}
@@ -279,9 +281,9 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                                 <TikTokIcon size={32} />
                             </div>
                             <div className="text-center">
-                                <h3 className="text-lg font-semibold text-white">Connect your TikTok account</h3>
+                                <h3 className="text-lg font-semibold text-white">{t('tiktokModal.connectAccount')}</h3>
                                 <p className="text-sm text-neutral-400 mt-1">
-                                    Sign in to post videos directly from TwitCanva
+                                    {t('tiktokModal.signInDesc')}
                                 </p>
                             </div>
                             <button
@@ -289,7 +291,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                                 className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-[#ff0050] to-[#00f2ea] text-white font-semibold rounded-full hover:opacity-90 transition-opacity"
                             >
                                 <TikTokIcon />
-                                Sign in with TikTok
+                                {t('tiktokModal.signInWithTikTok')}
                             </button>
                             {error && (
                                 <p className="text-sm text-red-400 mt-2">{error}</p>
@@ -301,8 +303,8 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                     {status === 'authenticating' && (
                         <div className="flex flex-col items-center gap-4 py-8">
                             <Loader2 size={40} className="text-[#00f2ea] animate-spin" />
-                            <p className="text-neutral-400">Waiting for authorization...</p>
-                            <p className="text-xs text-neutral-500">Complete sign-in in the popup window</p>
+                            <p className="text-neutral-400">{t('tiktokModal.waitingAuth')}</p>
+                            <p className="text-xs text-neutral-500">{t('tiktokModal.completeSignIn')}</p>
                         </div>
                     )}
 
@@ -321,12 +323,12 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
 
                             {/* Caption Input */}
                             <div className="space-y-2">
-                                <label className="text-sm text-neutral-400">Caption</label>
+                                <label className="text-sm text-neutral-400">{t('tiktokModal.caption')}</label>
                                 <textarea
                                     ref={textareaRef}
                                     value={captionText}
                                     onChange={(e) => setCaptionText(e.target.value)}
-                                    placeholder="Add a caption with #hashtags and @mentions..."
+                                    placeholder={t('tiktokModal.captionPlaceholder')}
                                     disabled={status === 'posting'}
                                     className="w-full bg-[#1a1a1a] border border-neutral-700 rounded-xl p-4 text-white placeholder-neutral-500 focus:outline-none focus:border-[#00f2ea] transition-colors resize-none disabled:opacity-50"
                                     rows={3}
@@ -340,7 +342,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
 
                             {/* Privacy Level Select */}
                             <div className="space-y-2">
-                                <label className="text-sm text-neutral-400">Who can view this video</label>
+                                <label className="text-sm text-neutral-400">{t('tiktokModal.whoCanView')}</label>
                                 <div className="grid grid-cols-2 gap-2">
                                     {PRIVACY_OPTIONS.map(option => (
                                         <button
@@ -353,9 +355,17 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                                                 }`}
                                         >
                                             <span className={`text-sm font-medium ${privacyLevel === option.value ? 'text-[#00f2ea]' : 'text-white'}`}>
-                                                {option.label}
+                                                {t(`tiktokModal.${
+                                                    option.value === 'PUBLIC_TO_EVERYONE' ? 'public' :
+                                                    option.value === 'MUTUAL_FOLLOW_FRIENDS' ? 'friends' :
+                                                    option.value === 'FOLLOWER_OF_CREATOR' ? 'followers' : 'onlyMe'
+                                                }`)}
                                             </span>
-                                            <p className="text-xs text-neutral-500 mt-0.5">{option.description}</p>
+                                            <p className="text-xs text-neutral-500 mt-0.5">{t(`tiktokModal.${
+                                                option.value === 'PUBLIC_TO_EVERYONE' ? 'publicDesc' :
+                                                option.value === 'MUTUAL_FOLLOW_FRIENDS' ? 'friendsDesc' :
+                                                option.value === 'FOLLOWER_OF_CREATOR' ? 'followersDesc' : 'onlyMeDesc'
+                                            }`)}</p>
                                         </button>
                                     ))}
                                 </div>
@@ -374,7 +384,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                                             }}
                                             className="text-xs text-red-400/70 hover:text-red-400 mt-1 underline"
                                         >
-                                            Try again
+                                            {t('tiktokModal.tryAgain')}
                                         </button>
                                     </div>
                                 </div>
@@ -383,7 +393,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                             {/* Sandbox Warning */}
                             <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
                                 <p className="text-xs text-yellow-400">
-                                    ⚠️ Videos posted from unaudited apps are private-only until TikTok approves your app.
+                                    ⚠️ {t('tiktokModal.privateOnly')}
                                 </p>
                             </div>
 
@@ -393,7 +403,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                                 className="flex items-center gap-1.5 text-xs text-neutral-500 hover:text-neutral-300 transition-colors"
                             >
                                 <LogOut size={12} />
-                                Sign out of {user.displayName || 'TikTok'}
+                                {t('tiktokModal.signOut', { name: user.displayName || 'TikTok' })}
                             </button>
                         </div>
                     )}
@@ -405,13 +415,13 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                                 <CheckCircle size={40} className="text-green-400" />
                             </div>
                             <div className="text-center">
-                                <h3 className="text-lg font-semibold text-white">Posted to TikTok!</h3>
+                                <h3 className="text-lg font-semibold text-white">{t('tiktokModal.postedToTikTok')}</h3>
                                 <p className="text-sm text-neutral-400 mt-1">
-                                    {successMessage || 'Your video is being processed'}
+                                    {successMessage || t('tiktokModal.videoProcessing')}
                                 </p>
                             </div>
                             <p className="text-xs text-neutral-500 text-center max-w-xs">
-                                It may take a few minutes for your video to appear on TikTok. Check your TikTok app to view it.
+                                {t('tiktokModal.processingNote')}
                             </p>
                         </div>
                     )}
@@ -424,7 +434,7 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                         disabled={status === 'posting'}
                         className="px-4 py-2 text-neutral-400 hover:text-white transition-colors disabled:opacity-50"
                     >
-                        {status === 'success' ? 'Close' : 'Cancel'}
+                        {status === 'success' ? t('tiktokModal.close') : t('tiktokModal.cancel')}
                     </button>
 
                     {user && status !== 'success' && (
@@ -436,12 +446,12 @@ export const TikTokPostModal: React.FC<TikTokPostModalProps> = ({
                             {status === 'posting' ? (
                                 <>
                                     <Loader2 size={18} className="animate-spin" />
-                                    Posting...
+                                    {t('tiktokModal.posting')}
                                 </>
                             ) : (
                                 <>
                                     <Send size={18} />
-                                    Post to TikTok
+                                    {t('tiktokModal.postToTikTok')}
                                 </>
                             )}
                         </button>

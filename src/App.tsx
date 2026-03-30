@@ -6,7 +6,7 @@
  * Uses custom hooks for state management and logic separation.
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Toolbar } from './components/Toolbar';
 import { TopBar } from './components/TopBar';
 import { CanvasNode } from './components/canvas/CanvasNode';
@@ -52,6 +52,12 @@ import { useTikTokImport } from './hooks/useTikTokImport';
 import { useStoryboardGenerator } from './hooks/useStoryboardGenerator';
 import { StoryboardGeneratorModal } from './components/modals/StoryboardGeneratorModal';
 import { StoryboardVideoModal } from './components/modals/StoryboardVideoModal';
+import { LoginPage } from './features/auth/pages/LoginPage';
+import { SettingsModal } from './features/settings/pages/SettingsModal';
+import { useSessionStore } from './features/auth/store/session-store';
+import { useTokenConfigStore } from './features/settings/store/token-config-store';
+import { OPENAITEACH_401_EVENT } from './shared/api/http';
+import { useApiSettings } from './hooks/useApiSettings';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -82,6 +88,7 @@ export default function App() {
   // ============================================================================
 
   const [hasApiKey] = useState(true); // Backend handles API key
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     isOpen: false,
     x: 0,
@@ -90,6 +97,24 @@ export default function App() {
   });
 
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark');
+
+  // ── OpenAiTeach session ──────────────────────────────────────────────────
+  const session = useSessionStore((s) => s.session);
+  const setSession = useSessionStore((s) => s.setSession);
+  const resetTokenConfig = useTokenConfigStore((s) => s.reset);
+
+  const handleLogout = useCallback(() => {
+    setSession(null);
+    resetTokenConfig();
+  }, [setSession, resetTokenConfig]);
+
+  useEffect(() => {
+    window.addEventListener(OPENAITEACH_401_EVENT, handleLogout);
+    return () => window.removeEventListener(OPENAITEACH_401_EVENT, handleLogout);
+  }, [handleLogout]);
+
+  // ── API Settings (model list) ─────────────────────────────────────────────
+  const { isModelEnabled, toggleModel, toggleAllInCategory } = useApiSettings();
 
   // Panel state management (history, chat, asset library, expand)
   const {
@@ -919,6 +944,17 @@ export default function App() {
   // handleDoubleClick, handleGlobalContextMenu, handleAddNext, handleNodeContextMenu,
   // handleContextMenuCreateAsset, handleContextMenuSelect, handleToolbarAdd
 
+  // 登录守卫：未登录时显示 LoginPage
+  if (!session?.ok) {
+    return (
+      <LoginPage
+        canvasTheme={canvasTheme}
+        onToggleTheme={() =>
+          setCanvasTheme((prev) => (prev === 'dark' ? 'light' : 'dark'))
+        }
+      />
+    );
+  }
 
   return (
     <div className={`w-screen h-screen ${canvasTheme === 'dark' ? 'bg-[#050505] text-white' : 'bg-neutral-50 text-neutral-900'} overflow-hidden select-none font-sans transition-colors duration-300`}>
@@ -1040,6 +1076,7 @@ export default function App() {
           canvasTheme={canvasTheme}
           onToggleTheme={() => setCanvasTheme(prev => prev === 'dark' ? 'light' : 'dark')}
           lastAutoSaveTime={lastAutoSaveTime}
+          onSettingsClick={() => setIsSettingsOpen(true)}
         />
       )}
 
@@ -1379,6 +1416,17 @@ export default function App() {
         scenes={storyboardVideoModal.nodes}
         storyContext={storyboardVideoModal.storyContext}
         onCreateVideos={handleGenerateStoryVideos}
+      />
+
+      {/* 设置弹窗（账号 / Token / 模型三 Tab） */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        canvasTheme={canvasTheme}
+        onLogout={handleLogout}
+        isModelEnabled={isModelEnabled}
+        onToggleModel={toggleModel}
+        onToggleAllModels={toggleAllInCategory}
       />
 
       {/* Video Editor Modal */}
