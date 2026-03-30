@@ -7,21 +7,33 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       proxy: {
+        '/oat-api': {
+          target: 'https://openaiteach.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (p) => p.replace(/^\/oat-api/, '/api'),
+        },
+        '/oat-v1': {
+          target: 'https://openaiteach.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (p) => p.replace(/^\/oat-v1/, '/v1'),
+        },
         '/api': {
           target: 'http://localhost:3001',
-          changeOrigin: true
+          changeOrigin: true,
         },
         '/library': {
           target: 'http://localhost:3001',
-          changeOrigin: true
-        }
-      }
+          changeOrigin: true,
+        },
+      },
     },
     plugins: [react()],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
-      }
-    }
+      },
+    },
   };
 });
