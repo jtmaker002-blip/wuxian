@@ -34,7 +34,7 @@ export interface ApiSettings {
 
 const STORAGE_KEY = 'twitcanva_api_settings';
 
-// 默认启用所有 isDefault=true 的模型
+// 默认启用所有模型，用户可在设置弹窗的"模型"tab 取消勾选
 const DEFAULT_ENABLED_IDS = MODEL_REGISTRY.map(m => m.id);
 
 const DEFAULT_SETTINGS: ApiSettings = {
