@@ -8,8 +8,9 @@
  *  - 提供判断某模型是否启用的方法
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { MODEL_REGISTRY } from '../config/modelRegistry';
+import { getRegistryVideoModels } from '../config/registryCanvasModels';
 
 // 自定义事件名，用于通知其他组件设置已变更
 export const API_SETTINGS_CHANGED_EVENT = 'twitcanva_api_settings_changed';
@@ -35,7 +36,10 @@ export interface ApiSettings {
 const STORAGE_KEY = 'twitcanva_api_settings';
 
 // 默认启用所有模型，用户可在设置弹窗的"模型"tab 取消勾选
-const DEFAULT_ENABLED_IDS = MODEL_REGISTRY.map(m => m.id);
+const DEFAULT_ENABLED_IDS = MODEL_REGISTRY
+  .filter((m) => m.category !== 'video')
+  .map((m) => m.id)
+  .concat(getRegistryVideoModels().map((m) => m.id));
 
 const DEFAULT_SETTINGS: ApiSettings = {
   providers: {},
@@ -65,6 +69,14 @@ export const useApiSettings = () => {
         // 兼容旧版本：如果没有 enabledModelIds 字段，用默认值
         if (!parsed.enabledModelIds) {
           parsed.enabledModelIds = DEFAULT_ENABLED_IDS;
+        } else {
+          const executableVideoIds = new Set(getRegistryVideoModels().map((m) => m.id));
+          parsed.enabledModelIds = parsed.enabledModelIds.filter((id) => {
+            const entry = MODEL_REGISTRY.find((model) => model.id === id);
+            if (!entry) return false;
+            if (entry.category !== 'video') return true;
+            return executableVideoIds.has(id);
+          });
         }
         return parsed;
       }
@@ -169,3 +181,29 @@ export const useApiSettings = () => {
     getEnabledModels,
   };
 };
+
+/** 与画布下拉一致：null 表示未存过 enabled 列表，视为「全部启用」 */
+export function readEnabledModelIdsFromStorage(): Set<string> | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ApiSettings>;
+      if (parsed.enabledModelIds && Array.isArray(parsed.enabledModelIds)) {
+        return new Set(parsed.enabledModelIds);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+export function useEnabledModelIdsFromStorage(): Set<string> | null {
+  const [ids, setIds] = useState<Set<string> | null>(() => readEnabledModelIdsFromStorage());
+  useEffect(() => {
+    const handler = () => setIds(readEnabledModelIdsFromStorage());
+    window.addEventListener(API_SETTINGS_CHANGED_EVENT, handler);
+    return () => window.removeEventListener(API_SETTINGS_CHANGED_EVENT, handler);
+  }, []);
+  return ids;
+}

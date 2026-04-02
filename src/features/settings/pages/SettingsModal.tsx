@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSessionStore } from '../../auth/store/session-store';
 import { useTokenConfigStore } from '../store/token-config-store';
 import { createTokenClient } from '../api/token-client';
 import { MODEL_REGISTRY, type ModelCategory } from '../../../config/modelRegistry';
+import { getRegistryVideoModels } from '../../../config/registryCanvasModels';
 
 type Tab = 'account' | 'token' | 'models';
 
@@ -53,6 +54,9 @@ export function SettingsModal({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [message, setMessage] = useState('');
+  const hasAutoRefreshedTokenTab = useRef(false);
+  const selectedAccountToken = availableTokens.find((t) => t.id === selectedTokenId);
+  const selectedAccountTokenNeedsManualCopy = Boolean(selectedAccountToken) && !selectedAccountToken.isUsable;
 
   const isDark = canvasTheme === 'dark';
   const overlay  = isDark ? 'bg-black/70' : 'bg-black/40';
@@ -68,6 +72,9 @@ export function SettingsModal({
   const tabI     = isDark ? 'text-neutral-500 hover:text-neutral-300' : 'text-neutral-400 hover:text-neutral-700';
 
   const enabledCount = MODEL_REGISTRY.filter((m) => isModelEnabled(m.id)).length;
+  const visibleVideoIds = new Set(getRegistryVideoModels().map((model) => model.id));
+  const visibleModels = MODEL_REGISTRY.filter((model) => model.category !== 'video' || visibleVideoIds.has(model.id));
+  const visibleEnabledCount = visibleModels.filter((model) => isModelEnabled(model.id)).length;
 
   async function handleRefreshTokens() {
     if (!session) return;
@@ -77,17 +84,46 @@ export function SettingsModal({
       const tokens = await tokenClient.listTokens({
         userId: session.userId,
         systemToken: session.sessionToken,
+        oatProxySid: session.oatProxySid,
       });
       setAvailableTokens(tokens);
       setMessage(
-        tokens.length > 0 ? `已同步 ${tokens.length} 个令牌` : '暂无令牌，请在网站创建 Token'
+        tokens.length > 0
+          ? `已同步 ${tokens.length} 个令牌`
+          : session.oatProxySid
+            ? '已请求账号令牌列表，但当前返回 0 个 token。请确认当前登录账号就是你在官网看到令牌的那个账号。'
+            : '请先点「退出」再登录一次（登录会经本机后端连接 openaiteach.com，刷新令牌才有效）。'
       );
     } catch (e) {
-      setMessage(e instanceof Error ? e.message : '刷新失败');
+      const msg = e instanceof Error ? e.message : '刷新失败';
+      setMessage(
+        msg.includes('401')
+          ? '未登录或 Cookie 未带上：请退出后重新登录，再点刷新；仍不行请用手动输入 sk-xxx 保存。'
+          : msg
+      );
     } finally {
       setIsRefreshing(false);
     }
   }
+
+  useEffect(() => {
+    if (!isOpen) {
+      hasAutoRefreshedTokenTab.current = false;
+      return;
+    }
+
+    if (tab !== 'token') {
+      hasAutoRefreshedTokenTab.current = false;
+      return;
+    }
+
+    if (!session || isRefreshing || availableTokens.length > 0 || hasAutoRefreshedTokenTab.current) {
+      return;
+    }
+
+    hasAutoRefreshedTokenTab.current = true;
+    void handleRefreshTokens();
+  }, [isOpen, tab, session, isRefreshing, availableTokens.length]);
 
   async function handleTestConnection() {
     const token = draftTokenValue.trim() || selectedTokenValue;
@@ -188,10 +224,11 @@ export function SettingsModal({
                     disabled={isRefreshing}
                     className="px-3 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-800 text-white text-xs transition-colors"
                   >
-                    {isRefreshing ? '...' : '刷新'}
+                    {isRefreshing ? '刷新中' : '刷新'}
                   </button>
                   <button
                     onClick={saveSelectedToken}
+                    disabled={!selectedAccountToken || selectedAccountTokenNeedsManualCopy}
                     className="px-3 py-2 rounded-lg bg-neutral-700 hover:bg-neutral-600 text-white text-xs transition-colors"
                   >
                     保存
@@ -221,14 +258,19 @@ export function SettingsModal({
                 <div className={textS}>
                   当前令牌：
                   <span className={textP}>
-                    {availableTokens.find((t) => t.id === selectedTokenId)?.name ??
+                    {selectedAccountToken?.name ??
                       (selectedTokenValue ? '手动 Token' : '未设置')}
                   </span>
                 </div>
+                {selectedAccountTokenNeedsManualCopy && (
+                  <div className="text-amber-400">
+                    当前账号列表只返回了掩码令牌，无法直接测试。请去官网复制完整 <span className={textP}>sk-...</span> 到下方手动输入后保存。
+                  </div>
+                )}
                 <div className="flex gap-2">
                   <button
                     onClick={handleTestConnection}
-                    disabled={isTesting}
+                    disabled={isTesting || selectedAccountTokenNeedsManualCopy}
                     className="px-3 py-1 rounded-lg bg-neutral-700 hover:bg-neutral-600 text-white text-xs transition-colors"
                   >
                     {isTesting ? '测试中...' : '测试连接'}
@@ -252,17 +294,17 @@ export function SettingsModal({
           {tab === 'models' && (
             <div className="space-y-4">
               <div className={`flex items-center justify-between text-xs ${textS}`}>
-                <span>已选 {enabledCount} / 共 {MODEL_REGISTRY.length} 个</span>
+                <span>已选 {visibleEnabledCount} / 共 {visibleModels.length} 个</span>
                 <div className="flex gap-2">
                   <button
-                    onClick={() => onToggleAllModels(MODEL_REGISTRY.map((m) => m.id), true)}
+                    onClick={() => onToggleAllModels(visibleModels.map((m) => m.id), true)}
                     className="text-indigo-400 hover:text-indigo-300"
                   >
                     全选
                   </button>
                   <span>|</span>
                   <button
-                    onClick={() => onToggleAllModels(MODEL_REGISTRY.map((m) => m.id), false)}
+                    onClick={() => onToggleAllModels(visibleModels.map((m) => m.id), false)}
                     className="text-indigo-400 hover:text-indigo-300"
                   >
                     全不选
@@ -271,7 +313,7 @@ export function SettingsModal({
               </div>
 
               {ALL_CATEGORIES.map((cat) => {
-                const models = MODEL_REGISTRY.filter((m) => m.category === cat);
+                const models = visibleModels.filter((m) => m.category === cat);
                 return (
                   <div key={cat}>
                     <div className={`text-xs font-semibold ${textS} mb-2`}>

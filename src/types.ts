@@ -46,6 +46,9 @@ export interface NodeData {
   generateAudio?: boolean; // Whether to generate native audio (Kling 2.6, Veo 3.1)
   inputUrl?: string; // Input URL for video generation (image-to-video)
 
+  // Audio node specific
+  audioModel?: string; // Voice model version (e.g., 'qwen3-tts-flash')
+
   // Video Editor specific
   trimStart?: number; // Trim start time in seconds
   trimEnd?: number; // Trim end time in seconds

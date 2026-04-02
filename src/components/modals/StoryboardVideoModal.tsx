@@ -9,7 +9,14 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, Sparkles, Film, Loader2, Play, Check, ChevronDown, Wand2, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NodeData } from '../../types';
-import { GoogleIcon, KlingIcon, HailuoIcon } from '../icons/BrandIcons';
+import { OpenAIIcon, GoogleIcon, KlingIcon, HailuoIcon } from '../icons/BrandIcons';
+import { useEnabledModelIdsFromStorage } from '../../hooks/useApiSettings';
+import {
+    getStoryboardVideoModalState,
+    getStoryboardVideoOptions,
+    normalizeStoryboardVideoSettings,
+    type StoryboardVideoSettings,
+} from './storyboardVideoOptions';
 
 interface StoryboardVideoModalProps {
     isOpen: boolean;
@@ -30,32 +37,11 @@ interface StoryboardVideoModalProps {
     };
 }
 
-// Video durations in seconds
-const VIDEO_DURATIONS = [5, 6, 8, 10];
-const VIDEO_RESOLUTIONS = ["Auto", "1080p", "768p", "720p", "512p"];
-
-const VIDEO_MODELS = [
-    {
-        id: 'veo-3.1',
-        name: 'Veo 3.1',
-        provider: 'google',
-        durations: [4, 6, 8],
-        resolutions: ['Auto', '720p', '1080p'],
-        // Explicitly map durations to allowed resolutions to prevent API errors
-        durationResolutionMap: {
-            4: ['Auto', '720p'],
-            6: ['Auto', '720p'],
-            8: ['Auto', '720p', '1080p']
-        }
-    },
-    { id: 'kling-v2-1', name: 'Kling V2.1', provider: 'kling', recommended: true, durations: [5, 10], resolutions: ['Auto', '720p', '1080p'] },
-    { id: 'kling-v2-1-master', name: 'Kling V2.1 Master', provider: 'kling', durations: [5, 10], resolutions: ['Auto', '720p', '1080p'] },
-    { id: 'kling-v2-5-turbo', name: 'Kling V2.5 Turbo', provider: 'kling', durations: [5, 10], resolutions: ['Auto', '720p', '1080p'] },
-    { id: 'kling-v2-6', name: 'Kling 2.6 (Motion)', provider: 'kling', durations: [5, 10], resolutions: ['Auto', '720p', '1080p'] },
-    { id: 'hailuo-2.3', name: 'Hailuo 2.3', provider: 'hailuo', durations: [5], resolutions: ['768p', '1080p'] },
-    { id: 'hailuo-2.3-fast', name: 'Hailuo 2.3 Fast', provider: 'hailuo', durations: [5], resolutions: ['768p', '1080p'] },
-    { id: 'hailuo-02', name: 'Hailuo 02', provider: 'hailuo', durations: [5], resolutions: ['768p', '1080p'] },
-];
+const EMPTY_SETTINGS: StoryboardVideoSettings = {
+    model: '',
+    duration: 5,
+    resolution: 'Auto',
+};
 
 export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
     isOpen,
@@ -65,6 +51,8 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
     storyContext
 }) => {
     const { t } = useTranslation();
+    const enabledIds = useEnabledModelIdsFromStorage();
+
     // Track removed scenes (locally within modal session)
     const [removedSceneIds, setRemovedSceneIds] = useState<Set<string>>(new Set());
 
@@ -80,61 +68,53 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
     const sortedScenes = [...activeScenes].sort((a, b) => a.x - b.x);
 
     const [prompts, setPrompts] = useState<Record<string, string>>({});
-    const [settings, setSettings] = useState({
-        model: 'veo-3.1',
-        duration: 4, // Default to 4s for Veo
-        resolution: '720p' // Safe default
-    });
+    const [settings, setSettings] = useState<StoryboardVideoSettings>(() =>
+        normalizeStoryboardVideoSettings(EMPTY_SETTINGS, getStoryboardVideoOptions(enabledIds)) ?? EMPTY_SETTINGS,
+    );
     const [generatingPrompts, setGeneratingPrompts] = useState<Record<string, boolean>>({});
     const [optimizingPrompts, setOptimizingPrompts] = useState<Record<string, boolean>>({});
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const modelDropdownRef = useRef<HTMLDivElement>(null);
+    const {
+        options: storyboardVideoOptions,
+        sections: storyboardVideoSections,
+        currentSettings: effectiveSettings,
+        currentOption,
+    } = getStoryboardVideoModalState(enabledIds, settings);
+    const currentSettings = effectiveSettings ?? EMPTY_SETTINGS;
+    const currentModel = currentOption?.model;
+    const availableDurations = currentOption?.durations ?? [];
+    const availableResolutions = currentOption?.resolutions ?? [];
+    const optionsSignature = storyboardVideoOptions
+        .map((option) => `${option.model.id}:${option.durations.join(',')}:${option.resolutions.join(',')}`)
+        .join('|');
 
-    // Dynamic resolution options based on model and duration
-    const currentModel = VIDEO_MODELS.find(m => m.id === settings.model) || VIDEO_MODELS[0];
-    const availableResolutions = (currentModel as any).durationResolutionMap?.[settings.duration]
-        || currentModel.resolutions
-        || VIDEO_RESOLUTIONS;
-
-    // Ensure settings are valid when model/duration changes
     useEffect(() => {
-        const model = VIDEO_MODELS.find(m => m.id === settings.model);
-        if (!model) return;
-
-        let newDuration = settings.duration;
-        let newResolution = settings.resolution;
-        let changed = false;
-
-        // Validation for Duration
-        if (!model.durations.includes(newDuration)) {
-            newDuration = model.durations[0];
-            changed = true;
+        if (effectiveSettings) {
+            if (
+                settings.model !== effectiveSettings.model ||
+                settings.duration !== effectiveSettings.duration ||
+                settings.resolution !== effectiveSettings.resolution
+            ) {
+                setSettings(effectiveSettings);
+            }
+            return;
         }
 
-        // Validation for Resolution
-        const allowedResolutions = (model as any).durationResolutionMap?.[newDuration] || model.resolutions || VIDEO_RESOLUTIONS;
-        if (!allowedResolutions.includes(newResolution) && !allowedResolutions.includes('Auto')) {
-            // If current resolution not allowed, pick first allowed
-            // Favor '720p' or '1080p' if available, else first
-            if (allowedResolutions.includes('720p')) newResolution = '720p';
-            else if (allowedResolutions.includes('1080p')) newResolution = '1080p';
-            else newResolution = allowedResolutions[0];
-            changed = true;
+        if (
+            settings.model !== EMPTY_SETTINGS.model ||
+            settings.duration !== EMPTY_SETTINGS.duration ||
+            settings.resolution !== EMPTY_SETTINGS.resolution
+        ) {
+            setSettings(EMPTY_SETTINGS);
         }
-
-        if (changed) {
-            setSettings(prev => ({ ...prev, duration: newDuration, resolution: newResolution }));
-        }
-    }, [settings.model, settings.duration, settings.resolution]);
-
-    // Initial settings sync
-    useEffect(() => {
-        // Ensure duration is valid for initial model
-        const model = VIDEO_MODELS.find(m => m.id === settings.model);
-        if (model && !model.durations.includes(settings.duration)) {
-            setSettings(prev => ({ ...prev, duration: model.durations[0] }));
-        }
-    }, []); // Only run once on mount
+    }, [
+        effectiveSettings,
+        optionsSignature,
+        settings.duration,
+        settings.model,
+        settings.resolution,
+    ]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -248,28 +228,30 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
     };
 
     const handleModelChange = (modelId: string) => {
-        const newModel = VIDEO_MODELS.find(m => m.id === modelId);
-        if (!newModel) return;
+        const nextSettings = normalizeStoryboardVideoSettings(
+            { ...currentSettings, model: modelId },
+            storyboardVideoOptions,
+        );
+        if (!nextSettings) return;
 
-        // Determine new duration: keep current if valid, else first available
-        let newDuration = settings.duration;
-        if (!newModel.durations.includes(newDuration)) {
-            newDuration = newModel.durations[0];
-        }
-
-        // Determine new resolution
-        let newResolution = settings.resolution;
-        const availableRes = (newModel as any).durationResolutionMap?.[newDuration] || newModel.resolutions || VIDEO_RESOLUTIONS;
-        if (!availableRes.includes(newResolution) && availableRes.length > 0) {
-            newResolution = availableRes[0];
-        }
-
-        setSettings({
-            model: modelId,
-            duration: newDuration,
-            resolution: newResolution
-        });
+        setSettings(nextSettings);
         setShowModelDropdown(false);
+    };
+
+    const renderVideoModelIcon = (provider?: string, selected = false) => {
+        if (provider === 'openai') {
+            return <OpenAIIcon size={14} className={selected ? 'text-blue-400' : 'text-green-400'} />;
+        }
+        if (provider === 'google') {
+            return <GoogleIcon size={14} className={selected ? 'text-blue-400' : 'text-neutral-400'} />;
+        }
+        if (provider === 'kling') {
+            return <KlingIcon size={16} />;
+        }
+        if (provider === 'hailuo') {
+            return <HailuoIcon size={16} />;
+        }
+        return <Film size={14} />;
     };
 
     // Use currentModel derived from settings state
@@ -398,14 +380,12 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
                                 <div className="relative">
                                     <button
                                         onClick={() => setShowModelDropdown(!showModelDropdown)}
+                                        disabled={!currentModel}
                                         className="flex items-center gap-2 bg-neutral-800 text-white text-xs px-3 py-2 rounded-lg border border-neutral-700 hover:bg-neutral-700 transition-colors min-w-[160px] justify-between"
                                     >
                                         <div className="flex items-center gap-2">
-                                            {currentModel.id === 'veo-3.1' ? <GoogleIcon size={14} className="text-white" /> :
-                                                currentModel.provider === 'kling' ? <KlingIcon size={16} /> :
-                                                    currentModel.provider === 'hailuo' ? <HailuoIcon size={16} /> :
-                                                        <Film size={14} />}
-                                            <span>{currentModel.name}</span>
+                                            {renderVideoModelIcon(currentModel?.provider)}
+                                            <span>{currentModel?.name ?? 'No available models'}</span>
                                         </div>
                                         <ChevronDown size={14} className="opacity-50" />
                                     </button>
@@ -413,56 +393,28 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
                                     {/* Dropdown */}
                                     {showModelDropdown && (
                                         <div className="absolute bottom-full mb-2 left-0 w-64 bg-[#1f1f1f] border border-neutral-700 rounded-xl shadow-2xl overflow-hidden z-50 flex flex-col max-h-[400px] overflow-y-auto">
-
-                                            {/* Google */}
-                                            <div className="px-3 py-2 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1a1a1a]">Google</div>
-                                            {VIDEO_MODELS.filter(m => m.provider === 'google').map(model => (
-                                                <button
-                                                    key={model.id}
-                                                    onClick={() => handleModelChange(model.id)}
-                                                    className={`w-full flex items-center justify-between px-3 py-2.5 text-xs hover:bg-[#2a2a2a] transition-colors ${settings.model === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-neutral-300'}`}
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <GoogleIcon size={14} className={settings.model === model.id ? 'text-blue-400' : 'text-neutral-400'} />
-                                                        {model.name}
+                                            {storyboardVideoSections.map((section, index) => (
+                                                <React.Fragment key={section.provider}>
+                                                    <div className={`px-3 py-2 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1a1a1a] ${index > 0 ? 'border-t border-neutral-700' : ''}`}>
+                                                        {section.label}
                                                     </div>
-                                                    {settings.model === model.id && <Check size={14} />}
-                                                </button>
-                                            ))}
-
-                                            {/* Kling */}
-                                            <div className="px-3 py-2 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1a1a1a] border-t border-neutral-700">Kling AI</div>
-                                            {VIDEO_MODELS.filter(m => m.provider === 'kling').map(model => (
-                                                <button
-                                                    key={model.id}
-                                                    onClick={() => handleModelChange(model.id)}
-                                                    className={`w-full flex items-center justify-between px-3 py-2.5 text-xs hover:bg-[#2a2a2a] transition-colors ${settings.model === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-neutral-300'}`}
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <KlingIcon size={16} />
-                                                        {model.name}
-                                                        {model.recommended && (
-                                                            <span className="text-[9px] px-1 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">{t('imageEditor.recommended')}</span>
-                                                        )}
-                                                    </div>
-                                                    {settings.model === model.id && <Check size={14} />}
-                                                </button>
-                                            ))}
-
-                                            {/* Hailuo */}
-                                            <div className="px-3 py-2 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1a1a1a] border-t border-neutral-700">Hailuo AI</div>
-                                            {VIDEO_MODELS.filter(m => m.provider === 'hailuo').map(model => (
-                                                <button
-                                                    key={model.id}
-                                                    onClick={() => handleModelChange(model.id)}
-                                                    className={`w-full flex items-center justify-between px-3 py-2.5 text-xs hover:bg-[#2a2a2a] transition-colors ${settings.model === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-neutral-300'}`}
-                                                >
-                                                    <div className="flex items-center gap-2">
-                                                        <HailuoIcon size={16} />
-                                                        {model.name}
-                                                    </div>
-                                                    {settings.model === model.id && <Check size={14} />}
-                                                </button>
+                                                    {section.models.map((model) => (
+                                                        <button
+                                                            key={model.id}
+                                                            onClick={() => handleModelChange(model.id)}
+                                                            className={`w-full flex items-center justify-between px-3 py-2.5 text-xs hover:bg-[#2a2a2a] transition-colors ${currentSettings.model === model.id ? 'text-blue-400 bg-blue-500/10' : 'text-neutral-300'}`}
+                                                        >
+                                                            <div className="flex items-center gap-2">
+                                                                {renderVideoModelIcon(model.provider, currentSettings.model === model.id)}
+                                                                {model.name}
+                                                                {model.recommended && (
+                                                                    <span className="text-[9px] px-1 py-0.5 bg-green-500/20 text-green-400 rounded font-medium">{t('imageEditor.recommended')}</span>
+                                                                )}
+                                                            </div>
+                                                            {currentSettings.model === model.id && <Check size={14} />}
+                                                        </button>
+                                                    ))}
+                                                </React.Fragment>
                                             ))}
                                         </div>
                                     )}
@@ -473,11 +425,20 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
                             <div className="flex flex-col gap-1">
                                 <label className="text-[10px] uppercase font-bold text-neutral-500 tracking-wider">{t('storyboardVideo.duration')}</label>
                                 <select
-                                    value={settings.duration}
-                                    onChange={(e) => setSettings(prev => ({ ...prev, duration: Number(e.target.value) }))}
+                                    value={currentSettings.duration}
+                                    onChange={(e) => {
+                                        const nextSettings = normalizeStoryboardVideoSettings(
+                                            { ...currentSettings, duration: Number(e.target.value) },
+                                            storyboardVideoOptions,
+                                        );
+                                        if (nextSettings) {
+                                            setSettings(nextSettings);
+                                        }
+                                    }}
+                                    disabled={!currentModel}
                                     className="bg-neutral-800 text-white text-xs px-3 py-2 rounded-lg border border-neutral-700 focus:outline-none focus:border-purple-500 min-w-[80px]"
                                 >
-                                    {currentModel.durations.map(d => (
+                                    {availableDurations.map(d => (
                                         <option key={d} value={d}>{d}s</option>
                                     ))}
                                 </select>
@@ -487,8 +448,17 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
                             <div className="flex flex-col gap-1">
                                 <label className="text-[10px] uppercase font-bold text-neutral-500 tracking-wider">{t('storyboardVideo.resolution')}</label>
                                 <select
-                                    value={settings.resolution}
-                                    onChange={(e) => setSettings(prev => ({ ...prev, resolution: e.target.value }))}
+                                    value={currentSettings.resolution}
+                                    onChange={(e) => {
+                                        const nextSettings = normalizeStoryboardVideoSettings(
+                                            { ...currentSettings, resolution: e.target.value },
+                                            storyboardVideoOptions,
+                                        );
+                                        if (nextSettings) {
+                                            setSettings(nextSettings);
+                                        }
+                                    }}
+                                    disabled={!currentModel}
                                     className="bg-neutral-800 text-white text-xs px-3 py-2 rounded-lg border border-neutral-700 focus:outline-none focus:border-purple-500 min-w-[80px]"
                                 >
                                     {availableResolutions.map(res => (
@@ -502,10 +472,11 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
                         <div className="flex items-center gap-3">
                             <div className="text-right mr-2">
                                 <div className="text-xs text-neutral-400">{t('storyboardVideo.estCost')}</div>
-                                <div className="text-sm font-medium text-white">~{(sortedScenes.length * 0.1 * (settings.duration / 5)).toFixed(2)} {t('storyboardVideo.credits')}</div>
+                                <div className="text-sm font-medium text-white">~{(sortedScenes.length * 0.1 * (currentSettings.duration / 5)).toFixed(2)} {t('storyboardVideo.credits')}</div>
                             </div>
                             <button
-                                onClick={() => onCreateVideos(prompts, settings, sortedScenes.map(s => s.id))}
+                                onClick={() => effectiveSettings && onCreateVideos(prompts, effectiveSettings, sortedScenes.map(s => s.id))}
+                                disabled={!effectiveSettings}
                                 className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white pl-4 pr-5 py-2.5 rounded-xl text-sm font-medium transition-all shadow-lg shadow-purple-900/40 flex items-center gap-2"
                             >
                                 <Play size={16} fill="currentColor" />

@@ -17,26 +17,34 @@ import tiktokPostRoutes from './routes/tiktok-post.js';
 import { processTikTokVideo, isValidTikTokUrl } from './tools/tiktok.js';
 import localModelsRoutes from './routes/local-models.js';
 import storyboardRoutes from './routes/storyboard.js';
+import openaiteachProxyRoutes from './routes/openaiteach-proxy.js';
+import modelCapabilitiesRoutes from './routes/model-capabilities.js';
+import { resolveRuntimePaths, resolveServerPort } from './runtime-paths.js';
+import { registerSpaFallback } from './spa-fallback.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = 3001;
-
-// Ensure library directories exist
-const LIBRARY_DIR = path.join(__dirname, '..', 'library');
-const WORKFLOWS_DIR = path.join(LIBRARY_DIR, 'workflows');
-const IMAGES_DIR = path.join(LIBRARY_DIR, 'images');
-const VIDEOS_DIR = path.join(LIBRARY_DIR, 'videos');
-const CHATS_DIR = path.join(LIBRARY_DIR, 'chats');
-const LIBRARY_ASSETS_DIR = path.join(LIBRARY_DIR, 'assets');
+const PORT = resolveServerPort();
+const {
+    rendererDistDir: RENDERER_DIST_DIR,
+    publicWorkflowsDir: PUBLIC_WORKFLOWS_DIR,
+    libraryDir: LIBRARY_DIR,
+    workflowsDir: WORKFLOWS_DIR,
+    imagesDir: IMAGES_DIR,
+    videosDir: VIDEOS_DIR,
+    chatsDir: CHATS_DIR,
+    libraryAssetsDir: LIBRARY_ASSETS_DIR,
+} = resolveRuntimePaths({ serverDir: __dirname });
 
 [LIBRARY_DIR, WORKFLOWS_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
 });
+
+process.env.LIBRARY_DIR = LIBRARY_DIR;
 
 // Enable CORS for all routes (must come before static file serving)
 app.use(cors());
@@ -93,6 +101,16 @@ if (!OPENAI_API_KEY) {
 }
 
 // ============================================================================
+// XAI VIDEO CONFIGURATION
+// ============================================================================
+
+const XAI_API_KEY = process.env.XAI_API_KEY;
+
+if (!XAI_API_KEY) {
+    console.warn("SERVER WARNING: XAI_API_KEY not set. Grok Video models will not work.");
+}
+
+// ============================================================================
 // FAL.AI CONFIGURATION (for Kling 2.6 Motion Control)
 // ============================================================================
 
@@ -102,13 +120,25 @@ if (!FAL_API_KEY) {
     console.warn("SERVER WARNING: FAL_API_KEY not set. Kling 2.6 Motion Control will not work.");
 }
 
+// ============================================================================
+// SEEDANCE / 即梦 CONFIGURATION
+// ============================================================================
+
+const SEEDANCE_API_KEY = process.env.SEEDANCE_API_KEY;
+
+if (!SEEDANCE_API_KEY) {
+    console.warn("SERVER WARNING: SEEDANCE_API_KEY not set. 即梦 / Seedance 视频模型将不可用。");
+}
+
 // Set up app.locals for sharing config with route modules
 app.locals.GEMINI_API_KEY = API_KEY;
 app.locals.KLING_ACCESS_KEY = KLING_ACCESS_KEY;
 app.locals.KLING_SECRET_KEY = KLING_SECRET_KEY;
 app.locals.HAILUO_API_KEY = HAILUO_API_KEY;
 app.locals.OPENAI_API_KEY = OPENAI_API_KEY;
+app.locals.XAI_API_KEY = XAI_API_KEY;
 app.locals.FAL_API_KEY = FAL_API_KEY;
+app.locals.SEEDANCE_API_KEY = SEEDANCE_API_KEY;
 app.locals.IMAGES_DIR = IMAGES_DIR;
 app.locals.VIDEOS_DIR = VIDEOS_DIR;
 app.locals.LIBRARY_DIR = LIBRARY_DIR;
@@ -219,6 +249,12 @@ function sanitizeWorkflowNodes(nodes) {
 
     return sanitized;
 }
+
+// OpenAiTeach：服务端会话代理（登录 / 拉 Token，避免浏览器 Cookie 在本地开发失效）
+app.use('/api/openaiteach', openaiteachProxyRoutes);
+
+// Model capabilities proxy (video / voice capability remote override)
+app.use('/api/model-capabilities', modelCapabilitiesRoutes);
 
 // Mount generation routes (image and video generation)
 app.use('/api', generationRoutes);
@@ -465,19 +501,17 @@ app.post('/api/workflows', async (req, res) => {
 // Dynamically scans directory - no need to maintain index.json manually
 app.get('/api/public-workflows', async (req, res) => {
     try {
-        const publicWorkflowsDir = path.join(__dirname, '..', 'public', 'workflows');
-
-        if (!fs.existsSync(publicWorkflowsDir)) {
+        if (!PUBLIC_WORKFLOWS_DIR || !fs.existsSync(PUBLIC_WORKFLOWS_DIR)) {
             return res.json([]);
         }
 
         // Scan all .json files except index.json
-        const files = fs.readdirSync(publicWorkflowsDir)
+        const files = fs.readdirSync(PUBLIC_WORKFLOWS_DIR)
             .filter(f => f.endsWith('.json') && f !== 'index.json');
 
         const workflows = files.map(file => {
             try {
-                const content = fs.readFileSync(path.join(publicWorkflowsDir, file), 'utf8');
+                const content = fs.readFileSync(path.join(PUBLIC_WORKFLOWS_DIR, file), 'utf8');
                 const workflow = JSON.parse(content);
 
                 // Generate description from workflow content
@@ -517,8 +551,11 @@ app.get('/api/public-workflows', async (req, res) => {
 // Load specific public workflow
 app.get('/api/public-workflows/:id', async (req, res) => {
     try {
-        const publicWorkflowsDir = path.join(__dirname, '..', 'public', 'workflows');
-        const filePath = path.join(publicWorkflowsDir, `${req.params.id}.json`);
+        if (!PUBLIC_WORKFLOWS_DIR) {
+            return res.status(404).json({ error: "Public workflow not found" });
+        }
+
+        const filePath = path.join(PUBLIC_WORKFLOWS_DIR, `${req.params.id}.json`);
 
         if (!fs.existsSync(filePath)) {
             return res.status(404).json({ error: "Public workflow not found" });
@@ -1214,15 +1251,23 @@ app.get('/api/chat/sessions/:id', async (req, res) => {
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
-    const distPath = path.join(__dirname, '..', 'dist');
-    app.use(express.static(distPath));
-
-    // Handle SPA routing: serve index.html for any unknown routes
-    app.get('*', (req, res) => {
-        res.sendFile(path.join(distPath, 'index.html'));
-    });
+    registerSpaFallback(app, RENDERER_DIST_DIR);
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
     console.log(`Backend server running on http://localhost:${PORT}`);
+    console.log(
+        `OpenAiTeach proxy: http://localhost:${PORT}/api/openaiteach/ping (GET 应返回 {"ok":true,...})`
+    );
+});
+
+server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE') {
+        console.error(
+            `[FATAL] 端口 ${PORT} 已被占用。请先结束占用该端口的旧 Node 进程（任务管理器或 netstat -ano | findstr :${PORT}），再重新启动；否则登录/Token 代理不会生效。`
+        );
+    } else {
+        console.error('[FATAL] HTTP server error:', err);
+    }
+    process.exit(1);
 });

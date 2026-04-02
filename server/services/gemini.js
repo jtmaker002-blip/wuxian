@@ -29,13 +29,59 @@ export function getGeminiClient(apiKey) {
 // IMAGE GENERATION
 // ============================================================================
 
+export const SUPPORTED_GEMINI_IMAGE_MODELS = Object.freeze([
+    'gemini-2.5-flash-image-preview',
+    'gemini-3.1-flash-image-preview',
+    'gemini-3-pro-image-preview'
+]);
+
+export const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-3-pro-image-preview';
+
+export function resolveGeminiImageModel(imageModel) {
+    if (!imageModel) {
+        return DEFAULT_GEMINI_IMAGE_MODEL;
+    }
+
+    if (SUPPORTED_GEMINI_IMAGE_MODELS.includes(imageModel)) {
+        return imageModel;
+    }
+
+    throw new Error(`Unsupported Gemini image model: ${imageModel}`);
+}
+
+export const SUPPORTED_VEO_VIDEO_MODELS = Object.freeze([
+    'veo-3.1-fast-generate-preview'
+]);
+
+export const DEFAULT_VEO_VIDEO_MODEL = 'veo-3.1-fast-generate-preview';
+
+const VEO_VIDEO_MODEL_ALIASES = Object.freeze({
+    'veo-3.1': DEFAULT_VEO_VIDEO_MODEL,
+    'veo3.1': DEFAULT_VEO_VIDEO_MODEL,
+    'veo3.1-pro': DEFAULT_VEO_VIDEO_MODEL,
+    'veo3.1-fast-components': DEFAULT_VEO_VIDEO_MODEL
+});
+
+export function resolveVeoVideoModel(videoModel) {
+    if (!videoModel) {
+        return DEFAULT_VEO_VIDEO_MODEL;
+    }
+
+    const normalizedModel = VEO_VIDEO_MODEL_ALIASES[videoModel] || videoModel;
+    if (SUPPORTED_VEO_VIDEO_MODELS.includes(normalizedModel)) {
+        return normalizedModel;
+    }
+
+    throw new Error(`Unsupported Veo video model: ${videoModel}`);
+}
+
 /**
  * Generate image using Gemini
  * @returns {Promise<Buffer>} Image buffer
  */
-export async function generateGeminiImage({ prompt, imageBase64Array, aspectRatio, resolution, apiKey }) {
+export async function generateGeminiImage({ prompt, imageBase64Array, aspectRatio, resolution, imageModel, apiKey }) {
     const ai = getGeminiClient(apiKey);
-    const modelName = 'gemini-3-pro-image-preview';
+    const modelName = resolveGeminiImageModel(imageModel);
 
     const parts = [];
 
@@ -138,30 +184,32 @@ export async function generateGeminiImage({ prompt, imageBase64Array, aspectRati
  * Generate video using Veo
  * @returns {Promise<Buffer>} Video buffer
  */
-export async function generateVeoVideo({ prompt, imageBase64, lastFrameBase64, aspectRatio, resolution, duration, generateAudio = true, apiKey }) {
+export async function generateVeoVideo({ prompt, imageBase64, lastFrameBase64, aspectRatio, resolution, duration, videoModel, generateAudio = true, apiKey }) {
     const ai = getGeminiClient(apiKey);
-    const model = 'veo-3.1-fast-generate-preview';
+    const model = resolveVeoVideoModel(videoModel);
 
-    // Map resolution
-    const resolutionMap = {
-        '1080p': '1080p',
-        '720p': '720p',
-        '512p': '512p',
-        'Auto': '720p'
-    };
-    const mappedResolution = resolutionMap[resolution] || '720p';
-
-    // Map aspect ratio
-    const ratioMap = {
-        'Auto': '16:9',
-        '16:9': '16:9',
-        '9:16': '9:16'
-    };
-    const mappedRatio = ratioMap[aspectRatio] || '16:9';
-
-    // Map duration - Veo 3 supports 4, 6, or 8 seconds only
+    const validResolutions = ['512p', '720p', '1080p'];
+    const validAspectRatios = ['16:9', '9:16'];
     const validDurations = [4, 6, 8];
-    const mappedDuration = validDurations.includes(duration) ? duration : 8;
+    const mappedResolution = resolution ?? '720p';
+    const mappedRatio = aspectRatio ?? '16:9';
+    const mappedDuration = duration ?? 8;
+
+    if (!validResolutions.includes(mappedResolution)) {
+        throw new Error(`Unsupported Veo resolution: ${mappedResolution}`);
+    }
+
+    if (!validAspectRatios.includes(mappedRatio)) {
+        throw new Error(`Unsupported Veo aspect ratio: ${mappedRatio}`);
+    }
+
+    if (!validDurations.includes(mappedDuration)) {
+        throw new Error(`Unsupported Veo duration: ${mappedDuration}`);
+    }
+
+    if (generateAudio) {
+        throw new Error('Veo 路线当前未接通音频生成');
+    }
 
     // Build API arguments
     // Note: generateAudio is NOT supported by @google/genai library yet (throws error)

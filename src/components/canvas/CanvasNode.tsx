@@ -11,12 +11,16 @@ import { NodeConnectors } from './NodeConnectors';
 import { NodeContent } from './NodeContent';
 import { NodeControls } from './NodeControls';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
+import {
+  type SwitchableNodeType,
+} from '../../config/nodeTypeRegistry';
 
 interface CanvasNodeProps {
   data: NodeData;
   inputUrl?: string;
   connectedImageNodes?: { id: string; url: string; type?: NodeType }[]; // For frame-to-frame video mode and motion control
   onUpdate: (id: string, updates: Partial<NodeData>) => void;
+  onSwitchType?: (id: string, nextType: SwitchableNodeType) => void;
   onGenerate: (id: string) => void;
   onAddNext: (id: string, type: 'left' | 'right') => void;
   selected: boolean;
@@ -55,6 +59,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   inputUrl,
   connectedImageNodes,
   onUpdate,
+  onSwitchType,
   onGenerate,
   onAddNext,
   selected,
@@ -97,7 +102,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   // Theme helper
   const isDark = canvasTheme === 'dark';
-
   // Inverse scaling for toolbar to keep it readable when zooming out
   // Same logic as NodeControls prompt bar
   const minEffectiveScale = 0.8;
@@ -125,6 +129,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   React.useEffect(() => {
     // Only detect if we have a result but no stored aspect ratio
     if (!isSuccess || !data.resultUrl || data.resultAspectRatio) return;
+    if (data.type === NodeType.AUDIO) return;
 
     if (data.type === NodeType.VIDEO) {
       // Detect video dimensions
@@ -170,6 +175,10 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     // Video nodes without result - use default 16:9
     if (data.type === NodeType.VIDEO) {
       return { aspectRatio: '16/9' };
+    }
+
+    if (data.type === NodeType.AUDIO) {
+      return { aspectRatio: '16/7' };
     }
 
     // Image nodes without result - use the selected aspect ratio for preview
@@ -910,6 +919,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             onImageToVideo={onImageToVideo}
             onUpdate={onUpdate}
             onPostToX={onPostToX}
+            canvasTheme={canvasTheme}
           />
         </div>
 
@@ -924,6 +934,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               isSuccess={isSuccess}
               connectedImageNodes={connectedImageNodes}
               onUpdate={onUpdate}
+              onSwitchType={onSwitchType}
               onGenerate={onGenerate}
               onChangeAngleGenerate={onChangeAngleGenerate}
               onSelect={onSelect}

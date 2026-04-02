@@ -5,7 +5,11 @@ export type LoginInput = {
 
 export type SessionPayload = {
   ok: boolean;
-  /** 前端标识占位符 "cookie-session:{userId}"，真实 session 由 HttpOnly Cookie 维护 */
+  /** 本机后端代理会话 id（有则 Token 列表走 /api/openaiteach/*） */
+  oatProxySid?: string;
+  /**
+   * `oat-proxy:{sid}` 或与 OpenAiTeach 直连相关的占位 / Bearer。
+   */
   sessionToken: string;
   userId?: string;
   username?: string;

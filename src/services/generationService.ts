@@ -23,6 +23,7 @@ export interface GenerateImageParams {
 export interface GenerateVideoParams {
   prompt: string;
   imageBase64?: string; // For Image-to-Video (start frame)
+  referenceImagesBase64?: string[]; // For providers that support multi-image / full reference
   lastFrameBase64?: string; // For frame-to-frame interpolation (end frame)
   aspectRatio?: string;
   resolution?: string; // Add resolution to params
@@ -31,6 +32,12 @@ export interface GenerateVideoParams {
   motionReferenceUrl?: string; // For Kling 2.6 motion control
   generateAudio?: boolean; // For Kling 2.6 and Veo 3.1 native audio (default: true)
   nodeId?: string; // ID of the node initiating generation
+}
+
+export interface GenerateAudioParams {
+  prompt: string;
+  audioModel?: string;
+  nodeId?: string;
 }
 
 /**
@@ -85,6 +92,30 @@ export const generateVideo = async (params: GenerateVideoParams): Promise<string
 
   } catch (error) {
     console.error("Video Generation Error:", error);
+    throw error;
+  }
+};
+
+export const generateAudio = async (params: GenerateAudioParams): Promise<string> => {
+  try {
+    const response = await fetch('/api/generate-audio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData.error || response.statusText);
+    }
+
+    const data = await response.json();
+    if (!data.resultUrl) {
+      throw new Error('No audio data returned from server');
+    }
+    return data.resultUrl;
+  } catch (error) {
+    console.error('Audio Generation Error:', error);
     throw error;
   }
 };

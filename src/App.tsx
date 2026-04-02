@@ -58,6 +58,23 @@ import { useSessionStore } from './features/auth/store/session-store';
 import { useTokenConfigStore } from './features/settings/store/token-config-store';
 import { OPENAITEACH_401_EVENT } from './shared/api/http';
 import { useApiSettings } from './hooks/useApiSettings';
+import {
+  LOCAL_VIDEO_CAPABILITIES,
+  LOCAL_VOICE_CAPABILITIES,
+  getVideoCapability,
+  resetRuntimeVideoCapabilities,
+  resetRuntimeVoiceCapabilities,
+  setRuntimeVideoCapabilities,
+  setRuntimeVoiceCapabilities,
+} from './config/modelCapabilities';
+import {
+  fetchRemoteVideoCapabilities,
+  fetchRemoteVoiceCapabilities,
+  mergeVideoCapabilities,
+  mergeVoiceCapabilities,
+} from './services/remoteCapabilitiesService';
+import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
+import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -89,6 +106,7 @@ export default function App() {
 
   const [hasApiKey] = useState(true); // Backend handles API key
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [capabilityRefreshTick, setCapabilityRefreshTick] = useState(0);
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     isOpen: false,
     x: 0,
@@ -96,7 +114,7 @@ export default function App() {
     type: 'global'
   });
 
-  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('dark');
+  const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('light');
 
   // ── OpenAiTeach session ──────────────────────────────────────────────────
   const session = useSessionStore((s) => s.session);
@@ -104,7 +122,17 @@ export default function App() {
   const resetTokenConfig = useTokenConfigStore((s) => s.reset);
 
   const handleLogout = useCallback(() => {
+    const sid = useSessionStore.getState().session?.oatProxySid;
+    if (sid) {
+      void fetch('/api/openaiteach/logout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sid }),
+      });
+    }
     setSession(null);
+    resetRuntimeVideoCapabilities();
+    resetRuntimeVoiceCapabilities();
     resetTokenConfig();
   }, [setSession, resetTokenConfig]);
 
@@ -112,6 +140,34 @@ export default function App() {
     window.addEventListener(OPENAITEACH_401_EVENT, handleLogout);
     return () => window.removeEventListener(OPENAITEACH_401_EVENT, handleLogout);
   }, [handleLogout]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRemoteCapabilities = async () => {
+      const [remoteVideo, remoteVoice] = await Promise.all([
+        fetchRemoteVideoCapabilities(session?.oatProxySid),
+        fetchRemoteVoiceCapabilities(session?.oatProxySid),
+      ]);
+      if (cancelled) return;
+      const mergedVideo = remoteVideo
+        ? mergeVideoCapabilities(LOCAL_VIDEO_CAPABILITIES, remoteVideo)
+        : LOCAL_VIDEO_CAPABILITIES;
+      setRuntimeVideoCapabilities(mergedVideo);
+      setCapabilityRefreshTick((tick) => tick + 1);
+
+      const mergedVoice = remoteVoice
+        ? mergeVoiceCapabilities(LOCAL_VOICE_CAPABILITIES, remoteVoice)
+        : LOCAL_VOICE_CAPABILITIES;
+      setRuntimeVoiceCapabilities(mergedVoice);
+    };
+
+    void loadRemoteCapabilities();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.oatProxySid]);
 
   // ── API Settings (model list) ─────────────────────────────────────────────
   const { isModelEnabled, toggleModel, toggleAllInCategory } = useApiSettings();
@@ -174,11 +230,31 @@ export default function App() {
     setSelectedNodeIds,
     addNode,
     updateNode,
+    switchNodeType,
     deleteNode,
     deleteNodes,
     clearSelection,
     handleSelectTypeFromMenu
   } = useNodeManagement();
+
+  useEffect(() => {
+    setNodes(prev =>
+      prev.map(node => {
+        if (node.type !== NodeType.VIDEO || !node.videoModel) return node;
+        const canonicalVideoModel = canonicalizeVideoModelId(node.videoModel) ?? node.videoModel;
+        const capability = getVideoCapability(canonicalVideoModel);
+        if (!capability) return node;
+        return {
+          ...node,
+          videoModel: canonicalVideoModel,
+          ...sanitizeVideoNodeState(
+            { ...node, videoModel: canonicalVideoModel, videoMode: node.videoMode ?? 'standard' },
+            capability
+          ),
+        };
+      })
+    );
+  }, [setNodes, session?.oatProxySid, capabilityRefreshTick]);
 
   const {
     isDraggingConnection,
@@ -579,8 +655,9 @@ export default function App() {
       // Create a new Video node for each image
       const newNodeId = crypto.randomUUID();
       const PROMPT = prompts[sourceNode.id] || sourceNode.prompt || 'Animated video';
+      const videoModel = canonicalizeVideoModelId(settings.model) ?? DEFAULT_REGISTRY_VIDEO_ID;
 
-      const newVideoNode: NodeData = {
+      const newVideoNodeBase: NodeData = {
         id: newNodeId,
         type: NodeType.VIDEO,
         // Clone the layout pattern but shifted to the right
@@ -588,16 +665,23 @@ export default function App() {
         y: sourceNode.y,
         prompt: PROMPT,
         status: NodeStatus.IDLE, // Will switch to LOADING when generated
-        model: settings.model,
-        videoModel: settings.model, // Explicitly set video model
+        model: videoModel,
+        videoModel,
         videoDuration: settings.duration,
         aspectRatio: sourceNode.aspectRatio || '16:9',
         resolution: settings.resolution,
         parentIds: [sourceNode.id], // Connect to source image
         // groupId: undefined, // Explicitly NOT in the group
-        videoMode: 'frame-to-frame', // Important for image-to-video
+        videoMode: 'standard',
         inputUrl: sourceNode.resultUrl, // Pass image as input
       };
+      const capability = getVideoCapability(videoModel);
+      const newVideoNode: NodeData = capability
+        ? {
+          ...newVideoNodeBase,
+          ...sanitizeVideoNodeState(newVideoNodeBase, capability),
+        }
+        : newVideoNodeBase;
 
       newNodes.push(newVideoNode);
     });
@@ -731,7 +815,7 @@ export default function App() {
     const createNode = (resultAspectRatio?: string, aspectRatio?: string) => {
       const isVideo = type === 'videos';
       // Use the original model from asset metadata, or fall back to defaults
-      const defaultModel = isVideo ? 'veo-3.1' : 'imagen-3.0-generate-002';
+      const defaultModel = isVideo ? 'veo3.1' : 'gemini-2.5-flash-image-preview';
       const nodeModel = model || defaultModel;
 
       const newNode: NodeData = {
@@ -1162,6 +1246,7 @@ export default function App() {
                     }));
                 })()}
                 onUpdate={updateNodeWithSync}
+                onSwitchType={switchNodeType}
                 onGenerate={handleGenerate}
                 onAddNext={handleAddNext}
                 selected={selectedNodeIds.includes(node.id)}

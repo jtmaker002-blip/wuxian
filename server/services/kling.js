@@ -75,32 +75,59 @@ function extractRawBase64(dataUrl) {
     return dataUrl;
 }
 
+export const SUPPORTED_KLING_VIDEO_MODELS = Object.freeze([
+    'kling-v2-1',
+    'kling-v2-1-master',
+    'kling-v2-5-turbo',
+    'kling-v2-6',
+    'kling-v3'
+]);
+
+export const DEFAULT_KLING_VIDEO_MODEL = 'kling-v3';
+
+export function resolveKlingVideoModel(modelId) {
+    if (!modelId) {
+        return DEFAULT_KLING_VIDEO_MODEL;
+    }
+
+    if (SUPPORTED_KLING_VIDEO_MODELS.includes(modelId)) {
+        return modelId;
+    }
+
+    throw new Error(`Unsupported Kling video model: ${modelId}`);
+}
+
+export const SUPPORTED_KLING_IMAGE_MODELS = Object.freeze([
+    'kling-v1-5',
+    'kling-v2-1'
+]);
+
+export const DEFAULT_KLING_IMAGE_MODEL = 'kling-v2-1';
+
+export function resolveKlingImageModel(modelId) {
+    if (!modelId) {
+        return DEFAULT_KLING_IMAGE_MODEL;
+    }
+
+    if (SUPPORTED_KLING_IMAGE_MODELS.includes(modelId)) {
+        return modelId;
+    }
+
+    throw new Error(`Unsupported Kling image model: ${modelId}`);
+}
+
 /**
  * Map frontend model ID to Kling API model_name for video
  */
 function mapKlingVideoModelName(modelId) {
-    // Consolidated models: removed legacy v1, v1-5, v1-6, v2-master
-    const mapping = {
-        'kling-v2-1': 'kling-v2-1',
-        'kling-v2-1-master': 'kling-v2-1-master',
-        'kling-v2-5-turbo': 'kling-v2-5-turbo',
-        'kling-v2-6': 'kling-v2-6'
-    };
-    return mapping[modelId] || 'kling-v2-1';
+    return resolveKlingVideoModel(modelId);
 }
 
 /**
  * Map frontend model ID to Kling API model_name for image
  */
 function mapKlingImageModelName(modelId) {
-    // Consolidated models: removed legacy v1, v2, v2-new
-    // v1-5 kept for single-image reference (face/subject modes)
-    // v2-1 kept for multi-image support
-    const mapping = {
-        'kling-v1-5': 'kling-v1-5',
-        'kling-v2-1': 'kling-v2-1'
-    };
-    return mapping[modelId] || 'kling-v2-1';
+    return resolveKlingImageModel(modelId);
 }
 
 // ============================================================================
@@ -150,6 +177,48 @@ async function pollKlingVideoTask(taskId, endpoint, token, maxWaitMs = 300000) {
 }
 
 /**
+ * Generate video using Kling AI Text-to-Video API
+ */
+export async function generateKlingTextToVideo({ prompt, modelId, aspectRatio, duration, accessKey, secretKey }) {
+    const token = generateKlingJWT(accessKey, secretKey);
+    const modelName = mapKlingVideoModelName(modelId);
+
+    const body = {
+        model_name: modelName,
+        mode: 'std',
+        duration: String(duration || 5),
+        aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
+        prompt: prompt || ''
+    };
+
+    console.log(`Kling Text-to-Video Gen: Using model ${modelName}, duration: ${body.duration}s, ratio: ${body.aspect_ratio}`);
+
+    const response = await fetch(`${KLING_BASE_URL}/v1/videos/text2video`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(body)
+    });
+
+    const result = await response.json();
+
+    if (result.code !== 0) {
+        throw new Error(`Kling API error: ${result.message || 'Failed to create text-to-video task'}`);
+    }
+
+    const taskId = result.data?.task_id;
+    if (!taskId) {
+        throw new Error('No task ID returned from Kling text-to-video API');
+    }
+
+    console.log(`Kling text-to-video task created: ${taskId}`);
+
+    return await pollKlingVideoTask(taskId, 'text2video', token);
+}
+
+/**
  * Generate video using Kling AI Image-to-Video API
  */
 export async function generateKlingVideo({ prompt, imageBase64, lastFrameBase64, motionReferenceUrl, modelId, aspectRatio, duration, accessKey, secretKey }) {
@@ -159,7 +228,7 @@ export async function generateKlingVideo({ prompt, imageBase64, lastFrameBase64,
     // Use 'pro' mode when:
     // 1. Doing frame-to-frame (with end frame) or motion control
     // 2. Using kling-v2-6 or kling-v2-master models (they only support 'pro' mode)
-    const proOnlyModels = ['kling-v2-6', 'kling-v2-master'];
+    const proOnlyModels = ['kling-v2-6'];
     const useProMode = !!lastFrameBase64 || !!motionReferenceUrl || proOnlyModels.includes(modelName);
 
     // Map aspect ratio - default to 16:9

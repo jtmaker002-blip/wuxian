@@ -6,6 +6,11 @@ export type HttpClientConfig = {
   baseUrl: string;
 };
 
+export type HttpGetOptions = {
+  /** 为 true 时不派发全局登出（例如 token 列表接口 Cookie 未带上时不应踢出登录页） */
+  suppressGlobal401?: boolean;
+};
+
 export function createHttpClient(config: HttpClientConfig) {
   const base = resolveAbsoluteBaseUrl(config.baseUrl);
 
@@ -16,13 +21,20 @@ export function createHttpClient(config: HttpClientConfig) {
   }
 
   return {
-    async get<T>(path: string, headers?: Record<string, string>): Promise<T> {
+    async get<T>(
+      path: string,
+      headers?: Record<string, string>,
+      options?: HttpGetOptions
+    ): Promise<T> {
       const res = await fetch(new URL(path, base), {
         method: 'GET',
         headers,
         credentials: 'include',
       });
-      if (res.status === 401) { dispatch401(); throw new Error('HTTP 401 Unauthorized'); }
+      if (res.status === 401) {
+        if (!options?.suppressGlobal401) dispatch401();
+        throw new Error('HTTP 401 Unauthorized');
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json() as Promise<T>;
     },
@@ -34,7 +46,10 @@ export function createHttpClient(config: HttpClientConfig) {
         body: JSON.stringify(body),
         credentials: 'include',
       });
-      if (res.status === 401) { dispatch401(); throw new Error('HTTP 401 Unauthorized'); }
+      if (res.status === 401) {
+        dispatch401();
+        throw new Error('HTTP 401 Unauthorized');
+      }
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return res.json() as Promise<T>;
     },

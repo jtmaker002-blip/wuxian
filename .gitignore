@@ -45,3 +45,5 @@ models/
 # Agent workflows and shared utilities
 .agent/
 .shared/
+.omx/
+.worktrees/

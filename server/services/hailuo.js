@@ -290,29 +290,47 @@ export async function generateHailuoVideo({
 export async function generateHailuoSubjectVideo({
     prompt,
     subjectImageBase64,
+    subjectImagesBase64,
+    aspectRatio,
+    resolution,
+    duration,
     apiKey
 }) {
     if (!apiKey) {
         throw new Error('Hailuo API key not configured');
     }
 
-    if (!subjectImageBase64) {
+    const rawSubjectImages = Array.isArray(subjectImagesBase64) && subjectImagesBase64.length > 0
+        ? subjectImagesBase64
+        : subjectImageBase64
+            ? [subjectImageBase64]
+            : [];
+
+    if (rawSubjectImages.length === 0) {
         throw new Error('Subject reference image required for S2V mode');
     }
 
-    // Format subject image
-    let subjectImage = subjectImageBase64;
-    if (!subjectImage.startsWith('data:') && !subjectImage.startsWith('http')) {
-        subjectImage = `data:image/jpeg;base64,${subjectImage}`;
-    }
+    const mappedResolution = mapResolution(resolution);
+    const mappedDuration = mapHailuoDuration(duration);
+    const mappedAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
+
+    const subjectImages = rawSubjectImages.map((subjectImageBase64Value) => {
+        if (subjectImageBase64Value.startsWith('data:') || subjectImageBase64Value.startsWith('http')) {
+            return subjectImageBase64Value;
+        }
+        return `data:image/jpeg;base64,${subjectImageBase64Value}`;
+    });
 
     const body = {
         model: 'S2V-01',
         prompt: prompt || '',
+        duration: mappedDuration,
+        resolution: mappedResolution,
+        aspect_ratio: mappedAspectRatio,
         subject_reference: [
             {
                 type: 'character',
-                image: [subjectImage]
+                image: subjectImages
             }
         ]
     };

@@ -1,9 +1,9 @@
 /**
  * openai.js
- * 
- * Service for OpenAI GPT Image generation (gpt-image-1.5).
- * Uses the Image API for both text-to-image (generations) and 
- * image-to-image (edits) generation.
+ *
+ * Service for OpenAI GPT Image / Sora video generation.
+ * Uses the Image API for text-to-image and image-to-image generation,
+ * and the Videos API for text/image-to-video generation.
  */
 
 import OpenAI, { toFile } from 'openai';
@@ -44,6 +44,43 @@ function mapResolutionToQuality(resolution) {
         'Auto': 'auto'
     };
     return qualityMap[resolution] || 'auto';
+}
+
+export const SUPPORTED_OPENAI_VIDEO_MODELS = Object.freeze([
+    'sora-2'
+]);
+
+export const DEFAULT_OPENAI_VIDEO_MODEL = 'sora-2';
+
+export function resolveOpenAIVideoModel(videoModel) {
+    if (!videoModel) {
+        return DEFAULT_OPENAI_VIDEO_MODEL;
+    }
+
+    if (SUPPORTED_OPENAI_VIDEO_MODELS.includes(videoModel)) {
+        return videoModel;
+    }
+
+    throw new Error(`Unsupported OpenAI video model: ${videoModel}`);
+}
+
+function mapVideoDurationToSeconds(duration) {
+    const seconds = Number(duration || 0);
+    if ([4, 8, 12].includes(seconds)) {
+        return String(seconds);
+    }
+    return '4';
+}
+
+function mapVideoSize(aspectRatio, resolution) {
+    const isPortrait = aspectRatio === '9:16';
+    const wants1080p = resolution === '1080p';
+
+    if (wants1080p) {
+        return isPortrait ? '1024x1792' : '1792x1024';
+    }
+
+    return isPortrait ? '720x1280' : '1280x720';
 }
 
 /**
@@ -145,4 +182,78 @@ export async function generateOpenAIImage({ prompt, imageBase64Array, aspectRati
         const imageBase64 = response.data[0].b64_json;
         return Buffer.from(imageBase64, 'base64');
     }
+}
+
+// ============================================================================
+// VIDEO GENERATION
+// ============================================================================
+
+async function pollOpenAIVideo(openai, videoId, maxWaitMs = 300000) {
+    const startTime = Date.now();
+    const pollInterval = 5000;
+
+    while (Date.now() - startTime < maxWaitMs) {
+        const video = await openai.videos.retrieve(videoId);
+
+        if (video.status === 'completed') {
+            return video;
+        }
+
+        if (video.status === 'failed') {
+            const message = video.error?.message || 'OpenAI video generation failed';
+            throw new Error(message);
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error('OpenAI video generation timed out');
+}
+
+/**
+ * Generate video using OpenAI Sora API
+ *
+ * @param {Object} params
+ * @param {string} params.prompt
+ * @param {string} [params.imageBase64]
+ * @param {string} [params.aspectRatio]
+ * @param {string|number} [params.duration]
+ * @param {string} [params.resolution]
+ * @param {string} [params.videoModel]
+ * @param {string} params.apiKey
+ * @returns {Promise<Buffer>}
+ */
+export async function generateOpenAIVideo({
+    prompt,
+    imageBase64,
+    aspectRatio,
+    duration,
+    resolution,
+    videoModel,
+    apiKey,
+}) {
+    const openai = new OpenAI({ apiKey });
+    const model = resolveOpenAIVideoModel(videoModel);
+    const seconds = mapVideoDurationToSeconds(duration);
+    const size = mapVideoSize(aspectRatio, resolution);
+
+    const request = {
+        model,
+        prompt: prompt || '',
+        seconds,
+        size,
+    };
+
+    if (imageBase64) {
+        request.input_reference = await base64ToFile(imageBase64, 'sora-reference.png');
+    }
+
+    const videoJob = await openai.videos.create(request);
+    const finishedVideo = await pollOpenAIVideo(openai, videoJob.id);
+    const contentResponse = await openai.videos.downloadContent(finishedVideo.id, {
+        variant: 'video',
+    });
+
+    const arrayBuffer = await contentResponse.arrayBuffer();
+    return Buffer.from(arrayBuffer);
 }

@@ -1,0 +1,14 @@
+HTTP/1.1 200 Connection established
+
+HTTP/1.1 200 OK
+Server: nginx
+Date: Mon, 30 Mar 2026 18:02:57 GMT
+Content-Type: application/json; charset=utf-8
+Content-Length: 45
+Connection: keep-alive
+Content-Security-Policy: frame-ancestors 'self'
+X-Api-Request-Id: 20260331020257488132108bSSBLJzs
+X-Frame-Options: SAMEORIGIN
+Strict-Transport-Security: max-age=31536000
+Alt-Svc: quic=":443"; h3=":443"; h3-29=":443"; h3-27=":443";h3-25=":443"; h3-T050=":443"; h3-Q050=":443";h3-Q049=":443";h3-Q048=":443"; h3-Q046=":443"; h3-Q043=":443"
+

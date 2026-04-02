@@ -22,30 +22,54 @@ const initial = {
   draftTokenValue: '',
 };
 
+type TokenSelectionSnapshot = Pick<
+  TokenConfigState,
+  'selectedTokenId' | 'selectedTokenValue' | 'draftTokenValue'
+>;
+
+export function resolveTokenSelection(
+  tokens: ApiTokenRecord[],
+  snapshot: TokenSelectionSnapshot
+) {
+  const { selectedTokenId, selectedTokenValue, draftTokenValue } = snapshot;
+  const matchedById = selectedTokenId
+    ? tokens.find((t) => t.id === selectedTokenId)
+    : undefined;
+  const matched = matchedById ??
+    (selectedTokenValue ? tokens.find((t) => t.value === selectedTokenValue) : undefined) ??
+    (!selectedTokenValue && !draftTokenValue && tokens.length > 0 ? tokens[0] : undefined);
+
+  return {
+    availableTokens: tokens,
+    selectedTokenId: matched?.id ?? '',
+    selectedTokenValue: matched?.isUsable ? matched.value : selectedTokenValue,
+    draftTokenValue: matched?.isUsable ? matched.value : draftTokenValue,
+  };
+}
+
 export const useTokenConfigStore = create<TokenConfigState>()(
   persist(
     (set, get) => ({
       ...initial,
       setAvailableTokens: (tokens) => {
-        const { selectedTokenId, draftTokenValue, selectedTokenValue } = get();
-        const matched = tokens.find((t) => t.id === selectedTokenId);
-        set({
-          availableTokens: tokens,
-          draftTokenValue: matched?.value ?? draftTokenValue,
-          selectedTokenValue: matched?.value ?? selectedTokenValue,
-        });
+        const next = resolveTokenSelection(tokens, get());
+        set(next);
       },
       setSelectedTokenId: (id) => {
         const matched = get().availableTokens.find((t) => t.id === id);
-        set({ selectedTokenId: id, draftTokenValue: matched?.value ?? '' });
+        set({
+          selectedTokenId: id,
+          draftTokenValue: matched?.isUsable ? matched.value : '',
+        });
       },
       setDraftTokenValue: (value) => set({ draftTokenValue: value }),
       saveSelectedToken: () => {
         const { availableTokens, selectedTokenId, draftTokenValue, selectedTokenValue } = get();
         const matched = availableTokens.find((t) => t.id === selectedTokenId);
         set({
-          draftTokenValue: matched?.value ?? draftTokenValue,
-          selectedTokenValue: matched?.value ?? selectedTokenValue,
+          selectedTokenId: matched?.id ?? '',
+          draftTokenValue: matched?.isUsable ? matched.value : draftTokenValue,
+          selectedTokenValue: matched?.isUsable ? matched.value : selectedTokenValue,
         });
       },
       saveManualToken: () => {

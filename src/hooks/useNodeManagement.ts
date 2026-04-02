@@ -7,6 +7,8 @@
 
 import { useState } from 'react';
 import { NodeData, NodeType, NodeStatus, Viewport } from '../types';
+import { isSwitchableNodeType, type SwitchableNodeType } from '../config/nodeTypeRegistry';
+import { switchNodeTypeData } from '../utils/nodeTypeSwitch';
 
 export const useNodeManagement = () => {
     // ============================================================================
@@ -64,6 +66,17 @@ export const useNodeManagement = () => {
      */
     const updateNode = (id: string, updates: Partial<NodeData>) => {
         setNodes(prev => prev.map(n => n.id === id ? { ...n, ...updates } : n));
+    };
+
+    /**
+     * Switches a node between text/image/video while preserving shared content.
+     */
+    const switchNodeType = (id: string, nextType: SwitchableNodeType) => {
+        setNodes(prev => prev.map(node => {
+            if (node.id !== id) return node;
+            if (!isSwitchableNodeType(node.type)) return node;
+            return switchNodeTypeData(node, nextType);
+        }));
     };
 
     /**
@@ -175,6 +188,7 @@ export const useNodeManagement = () => {
         setSelectedNodeIds,
         addNode,
         updateNode,
+        switchNodeType,
         deleteNode,
         deleteNodes,
         clearSelection,

@@ -115,13 +115,24 @@ export function LoginPage({ canvasTheme, onToggleTheme }: LoginPageProps) {
           </button>
         </form>
 
-        <div className={`mt-4 text-center text-xs ${textSecondary}`}>
+        <div className={`mt-4 text-center text-xs ${textSecondary} space-y-2`}>
+          <p>
+            还没有账号？
+            <a
+              href="https://openaiteach.com/register"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-indigo-400 hover:underline ml-1"
+            >
+              去注册
+            </a>
+          </p>
           <p>
             遇到问题？前往
             <a
               href="https://openaiteach.com"
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="text-indigo-400 hover:underline ml-1"
             >
               openaiteach.com

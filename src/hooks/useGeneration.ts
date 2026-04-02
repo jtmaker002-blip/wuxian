@@ -6,9 +6,20 @@
  */
 
 import { NodeData, NodeType, NodeStatus } from '../types';
-import { generateImage, generateVideo } from '../services/generationService';
+import { generateAudio, generateImage, generateVideo } from '../services/generationService';
 import { generateLocalImage } from '../services/localModelService';
 import { extractVideoLastFrame } from '../utils/videoHelpers';
+import {
+    DEFAULT_REGISTRY_VIDEO_ID,
+    DEFAULT_REGISTRY_IMAGE_ID,
+    canonicalizeImageModelId,
+    canonicalizeVideoModelId,
+    mapRegistryImageIdToServerImageId,
+    mapRegistryVideoIdToServerVideoId,
+} from '../config/registryModelBridge';
+import { getAllVoiceCapabilities, getVideoCapability, getVoiceCapability } from '../config/modelCapabilities';
+import { resolveStandardVideoExecutionState, resolveStandardVideoInputState, sanitizeVideoNodeState } from '../utils/videoCapabilityState';
+import { getVideoModeAvailabilityState, resolveEffectiveVideoMode } from '../utils/videoModeResolution';
 
 interface UseGenerationProps {
     nodes: NodeData[];
@@ -99,19 +110,127 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
         const textNodePrompts = getTextNodePrompts();
         const combinedPrompt = [...textNodePrompts, node.prompt].filter(Boolean).join('\n\n');
 
-        // Check if prompt is required
-        // For Kling frame-to-frame with both start and end frames, prompt is optional
-        const isKlingFrameToFrame =
-            node.type === NodeType.VIDEO &&
-            node.videoModel?.startsWith('kling-') &&
-            (node.parentIds && node.parentIds.length >= 2);
+        const canonicalVideoModel =
+            node.type === NodeType.VIDEO
+                ? (node.videoModel ? canonicalizeVideoModelId(node.videoModel) : DEFAULT_REGISTRY_VIDEO_ID)
+                : node.videoModel;
+        const videoCapability = node.type === NodeType.VIDEO ? getVideoCapability(canonicalVideoModel) : undefined;
+        const normalizedVideoNode =
+            node.type === NodeType.VIDEO && videoCapability
+                ? { ...node, videoModel: canonicalVideoModel, ...sanitizeVideoNodeState({ ...node, videoModel: canonicalVideoModel }, videoCapability) }
+                : node;
+        const connectedParentNodes =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? (normalizedVideoNode.parentIds ?? [])
+                    .map((pid) => nodes.find((candidate) => candidate.id === pid))
+                    .filter(Boolean)
+                : [];
+        const connectedParentPreviews =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? connectedParentNodes.map((candidate) => ({ type: candidate?.type }))
+                : [];
+        const activeVideoMode =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? resolveEffectiveVideoMode(
+                    normalizedVideoNode,
+                    connectedParentPreviews
+                )
+                : 'standard';
+        const selectedVideoModeAvailability =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? getVideoModeAvailabilityState(normalizedVideoNode, videoCapability)
+                : undefined;
+        const connectedFrameSourceNodes =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? connectedParentNodes.filter(
+                    (candidate): candidate is NodeData =>
+                        Boolean(candidate) &&
+                        candidate.type === NodeType.IMAGE &&
+                        Boolean(candidate.resultUrl)
+                )
+                : [];
+        const connectedVideoSourceNodes =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? connectedParentNodes.filter(
+                    (candidate): candidate is NodeData =>
+                        Boolean(candidate) &&
+                        candidate.type === NodeType.VIDEO &&
+                        Boolean(candidate.resultUrl)
+                )
+                : [];
+        const hasLegacyFrameFallback = connectedFrameSourceNodes.length >= 2;
+        const resolvedExplicitFrameInputs =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? (() => {
+                    const frameInputs = normalizedVideoNode.frameInputs ?? [];
+                    if (frameInputs.length < 2) return undefined;
 
-        if (!combinedPrompt && !isKlingFrameToFrame) return;
+                    const startFrameInput = frameInputs.find((input) => input.order === 'start');
+                    const endFrameInput = frameInputs.find((input) => input.order === 'end');
+                    if (!startFrameInput || !endFrameInput) return undefined;
+
+                    const startNode = nodes.find((candidate) => candidate.id === startFrameInput.nodeId);
+                    const endNode = nodes.find((candidate) => candidate.id === endFrameInput.nodeId);
+
+                    return {
+                        startUrl: startNode?.type === NodeType.IMAGE ? startNode.resultUrl : undefined,
+                        endUrl: endNode?.type === NodeType.IMAGE ? endNode.resultUrl : undefined,
+                    };
+                })()
+                : undefined;
+
+        // Check if prompt is required
+        const isVideoFrameDriven =
+            normalizedVideoNode.type === NodeType.VIDEO &&
+            activeVideoMode === 'frame-to-frame' &&
+            Boolean(
+                (normalizedVideoNode.frameInputs && normalizedVideoNode.frameInputs.length >= 2) ||
+                hasLegacyFrameFallback
+            );
+
+        if (!combinedPrompt && !isVideoFrameDriven) return;
+
+        if (node.type === NodeType.LOCAL_VIDEO_MODEL) {
+            updateNode(id, {
+                status: NodeStatus.ERROR,
+                errorMessage: '本地视频模型生成功能链尚未接通，请先使用普通视频节点。',
+            });
+            return;
+        }
+
+        if (node.type === NodeType.VIDEO && !videoCapability) {
+            updateNode(id, {
+                status: NodeStatus.ERROR,
+                errorMessage: node.videoModel
+                    ? '当前视频模型在后端尚未接通真实执行链，请切换到已接通的可执行视频模型。'
+                    : '当前没有可用的视频模型，请先在设置里启用支持的模型。',
+            });
+            return;
+        }
+
+        if (
+            normalizedVideoNode.type === NodeType.VIDEO &&
+            activeVideoMode !== 'standard' &&
+            !selectedVideoModeAvailability?.selectedModeEnabled
+        ) {
+            updateNode(id, {
+                status: NodeStatus.ERROR,
+                errorMessage: activeVideoMode === 'frame-to-frame'
+                    ? '当前视频模型尚未接通首尾帧模式，请切换到支持该模式的模型。'
+                    : '当前视频模型尚未接通运动参考模式，请切换到支持该模式的模型。',
+            });
+            return;
+        }
 
         updateNode(id, { status: NodeStatus.LOADING, generationStartTime: Date.now() });
 
         try {
             if (node.type === NodeType.IMAGE || node.type === NodeType.IMAGE_EDITOR) {
+                const canonicalImageModel = canonicalizeImageModelId(node.imageModel) ?? DEFAULT_REGISTRY_IMAGE_ID;
+                if (canonicalImageModel !== node.imageModel) {
+                    updateNode(id, { imageModel: canonicalImageModel });
+                }
+
                 // Collect ALL parent images for multi-input generation
                 const imageBase64s: string[] = [];
 
@@ -153,7 +272,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     aspectRatio: node.aspectRatio,
                     resolution: node.resolution,
                     imageBase64: imageBase64s.length > 0 ? imageBase64s : undefined,
-                    imageModel: node.imageModel,
+                    imageModel: mapRegistryImageIdToServerImageId(canonicalImageModel),
                     nodeId: id,
                     // Kling V1.5 reference settings
                     klingReferenceMode: node.klingReferenceMode,
@@ -227,28 +346,56 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 }
 
             } else if (node.type === NodeType.VIDEO) {
+                if (
+                    activeVideoMode === 'frame-to-frame' &&
+                    !(
+                        (resolvedExplicitFrameInputs?.startUrl && resolvedExplicitFrameInputs?.endUrl) ||
+                        hasLegacyFrameFallback
+                    )
+                ) {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: '首尾帧模式需要两张图片输入后才能生成。',
+                    });
+                    return;
+                }
+
+                if (activeVideoMode === 'motion-control') {
+                    const hasVideoReference = connectedVideoSourceNodes.length > 0;
+                    const hasCharacterImage = connectedFrameSourceNodes.length > 0;
+                    if (!hasVideoReference || !hasCharacterImage) {
+                        updateNode(id, {
+                            status: NodeStatus.ERROR,
+                            errorMessage: '运动参考模式需要同时连接一个视频参考和一张角色图片。',
+                        });
+                        return;
+                    }
+                }
+
                 // Get first parent image for video generation (start frame)
                 let imageBase64: string | undefined;
                 let lastFrameBase64: string | undefined;
 
-                // Get non-TEXT parent nodes (image sources only)
-                const imageParentIds = node.parentIds?.filter(pid => {
+                // Get non-TEXT parent nodes
+                const nonTextParentIds = node.parentIds?.filter(pid => {
                     const parent = nodes.find(n => n.id === pid);
                     return parent?.type !== NodeType.TEXT;
                 }) || [];
-
-                // Check for frame-to-frame mode (explicit or auto-detected from 2+ image parents)
-                const hasMultipleInputs = imageParentIds.length >= 2;
-                const hasExplicitFrameInputs = node.frameInputs && node.frameInputs.length >= 2;
+                const frameImageParentIds = connectedFrameSourceNodes.map((parent) => parent.id);
+                const standardVideoExecutionState =
+                    activeVideoMode === 'standard'
+                        ? resolveStandardVideoExecutionState(videoCapability, {
+                            imageUrls: connectedFrameSourceNodes.map((parent) => parent.resultUrl),
+                            hasInputSource: nonTextParentIds.length > 0,
+                        })
+                        : undefined;
 
                 // Motion Reference logic (Kling 2.6)
                 let motionReferenceUrl: string | undefined;
                 let isMotionControl = false;
-                if (node.videoModel === 'kling-v2-6') {
+                if (activeVideoMode === 'motion-control') {
                     // Find a parent video node that has a result
-                    const videoParent = node.parentIds
-                        ?.map(pid => nodes.find(n => n.id === pid))
-                        .find(n => n?.type === NodeType.VIDEO && n.resultUrl);
+                    const videoParent = connectedVideoSourceNodes[0];
 
                     if (videoParent) {
                         motionReferenceUrl = videoParent.resultUrl;
@@ -257,51 +404,52 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 }
 
                 // Only evaluate as frame-to-frame if NOT in motion control mode
-                const isFrameToFrame = !isMotionControl && (node.videoMode === 'frame-to-frame' || hasMultipleInputs || hasExplicitFrameInputs);
+                const isFrameToFrame = !isMotionControl && activeVideoMode === 'frame-to-frame';
+                const hasUnsupportedMultiImageVideo = Boolean(standardVideoExecutionState?.hasUnsupportedMultipleImageInputs);
+                const referenceImagesBase64 = standardVideoExecutionState?.referenceImageUrls;
 
-                if (isFrameToFrame && imageParentIds.length >= 2) {
+                if (hasUnsupportedMultiImageVideo) {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: '当前后端尚未接通标准模式的多图/全图参考，请先减少为单图，或改用已接通的专用模式。',
+                    });
+                    return;
+                }
+
+                if (activeVideoMode === 'standard' && standardVideoExecutionState && !standardVideoExecutionState.supportsCurrentInputMode) {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: '当前视频模型尚未接通当前标准输入模式，请切换模型或调整输入后再试。',
+                    });
+                    return;
+                }
+
+                if (isFrameToFrame && frameImageParentIds.length >= 2) {
                     // Get start and end frames from frameInputs (if user reordered) or default order
-                    const parent1 = nodes.find(n => n.id === imageParentIds[0]);
-                    const parent2 = nodes.find(n => n.id === imageParentIds[1]);
+                    const parent1 = nodes.find(n => n.id === frameImageParentIds[0]);
+                    const parent2 = nodes.find(n => n.id === frameImageParentIds[1]);
 
                     // Check if user has explicitly set frame order
-                    if (node.frameInputs && node.frameInputs.length >= 2) {
-                        const startFrameInput = node.frameInputs.find(f => f.order === 'start');
-                        const endFrameInput = node.frameInputs.find(f => f.order === 'end');
-
-                        if (startFrameInput) {
-                            const startNode = nodes.find(n => n.id === startFrameInput.nodeId);
-                            if (startNode?.resultUrl) {
-                                imageBase64 = startNode.resultUrl;
-                            }
-                        }
-
-                        if (endFrameInput) {
-                            const endNode = nodes.find(n => n.id === endFrameInput.nodeId);
-                            if (endNode?.resultUrl) {
-                                lastFrameBase64 = endNode.resultUrl;
-                            }
-                        }
+                    if (normalizedVideoNode.frameInputs && normalizedVideoNode.frameInputs.length >= 2) {
+                        imageBase64 = resolvedExplicitFrameInputs?.startUrl;
+                        lastFrameBase64 = resolvedExplicitFrameInputs?.endUrl;
                     } else {
                         // Default: first parent = start, second parent = end
                         if (parent1?.resultUrl) imageBase64 = parent1.resultUrl;
                         if (parent2?.resultUrl) lastFrameBase64 = parent2.resultUrl;
                     }
-                } else if (imageParentIds.length > 0) {
+                } else if (nonTextParentIds.length > 0) {
                     // Standard mode or Motion Control: get character reference or first parent image
                     if (isMotionControl) {
                         // For Motion Control, look specifically for an IMAGE parent as character reference
-                        const characterParent = node.parentIds
-                            ?.map(pid => nodes.find(n => n.id === pid))
-                            .find(n => n?.type === NodeType.IMAGE && n.resultUrl);
+                        const characterParent = connectedFrameSourceNodes[0];
 
                         if (characterParent?.resultUrl) {
                             imageBase64 = characterParent.resultUrl;
                         }
-                    } else {
+                    } else if (!referenceImagesBase64) {
                         // Standard mode: get first parent image or video last frame
-                        // Use imageParentIds (filtered to exclude TEXT nodes) instead of raw parentIds
-                        const parent = nodes.find(n => n.id === imageParentIds[0]);
+                        const parent = nodes.find(n => n.id === nonTextParentIds[0]);
 
                         if (parent?.type === NodeType.VIDEO && parent.lastFrame) {
                             // Use last frame from parent video
@@ -314,16 +462,26 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 }
 
                 // Generate video
+                const mappedVideoModel = mapRegistryVideoIdToServerVideoId(normalizedVideoNode.videoModel);
+                if (!mappedVideoModel) {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: '当前视频模型在后端尚未接通真实执行链，请切换到已接通的可执行视频模型。',
+                    });
+                    return;
+                }
+
                 const rawResultUrl = await generateVideo({
                     prompt: combinedPrompt,
                     imageBase64,
+                    referenceImagesBase64,
                     lastFrameBase64,
-                    aspectRatio: node.aspectRatio,
-                    resolution: node.resolution,
-                    duration: node.videoDuration,
-                    videoModel: node.videoModel,
+                    aspectRatio: normalizedVideoNode.aspectRatio,
+                    resolution: normalizedVideoNode.resolution,
+                    duration: normalizedVideoNode.videoDuration,
+                    videoModel: mappedVideoModel,
                     motionReferenceUrl,
-                    generateAudio: node.generateAudio, // For Kling 2.6 and Veo 3.1 native audio
+                    generateAudio: normalizedVideoNode.generateAudio === true,
                     nodeId: id
                 });
 
@@ -361,6 +519,34 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     errorMessage: undefined // Clear any previous error
                 });
 
+            } else if (node.type === NodeType.AUDIO) {
+                const availableVoiceCapabilities = getAllVoiceCapabilities();
+                const fallbackAudioModel = Object.keys(availableVoiceCapabilities)[0];
+                const selectedAudioModel = node.audioModel || node.model || fallbackAudioModel;
+                const voiceCapability = getVoiceCapability(selectedAudioModel);
+
+                if (!voiceCapability) {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: '当前语音模型在前端能力表中不存在，请先切换到可用语音模型。',
+                    });
+                    return;
+                }
+
+                const rawResultUrl = await generateAudio({
+                    prompt: combinedPrompt,
+                    audioModel: voiceCapability.serverModelId,
+                    nodeId: id,
+                });
+
+                const resultUrl = `${rawResultUrl}${rawResultUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
+
+                updateNode(id, {
+                    status: NodeStatus.SUCCESS,
+                    resultUrl,
+                    errorMessage: undefined,
+                });
+
 
             }
         } catch (error: any) {
@@ -369,9 +555,9 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
             let errorMessage = error.message || 'Generation failed';
 
             if (msg.includes('permission_denied') || msg.includes('403')) {
-                errorMessage = 'Permission denied. Check API Key configuration.';
+                errorMessage = '权限不足，请检查当前账号额度、模型权限或 API Key 配置。';
             } else if (msg.includes('unable to process input image') || msg.includes('invalid_argument')) {
-                errorMessage = '⚠️ Input image incompatible. Veo requires: JPEG format, 16:9 or 9:16 aspect ratio. Try a different image or generate without input.';
+                errorMessage = '输入图片与当前视频模型不兼容。请优先使用 JPEG，比例保持 16:9 或 9:16，或者先切回无参考图生成。';
             }
 
             updateNode(id, { status: NodeStatus.ERROR, errorMessage });

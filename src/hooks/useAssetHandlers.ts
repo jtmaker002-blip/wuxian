@@ -96,8 +96,9 @@ export const useAssetHandlers = ({
                 status: NodeStatus.SUCCESS,
                 resultUrl: url,
                 resultAspectRatio,
-                model: isVideo ? 'veo-3.1' : 'imagen-3.0-generate-002',
-                videoModel: isVideo ? 'veo-3.1' : undefined,
+                model: isVideo ? 'veo3.1' : 'gemini-2.5-flash-image-preview',
+                videoModel: isVideo ? 'veo3.1' : undefined,
+                imageModel: !isVideo ? 'gemini-2.5-flash-image-preview' : undefined,
                 aspectRatio: aspectRatio || '16:9',
                 resolution: isVideo ? 'Auto' : '1024x1024'
             };

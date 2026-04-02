@@ -8,11 +8,22 @@
 import express from 'express';
 import fs from 'fs';
 import path from 'path';
-import { generateKlingVideo, generateKlingImage, generateKlingMultiImage } from '../services/kling.js';
-import { generateGeminiImage, generateVeoVideo } from '../services/gemini.js';
-import { generateHailuoVideo } from '../services/hailuo.js';
-import { generateOpenAIImage } from '../services/openai.js';
+import { generateKlingVideo, generateKlingImage, generateKlingMultiImage, generateKlingTextToVideo } from '../services/kling.js';
+import {
+    DEFAULT_GEMINI_IMAGE_MODEL,
+    DEFAULT_VEO_VIDEO_MODEL,
+    generateGeminiImage,
+    generateVeoVideo,
+    resolveGeminiImageModel,
+    resolveVeoVideoModel
+} from '../services/gemini.js';
+import { generateHailuoSubjectVideo, generateHailuoVideo } from '../services/hailuo.js';
+import { generateOpenAIImage, generateOpenAIVideo } from '../services/openai.js';
+import { generateXAIVideo } from '../services/xai.js';
+import { generateSeedanceVideo } from '../services/seedance.js';
 import { resolveImageToBase64, saveBufferToFile } from '../utils/imageHelpers.js';
+import { validateVideoRequest } from '../utils/videoRequestValidation.js';
+import { assertVideoExecutionSupported, resolveVideoExecutionPlan } from '../utils/videoProviderRouting.js';
 
 const router = express.Router();
 
@@ -31,6 +42,7 @@ router.post('/generate-image', async (req, res) => {
 
         let imageBuffer;
         let imageFormat = 'png';
+        let executedImageModel = imageModel || DEFAULT_GEMINI_IMAGE_MODEL;
 
         if (isKlingModel) {
             // --- KLING AI IMAGE GENERATION ---
@@ -41,6 +53,7 @@ router.post('/generate-image', async (req, res) => {
             }
 
             console.log(`Using Kling AI model for image: ${imageModel}`);
+            executedImageModel = imageModel;
 
             // Resolve images if provided
             let resolvedImages = null;
@@ -117,6 +130,7 @@ router.post('/generate-image', async (req, res) => {
             }
 
             console.log(`Using OpenAI GPT Image model: ${imageModel}`);
+            executedImageModel = imageModel;
 
             // Resolve images if provided
             let imageBase64Array = null;
@@ -139,6 +153,8 @@ router.post('/generate-image', async (req, res) => {
                 return res.status(500).json({ error: "Server missing API Key config" });
             }
 
+            executedImageModel = resolveGeminiImageModel(imageModel);
+
             let imageBase64Array = null;
             if (rawImageBase64) {
                 const rawImages = Array.isArray(rawImageBase64) ? rawImageBase64 : [rawImageBase64];
@@ -150,6 +166,7 @@ router.post('/generate-image', async (req, res) => {
                 imageBase64Array,
                 aspectRatio,
                 resolution,
+                imageModel: executedImageModel,
                 apiKey: GEMINI_API_KEY
             });
         }
@@ -165,13 +182,14 @@ router.post('/generate-image', async (req, res) => {
             id: metadataId,  // Must match the filename for delete API to find it
             filename: saved.filename,
             prompt: prompt,
-            model: imageModel || 'gemini-pro',
+            model: executedImageModel,
+            requestedModel: imageModel || executedImageModel,
             createdAt: new Date().toISOString(),
             type: 'images'
         };
         fs.writeFileSync(path.join(IMAGES_DIR, `${metadataId}.json`), JSON.stringify(metadata, null, 2));
 
-        console.log(`Image saved: ${saved.url} (model: ${imageModel || 'gemini-pro'})`);
+        console.log(`Image saved: ${saved.url} (model: ${executedImageModel})`);
         return res.json({ resultUrl: saved.url });
 
     } catch (error) {
@@ -186,95 +204,148 @@ router.post('/generate-image', async (req, res) => {
 
 router.post('/generate-video', async (req, res) => {
     try {
-        const { nodeId, prompt, imageBase64: rawImageBase64, lastFrameBase64: rawLastFrameBase64, motionReferenceUrl: rawMotionReferenceUrl, aspectRatio, resolution, duration, videoModel } = req.body;
-        const { GEMINI_API_KEY, KLING_ACCESS_KEY, KLING_SECRET_KEY, HAILUO_API_KEY, VIDEOS_DIR } = req.app.locals;
+        const {
+            nodeId,
+            prompt,
+            imageBase64: rawImageBase64,
+            referenceImagesBase64: rawReferenceImagesBase64,
+            lastFrameBase64: rawLastFrameBase64,
+            motionReferenceUrl: rawMotionReferenceUrl,
+            aspectRatio,
+            resolution,
+            duration,
+            videoModel
+        } = req.body;
+        const { GEMINI_API_KEY, KLING_ACCESS_KEY, KLING_SECRET_KEY, HAILUO_API_KEY, OPENAI_API_KEY, XAI_API_KEY, SEEDANCE_API_KEY, VIDEOS_DIR } = req.app.locals;
 
         // Resolve file URLs to base64
         const imageBase64 = resolveImageToBase64(rawImageBase64);
+        const referenceImagesBase64 = Array.isArray(rawReferenceImagesBase64)
+            ? rawReferenceImagesBase64.map((item) => resolveImageToBase64(item)).filter(Boolean)
+            : undefined;
         const lastFrameBase64 = resolveImageToBase64(rawLastFrameBase64);
         const motionReferenceUrl = resolveImageToBase64(rawMotionReferenceUrl);
 
+        validateVideoRequest({
+            videoModel,
+            imageBase64,
+            referenceImagesBase64,
+            lastFrameBase64,
+            motionReferenceUrl,
+            duration,
+            aspectRatio,
+            resolution,
+            generateAudio: req.body.generateAudio === true,
+        });
+
         // Determine provider
-        const isKlingModel = videoModel && videoModel.startsWith('kling-');
-        const isHailuoModel = videoModel && videoModel.startsWith('hailuo-');
+        const { provider: videoProvider, normalizedModel, executionMode, executionProvider } = resolveVideoExecutionPlan({
+            modelId: videoModel,
+            imageBase64,
+            referenceImagesBase64,
+            lastFrameBase64,
+            motionReferenceUrl,
+        });
+        assertVideoExecutionSupported({
+            provider: videoProvider,
+            normalizedModel,
+            executionMode,
+        });
+
+        console.log(
+            `[Route] Video plan -> provider: ${videoProvider}, runtime: ${executionProvider}, mode: ${executionMode}, model: ${normalizedModel}`
+        );
 
         let videoBuffer;
+        let executedVideoModel = normalizedModel || DEFAULT_VEO_VIDEO_MODEL;
 
-        if (isKlingModel) {
-            // --- KLING AI VIDEO GENERATION ---
+        let resultVideoUrl;
 
-            // Check if this is a Kling 2.6 model (route to Fal.ai - official API doesn't support v2.6)
-            const isKling26 = videoModel === 'kling-v2-6';
-            // Check if this is a motion control request (kling-v2-6 with motion reference)
-            const isMotionControl = isKling26 && motionReferenceUrl;
+        if (executionProvider === 'fal' || executionProvider === 'fal-wan') {
+            // --- FAL.AI BACKED VIDEO GENERATION ---
+            executedVideoModel = normalizedModel;
 
-            let resultVideoUrl;
+            const { FAL_API_KEY } = req.app.locals;
+            if (!FAL_API_KEY) {
+                return res.status(500).json({
+                    error: "FAL_API_KEY not configured. Add FAL_API_KEY to .env for Fal-backed video models."
+                });
+            }
 
-            if (isKling26) {
-                // --- KLING 2.6 VIA FAL.AI ---
-                // Official Kling API doesn't support v2.6, use fal.ai instead
-                const { FAL_API_KEY } = req.app.locals;
+            if (executionProvider === 'fal-wan') {
+                console.log(`\n[Route] WAN image-to-video detected - routing to fal.ai`);
+                console.log(`[Route] Model: ${normalizedModel}`);
+                console.log(`[Route] Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
+                console.log(`[Route] Duration: ${duration || 5}s`);
+                console.log(`[Route] Resolution: ${resolution || '1080p'}`);
 
-                if (!FAL_API_KEY) {
-                    return res.status(500).json({
-                        error: "FAL_API_KEY not configured. Add FAL_API_KEY to .env for Kling 2.6."
-                    });
-                }
+                const {
+                    generateFalWan25PreviewImageToVideo,
+                    generateFalWanImageToVideo,
+                    generateFalWanImageToVideoFlash,
+                } = await import('../services/fal.js');
 
-                if (isMotionControl) {
-                    // Motion Control mode
-                    console.log(`\n[Route] Kling 2.6 Motion Control detected - routing to fal.ai`);
-                    console.log(`[Route] Motion Reference: ${motionReferenceUrl ? 'YES (' + Math.round(motionReferenceUrl.length / 1024) + ' KB)' : 'NO'}`);
-                    console.log(`[Route] Character Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
-                    console.log(`[Route] Prompt: ${prompt ? prompt.substring(0, 50) + '...' : '(none)'}`);
+                const wanHandler =
+                    normalizedModel === 'wan2.5-i2v-preview'
+                        ? generateFalWan25PreviewImageToVideo
+                        : normalizedModel === 'wan2.6-i2v-flash'
+                        ? generateFalWanImageToVideoFlash
+                        : generateFalWanImageToVideo;
 
-                    const { generateFalMotionControl } = await import('../services/fal.js');
+                resultVideoUrl = await wanHandler({
+                    prompt,
+                    imageBase64,
+                    duration: String(duration || 5),
+                    resolution: resolution || '1080p',
+                    apiKey: FAL_API_KEY,
+                });
+            } else if (executionMode === 'motion-control') {
+                console.log(`\n[Route] Kling 2.6 Motion Control detected - routing to fal.ai`);
+                console.log(`[Route] Motion Reference: ${motionReferenceUrl ? 'YES (' + Math.round(motionReferenceUrl.length / 1024) + ' KB)' : 'NO'}`);
+                console.log(`[Route] Character Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
+                console.log(`[Route] Prompt: ${prompt ? prompt.substring(0, 50) + '...' : '(none)'}`);
 
-                    resultVideoUrl = await generateFalMotionControl({
-                        prompt,
-                        characterImageBase64: imageBase64,
-                        motionVideoBase64: motionReferenceUrl,
-                        characterOrientation: 'video',
-                        apiKey: FAL_API_KEY
-                    });
-                } else {
-                    // Standard Image-to-Video mode
-                    console.log(`\n[Route] Kling 2.6 Image-to-Video - routing to fal.ai`);
-                    console.log(`[Route] Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
-                    console.log(`[Route] Duration: ${duration || 5}s`);
-                    console.log(`[Route] Generate Audio: ${req.body.generateAudio !== false}`);
+                const { generateFalMotionControl } = await import('../services/fal.js');
 
-                    const { generateFalImageToVideo } = await import('../services/fal.js');
+                resultVideoUrl = await generateFalMotionControl({
+                    prompt,
+                    characterImageBase64: imageBase64,
+                    motionVideoBase64: motionReferenceUrl,
+                    characterOrientation: 'video',
+                    apiKey: FAL_API_KEY
+                });
+            } else if (executionMode === 'standard-image-to-video' || executionMode === 'standard-text-to-video') {
+                console.log(
+                    `\n[Route] Kling 2.6 ${
+                        executionMode === 'standard-text-to-video' ? 'Text-to-Video' : 'Image-to-Video'
+                    } - routing to fal.ai`
+                );
+                console.log(`[Route] Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
+                console.log(`[Route] Duration: ${duration || 5}s`);
+                console.log(`[Route] Generate Audio: ${req.body.generateAudio === true}`);
 
+                const { generateFalImageToVideo, generateFalTextToVideo } = await import('../services/fal.js');
+
+                if (imageBase64) {
                     resultVideoUrl = await generateFalImageToVideo({
                         prompt,
                         imageBase64,
                         duration: String(duration || 5),
-                        generateAudio: req.body.generateAudio !== false, // Default to true
+                        aspectRatio: aspectRatio || '16:9',
+                        generateAudio: req.body.generateAudio === true,
+                        apiKey: FAL_API_KEY
+                    });
+                } else {
+                    resultVideoUrl = await generateFalTextToVideo({
+                        prompt,
+                        duration: String(duration || 5),
+                        aspectRatio: aspectRatio || '16:9',
+                        generateAudio: req.body.generateAudio === true,
                         apiKey: FAL_API_KEY
                     });
                 }
             } else {
-                // --- STANDARD KLING VIDEO GENERATION ---
-                if (!KLING_ACCESS_KEY || !KLING_SECRET_KEY) {
-                    return res.status(500).json({
-                        error: "Kling API credentials not configured. Add KLING_ACCESS_KEY and KLING_SECRET_KEY to .env"
-                    });
-                }
-
-                console.log(`Using Kling AI model: ${videoModel}, duration: ${duration || 5}s`);
-
-                resultVideoUrl = await generateKlingVideo({
-                    prompt,
-                    imageBase64,
-                    lastFrameBase64,
-                    modelId: videoModel,
-                    aspectRatio,
-                    duration: duration || 5,
-                    motionReferenceUrl,
-                    accessKey: KLING_ACCESS_KEY,
-                    secretKey: KLING_SECRET_KEY
-                });
+                throw new Error(`Kling 2.6 当前后端尚未接通模式：${executionMode}`);
             }
 
             // Download from the result URL
@@ -284,7 +355,58 @@ router.post('/generate-video', async (req, res) => {
             }
             videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
 
-        } else if (isHailuoModel) {
+        } else if (executionProvider === 'kling') {
+            // --- STANDARD KLING VIDEO GENERATION ---
+            if (!KLING_ACCESS_KEY || !KLING_SECRET_KEY) {
+                return res.status(500).json({
+                    error: "Kling API credentials not configured. Add KLING_ACCESS_KEY and KLING_SECRET_KEY to .env"
+                });
+            }
+
+            console.log(`Using Kling AI model: ${normalizedModel}, duration: ${duration || 5}s, mode: ${executionMode}`);
+
+            if (executionMode === 'standard-text-to-video') {
+                resultVideoUrl = await generateKlingTextToVideo({
+                    prompt,
+                    modelId: normalizedModel,
+                    aspectRatio,
+                    duration: duration || 5,
+                    accessKey: KLING_ACCESS_KEY,
+                    secretKey: KLING_SECRET_KEY
+                });
+            } else if (executionMode === 'frame-to-frame') {
+                resultVideoUrl = await generateKlingVideo({
+                    prompt,
+                    imageBase64,
+                    lastFrameBase64,
+                    modelId: normalizedModel,
+                    aspectRatio,
+                    duration: duration || 5,
+                    motionReferenceUrl: undefined,
+                    accessKey: KLING_ACCESS_KEY,
+                    secretKey: KLING_SECRET_KEY
+                });
+            } else {
+                resultVideoUrl = await generateKlingVideo({
+                    prompt,
+                    imageBase64,
+                    lastFrameBase64,
+                    modelId: normalizedModel,
+                    aspectRatio,
+                    duration: duration || 5,
+                    motionReferenceUrl,
+                    accessKey: KLING_ACCESS_KEY,
+                    secretKey: KLING_SECRET_KEY
+                });
+            }
+
+            const videoResponse = await fetch(resultVideoUrl);
+            if (!videoResponse.ok) {
+                throw new Error('Failed to download generated video');
+            }
+            videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
+
+        } else if (executionProvider === 'hailuo') {
             // --- HAILUO AI VIDEO GENERATION ---
             if (!HAILUO_API_KEY) {
                 return res.status(500).json({
@@ -292,18 +414,30 @@ router.post('/generate-video', async (req, res) => {
                 });
             }
 
-            console.log(`Using Hailuo AI model: ${videoModel}, duration: ${duration || 6}s`);
+            const hailuoModelId = normalizedModel;
+            executedVideoModel = hailuoModelId;
+            console.log(`Using Hailuo AI model: ${hailuoModelId}, duration: ${duration || 6}s`);
 
-            const hailuoVideoUrl = await generateHailuoVideo({
-                prompt,
-                imageBase64,
-                lastFrameBase64,
-                modelId: videoModel,
-                aspectRatio,
-                resolution,
-                duration: duration || 6,
-                apiKey: HAILUO_API_KEY
-            });
+            const hailuoVideoUrl =
+                executionMode === 'standard-reference-images'
+                    ? await generateHailuoSubjectVideo({
+                        prompt,
+                        subjectImagesBase64: referenceImagesBase64,
+                        aspectRatio,
+                        resolution,
+                        duration: duration || 6,
+                        apiKey: HAILUO_API_KEY
+                    })
+                    : await generateHailuoVideo({
+                        prompt,
+                        imageBase64,
+                        lastFrameBase64,
+                        modelId: hailuoModelId,
+                        aspectRatio,
+                        resolution,
+                        duration: duration || 6,
+                        apiKey: HAILUO_API_KEY
+                    });
 
             // Download from Hailuo's URL
             const videoResponse = await fetch(hailuoVideoUrl);
@@ -312,13 +446,75 @@ router.post('/generate-video', async (req, res) => {
             }
             videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
 
-        } else {
+        } else if (executionProvider === 'openai-video') {
+            if (!OPENAI_API_KEY) {
+                return res.status(500).json({
+                    error: "OpenAI API key not configured. Add OPENAI_API_KEY to .env"
+                });
+            }
+
+            executedVideoModel = normalizedModel;
+            videoBuffer = await generateOpenAIVideo({
+                prompt,
+                imageBase64,
+                aspectRatio,
+                duration: duration || 4,
+                resolution: resolution || '720p',
+                videoModel: normalizedModel,
+                apiKey: OPENAI_API_KEY
+            });
+        } else if (executionProvider === 'xai-video') {
+            if (!XAI_API_KEY) {
+                return res.status(500).json({
+                    error: "XAI_API_KEY not configured. Add XAI_API_KEY to .env"
+                });
+            }
+
+            executedVideoModel = normalizedModel;
+            console.log(
+                `Using xAI video model: ${normalizedModel}, mode: ${executionMode}, singleImage: ${Boolean(imageBase64)}, referenceImages: ${referenceImagesBase64?.length || 0}`
+            );
+            videoBuffer = await generateXAIVideo({
+                prompt,
+                imageBase64,
+                referenceImagesBase64,
+                aspectRatio: aspectRatio || '16:9',
+                duration: duration || 8,
+                resolution: resolution || '720p',
+                videoModel: normalizedModel,
+                executionMode,
+                apiKey: XAI_API_KEY
+            });
+        } else if (executionProvider === 'seedance') {
+            if (!SEEDANCE_API_KEY) {
+                return res.status(500).json({
+                    error: "SEEDANCE_API_KEY not configured. Add SEEDANCE_API_KEY to .env"
+                });
+            }
+
+            executedVideoModel = normalizedModel;
+            console.log(`Using Seedance video model: ${normalizedModel}, mode: ${executionMode}`);
+            videoBuffer = await generateSeedanceVideo({
+                prompt,
+                imageBase64,
+                lastFrameBase64,
+                aspectRatio: aspectRatio || '16:9',
+                duration: duration || 5,
+                resolution: resolution || '720p',
+                videoModel: normalizedModel,
+                generateAudio: req.body.generateAudio === true,
+                apiKey: SEEDANCE_API_KEY
+            });
+        } else if (executionProvider === 'veo') {
             // --- VEO VIDEO GENERATION (Default) ---
             if (!GEMINI_API_KEY) {
                 return res.status(500).json({ error: "Server missing API Key config" });
             }
 
-            console.log(`Using Veo model: ${videoModel || 'veo-3.1'}, duration: ${duration || 8}s, generateAudio: ${req.body.generateAudio !== false}`);
+            executedVideoModel = resolveVeoVideoModel(videoModel);
+
+            const shouldGenerateVeoAudio = req.body.generateAudio === true;
+            console.log(`Using Veo model: ${executedVideoModel}, duration: ${duration || 8}s, generateAudio: ${shouldGenerateVeoAudio}`);
 
             videoBuffer = await generateVeoVideo({
                 prompt,
@@ -327,9 +523,13 @@ router.post('/generate-video', async (req, res) => {
                 aspectRatio,
                 resolution,
                 duration: duration || 8,
-                generateAudio: req.body.generateAudio !== false, // Default to true
+                videoModel: executedVideoModel,
+                generateAudio: shouldGenerateVeoAudio,
                 apiKey: GEMINI_API_KEY
             });
+
+        } else {
+            throw new Error(`Unsupported video runtime provider: ${executionProvider}`);
         }
 
         // Save to library - use unique filename to preserve previous generations
@@ -343,7 +543,8 @@ router.post('/generate-video', async (req, res) => {
             id: metadataId,  // Must match the filename for delete API to find it
             filename: saved.filename,
             prompt: prompt,
-            model: videoModel || 'veo-3.1',
+            model: executedVideoModel,
+            requestedModel: videoModel || executedVideoModel,
             aspectRatio: aspectRatio || 'Auto',
             resolution: resolution || 'Auto',
             createdAt: new Date().toISOString(),
@@ -351,7 +552,7 @@ router.post('/generate-video', async (req, res) => {
         };
         fs.writeFileSync(path.join(VIDEOS_DIR, `${metadataId}.json`), JSON.stringify(metadata, null, 2));
 
-        console.log(`Video saved: ${saved.url} (model: ${videoModel || 'veo-3.1'})`);
+        console.log(`Video saved: ${saved.url} (model: ${executedVideoModel})`);
         return res.json({ resultUrl: saved.url });
 
     } catch (error) {
@@ -391,6 +592,24 @@ router.get('/generation-status/:nodeId', async (req, res) => {
     } catch (error) {
         console.error("Status Check Error:", error);
         res.status(500).json({ error: error.message });
+    }
+});
+
+router.post('/generate-audio', async (req, res) => {
+    try {
+        const { nodeId, prompt, audioModel } = req.body;
+
+        if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+            return res.status(400).json({ error: '语音生成需要输入文本内容。' });
+        }
+
+        return res.status(501).json({
+            error: `语音模型 ${audioModel || 'default'} 当前后端尚未接通 provider，请先完成语音 provider 接入。`,
+            nodeId: nodeId || null,
+        });
+    } catch (error) {
+        console.error('Server Audio Gen Error:', error);
+        return res.status(500).json({ error: error.message || 'Audio generation failed' });
     }
 });
 
