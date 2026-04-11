@@ -32,6 +32,11 @@ export const NodeConnectors: React.FC<NodeConnectorsProps> = ({
         <>
             {/* Left Connector */}
             <button
+                type="button"
+                aria-label={`Connect left side of ${nodeId}`}
+                title="连接到左侧"
+                data-node-id={nodeId}
+                data-connector-side="left"
                 onPointerDown={(e) => {
                     e.stopPropagation();
                     onConnectorDown(e, nodeId, 'left');
@@ -43,6 +48,11 @@ export const NodeConnectors: React.FC<NodeConnectorsProps> = ({
 
             {/* Right Connector */}
             <button
+                type="button"
+                aria-label={`Connect right side of ${nodeId}`}
+                title="连接到右侧"
+                data-node-id={nodeId}
+                data-connector-side="right"
                 onPointerDown={(e) => {
                     e.stopPropagation();
                     onConnectorDown(e, nodeId, 'right');
