@@ -68,6 +68,7 @@ interface CanvasNodeProps {
   onContextMenu: (e: React.MouseEvent, id: string) => void;
   onConnectorDown: (e: React.PointerEvent, id: string, side: 'left' | 'right') => void;
   isHoveredForConnection?: boolean;
+  isImageToVideoDropTarget?: boolean;
   onOpenEditor?: (nodeId: string) => void;
   onUpload?: (nodeId: string, imageDataUrl: string) => void;
   onExpand?: (imageUrl: string) => void;
@@ -111,6 +112,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onContextMenu,
   onConnectorDown,
   isHoveredForConnection,
+  isImageToVideoDropTarget = false,
   onOpenEditor,
   onUpload,
   onExpand,
@@ -1408,6 +1410,15 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   : 'border-neutral-200'
           }`}
         >
+          {isImageToVideoDropTarget && (
+            <div className="pointer-events-none absolute inset-0 z-[90] flex items-center justify-center rounded-2xl border-2 border-cyan-300/80 bg-cyan-500/10 shadow-[0_0_0_8px_rgba(34,211,238,0.12),0_24px_70px_rgba(8,145,178,0.38)] backdrop-blur-[1px]">
+              <div className="rounded-[22px] border border-white/16 bg-black/72 px-5 py-4 text-center text-white shadow-[0_18px_46px_rgba(0,0,0,0.38)]">
+                <div className="text-[15px] font-semibold tracking-[0.03em]">图生视频</div>
+                <div className="mt-1 text-[12px] text-white/78">释放鼠标，接入当前图片素材</div>
+              </div>
+            </div>
+          )}
+
           {/* Header (Editable Title) - Positioned horizontally on top-left side */}
           {isEditingTitle && !isLiblibImageNode ? (
             <input

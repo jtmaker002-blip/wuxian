@@ -329,6 +329,18 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
       </div>
 
       <div className={`${isConnector ? 'px-4 pb-4' : 'p-2'} flex flex-col gap-1 max-h-[440px] overflow-y-auto`}>
+        {isConnector && isImageConnector && allowVideoFromConnector && isConnectorTypeEnabled(NodeType.VIDEO) && (
+          <MenuItem
+            icon={<Video size={18} />}
+            label="图生视频"
+            desc="引用该图片作为首帧生成视频"
+            badge="主路径"
+            active
+            onClick={() => onSelectType(NodeType.VIDEO)}
+            variant="connector"
+            canvasTheme={canvasTheme}
+          />
+        )}
         {(!isConnector || isConnectorTypeEnabled(NodeType.TEXT)) && (
           <MenuItem
             icon={<Type size={18} />}
@@ -350,7 +362,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
             canvasTheme={canvasTheme}
           />
         )}
-        {(!isConnector || (allowVideoFromConnector && isConnectorTypeEnabled(NodeType.VIDEO))) && (
+        {(!isConnector || (!isImageConnector && allowVideoFromConnector && isConnectorTypeEnabled(NodeType.VIDEO))) && (
           <MenuItem
             icon={<Video size={18} />}
             label={t('contextMenu.video')}

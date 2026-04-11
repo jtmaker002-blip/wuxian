@@ -1547,6 +1547,13 @@ export default function App() {
                     type: parent!.lastFrame ? NodeType.IMAGE : parent!.type
                   }));
               })();
+              const connectionSourceNode = connectionStart
+                ? nodes.find((candidate) => candidate.id === connectionStart.nodeId)
+                : undefined;
+              const isImageToVideoDropTarget =
+                connectionHoveredNodeId === node.id &&
+                (node.type === NodeType.VIDEO || node.type === NodeType.LOCAL_VIDEO_MODEL) &&
+                (connectionSourceNode?.type === NodeType.IMAGE || connectionSourceNode?.type === NodeType.IMAGE_EDITOR);
 
               return (
               <CanvasNode
@@ -1584,6 +1591,7 @@ export default function App() {
                 onSelect={(id) => setSelectedNodeIds([id])}
                 onConnectorDown={handleConnectorPointerDown}
                 isHoveredForConnection={connectionHoveredNodeId === node.id}
+                isImageToVideoDropTarget={isImageToVideoDropTarget}
                 onOpenEditor={handleOpenEditor}
                 onUpload={handleUpload}
                 onExpand={handleExpandImage}
