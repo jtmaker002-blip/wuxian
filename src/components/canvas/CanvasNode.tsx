@@ -83,6 +83,7 @@ interface CanvasNodeProps {
   onChangeAngleGenerate?: (nodeId: string) => void;
   onQuickAddInputNode?: (nodeId: string, inputType: 'image' | 'video') => void;
   onSplitImageGrid?: (nodeId: string, rows: number, cols: number) => void;
+  onCreateNineGridTiles?: (nodeId: string, actionLabel: string) => void;
   zoom: number;
   // Mouse event callbacks for chat panel drag functionality
   onMouseEnter?: () => void;
@@ -123,6 +124,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onChangeAngleGenerate,
   onQuickAddInputNode,
   onSplitImageGrid,
+  onCreateNineGridTiles,
   zoom,
   onMouseEnter,
   onMouseLeave,
@@ -254,6 +256,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     if (mode === 'grid' && data.resultUrl) {
       try {
         const result = await createNineGridVariant(data.resultUrl);
+        onCreateNineGridTiles?.(data.id, item);
         onUpdate(data.id, {
           resultUrl: result.dataUrl,
           resultAspectRatio: result.resultAspectRatio,
@@ -322,7 +325,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       imageToolMode: mode,
       imageToolAction: item,
     });
-  }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onSplitImageGrid, onUpdate]);
+  }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onCreateNineGridTiles, onSplitImageGrid, onUpdate]);
 
   const startImageAnnotation = React.useCallback((label: string) => {
     const typeByLabel: Record<string, 'reference' | 'note' | 'preserve' | 'ignore'> = {

@@ -83,6 +83,7 @@ import {
   eraseImageSelection,
   repaintImageSelection,
   splitImageIntoGrid,
+  createNineGridTiles,
 } from './utils/imageNodeActions';
 
 const CANVAS_DRAFT_STORAGE_KEY = 'twitcanva-current-canvas-draft';
@@ -742,6 +743,50 @@ export default function App() {
       updateNode(sourceNode.id, {
         status: NodeStatus.ERROR,
         errorMessage: error instanceof Error ? error.message : '宫格切分失败',
+      });
+    }
+  }, [nodes, setNodes, setSelectedNodeIds, updateNode]);
+
+  const handleCreateNineGridTiles = React.useCallback(async (nodeId: string, actionLabel: string) => {
+    const sourceNode = nodes.find((node) => node.id === nodeId);
+    if (!sourceNode?.resultUrl) return;
+
+    try {
+      const tiles = await createNineGridTiles(sourceNode.resultUrl);
+      const tileWidth = 150;
+      const tileGap = 20;
+      const startX = sourceNode.x + 420;
+      const startY = sourceNode.y;
+      const gridNodes: NodeData[] = tiles.map((tile) => ({
+        id: crypto.randomUUID(),
+        type: NodeType.IMAGE,
+        x: startX + tile.col * (tileWidth + tileGap),
+        y: startY + tile.row * (tileWidth + tileGap),
+        prompt: `九宫格 ${actionLabel} · ${tile.label}`,
+        status: NodeStatus.SUCCESS,
+        model: sourceNode.model,
+        imageModel: sourceNode.imageModel,
+        aspectRatio: sourceNode.aspectRatio || 'Auto',
+        resolution: sourceNode.resolution || 'Auto',
+        resultUrl: tile.dataUrl,
+        resultAspectRatio: tile.resultAspectRatio,
+        title: `九宫格-${tile.label}`,
+        parentIds: [sourceNode.id],
+      }));
+
+      setNodes((prev) => [
+        ...prev.map((node) =>
+          node.id === sourceNode.id
+            ? { ...node, imageToolMode: null, imageToolAction: actionLabel }
+            : node
+        ),
+        ...gridNodes,
+      ]);
+      setSelectedNodeIds(gridNodes.map((node) => node.id));
+    } catch (error) {
+      updateNode(sourceNode.id, {
+        status: NodeStatus.ERROR,
+        errorMessage: error instanceof Error ? error.message : '九宫格生成失败',
       });
     }
   }, [nodes, setNodes, setSelectedNodeIds, updateNode]);
@@ -1516,6 +1561,7 @@ export default function App() {
                 onAddNext={handleAddNext}
                 onQuickAddInputNode={handleQuickAddInputNode}
                 onSplitImageGrid={handleSplitImageGrid}
+                onCreateNineGridTiles={handleCreateNineGridTiles}
                 selected={selectedNodeIds.includes(node.id)}
                 showControls={selectedNodeIds.length === 1 && selectedNodeIds.includes(node.id)}
                 onNodePointerDown={(e) => {

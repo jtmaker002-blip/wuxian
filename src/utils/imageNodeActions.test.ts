@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyLightingEffect,
   cutoutImageBySelection,
+  createNineGridTiles,
   expandImageCanvas,
   getCropBox,
   getGridCropBoxes,
@@ -270,6 +271,21 @@ describe('local image effects', () => {
     expect(operationsNamed(createdCanvases[3].context, 'drawImage')[0]).toMatchObject({
       args: [expect.any(Object), 50, 40, 51, 41, 0, 0, 51, 41],
     });
+  });
+
+  it('creates nine separate grid variant tiles with labels', async () => {
+    const tiles = await createNineGridTiles('mock://image');
+
+    expect(tiles).toHaveLength(9);
+    expect(tiles[0]).toMatchObject({
+      row: 0,
+      col: 0,
+      label: '高清',
+      dataUrl: 'data:image/png;mock,320x180',
+      resultAspectRatio: '320/180',
+    });
+    expect(tiles[4].label).toBe('原图');
+    expect(createdCanvases).toHaveLength(9);
   });
 
   it('applies lighting settings as visible canvas compositing metadata', async () => {

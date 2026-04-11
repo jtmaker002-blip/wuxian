@@ -226,6 +226,47 @@ export async function createNineGridVariant(imageUrl: string) {
   return exportCanvas(canvas);
 }
 
+export async function createNineGridTiles(imageUrl: string): Promise<Array<{
+  dataUrl: string;
+  resultAspectRatio: string;
+  row: number;
+  col: number;
+  label: string;
+}>> {
+  const image = await loadImage(imageUrl);
+  const filters = [
+    ['高清', 'brightness(1.05) contrast(1.04)'],
+    ['鲜明', 'saturate(1.18)'],
+    ['冷调', 'hue-rotate(-8deg) brightness(1.02)'],
+    ['高对比', 'contrast(1.12)'],
+    ['原图', 'none'],
+    ['暖调', 'hue-rotate(8deg) saturate(1.1)'],
+    ['暗部', 'brightness(0.92) contrast(1.08)'],
+    ['胶片', 'sepia(0.16) saturate(1.04)'],
+    ['柔亮', 'brightness(1.12) saturate(0.92)'],
+  ] as const;
+
+  return filters.map(([label, filter], index) => {
+    const row = Math.floor(index / 3);
+    const col = index % 3;
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Canvas 2D context is not available');
+    context.filter = filter;
+    context.drawImage(image, 0, 0);
+    context.filter = 'none';
+
+    return {
+      ...exportCanvas(canvas),
+      row,
+      col,
+      label,
+    };
+  });
+}
+
 export async function splitImageIntoGrid(imageUrl: string, rows: number, cols: number): Promise<Array<{
   dataUrl: string;
   resultAspectRatio: string;
