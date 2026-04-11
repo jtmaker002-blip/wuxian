@@ -77,7 +77,13 @@ import {
 } from './services/remoteCapabilitiesService';
 import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
 import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
-import { splitImageIntoGrid } from './utils/imageNodeActions';
+import {
+  cropImageBySelection,
+  cutoutImageBySelection,
+  eraseImageSelection,
+  repaintImageSelection,
+  splitImageIntoGrid,
+} from './utils/imageNodeActions';
 
 const CANVAS_DRAFT_STORAGE_KEY = 'twitcanva-current-canvas-draft';
 
@@ -1063,6 +1069,46 @@ export default function App() {
     return '局部说明';
   };
 
+  const applyPendingFocusAction = React.useCallback(async (
+    node: NodeData,
+    selection: NonNullable<NodeData['focusSelection']>
+  ) => {
+    if (!node.resultUrl || !node.imageToolAction) {
+      updateNode(node.id, { focusSelection: selection });
+      return;
+    }
+
+    const actionHandlers: Record<string, typeof cropImageBySelection> = {
+      擦除: eraseImageSelection,
+      重绘: repaintImageSelection,
+      裁剪: cropImageBySelection,
+      抠图: cutoutImageBySelection,
+    };
+    const handler = actionHandlers[node.imageToolAction];
+    if (!handler) {
+      updateNode(node.id, { focusSelection: selection });
+      return;
+    }
+
+    try {
+      const result = await handler(node.resultUrl, selection);
+      updateNode(node.id, {
+        focusSelection: selection,
+        resultUrl: result.dataUrl,
+        resultAspectRatio: result.resultAspectRatio,
+        imageToolMode: null,
+        imageToolAction: node.imageToolAction,
+        title: `${node.title || 'image'}-${node.imageToolAction}`,
+      });
+    } catch (error) {
+      updateNode(node.id, {
+        focusSelection: selection,
+        imageToolMode: null,
+        errorMessage: error instanceof Error ? error.message : '图片局部工具执行失败',
+      });
+    }
+  }, [updateNode]);
+
   // Create asset modal (isCreateAssetModalOpen, handleOpenCreateAsset, handleSaveAssetToLibrary) provided by useAssetHandlers hook
 
   // ============================================================================
@@ -1758,7 +1804,9 @@ export default function App() {
         <FocusSelectionOverlay
           imageUrl={activeFocusNode.resultUrl}
           initialSelection={activeFocusNode.focusSelection}
-          onChange={(selection) => updateNode(activeFocusNode.id, { focusSelection: selection })}
+          onChange={(selection) => {
+            void applyPendingFocusAction(activeFocusNode, selection);
+          }}
           onClose={() => updateNode(activeFocusNode.id, { imageToolMode: null })}
         />
       )}

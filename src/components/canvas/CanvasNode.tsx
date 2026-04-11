@@ -177,6 +177,16 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   }, [data.id, data.prompt, onUpdate]);
 
   const applyImageToolAction = React.useCallback(async (mode: 'enhance' | 'grid' | 'split' | 'style', item: string, promptPrefix: string) => {
+    const focusRequiredActions = ['擦除', '重绘', '裁剪', '抠图'];
+    if (mode === 'enhance' && focusRequiredActions.includes(item) && data.resultUrl && !data.focusSelection) {
+      onUpdate(data.id, {
+        imageToolMode: 'focus',
+        imageToolAction: item,
+        angleMode: false,
+      });
+      return;
+    }
+
     if (mode === 'enhance' && data.resultUrl && item === '高清') {
       try {
         const result = await upscaleImage2x(data.resultUrl);
