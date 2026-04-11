@@ -245,11 +245,20 @@ export const StoryboardVideoModal: React.FC<StoryboardVideoModalProps> = ({
         if (provider === 'google') {
             return <GoogleIcon size={14} className={selected ? 'text-blue-400' : 'text-neutral-400'} />;
         }
+        if (provider === 'xai') {
+            return <Sparkles size={14} className={selected ? 'text-blue-400' : 'text-orange-400'} />;
+        }
         if (provider === 'kling') {
             return <KlingIcon size={16} />;
         }
         if (provider === 'hailuo') {
             return <HailuoIcon size={16} />;
+        }
+        if (provider === 'wan') {
+            return <Film size={14} className={selected ? 'text-blue-400' : 'text-cyan-400'} />;
+        }
+        if (provider === 'seedance') {
+            return <Wand2 size={14} className={selected ? 'text-blue-400' : 'text-violet-400'} />;
         }
         return <Film size={14} />;
     };

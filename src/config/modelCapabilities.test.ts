@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   getVideoCapability,
+  getNativeVideoCapability,
+  getNativeVideoFeatureKeys,
+  getNativeVideoModelNotes,
+  getNativeVideoModelSources,
   getVoiceCapability,
   LOCAL_VIDEO_CAPABILITIES,
   LOCAL_VOICE_CAPABILITIES,
@@ -20,6 +24,42 @@ describe('model capabilities', () => {
     expect(capability?.id).toBe('veo3.1');
     expect(capability?.serverModelId).toBeTruthy();
     expect(capability?.modes.standard.enabled).toBe(true);
+  });
+
+  it('returns native capability overrides for models with officially confirmed broader features', () => {
+    expect(getNativeVideoCapability('veo3.1')?.modes.standard.supportsFullReference).toBe(true);
+    expect(getNativeVideoCapability('jimeng-seedance-2')?.modes.frameToFrame.supportsStartEndFrames).toBe(true);
+    expect(getNativeVideoCapability('kling-v3')?.modes.standard.supportsAudio).toBe(true);
+    expect(getNativeVideoCapability('sora-2')?.modes.standard.supportsAudio).toBe(true);
+  });
+
+  it('exposes native feature keys separately from currently wired backend flags', () => {
+    expect(getNativeVideoFeatureKeys('jimeng-seedance-2')).toContain('fullReference');
+    expect(getNativeVideoFeatureKeys('jimeng-seedance-2')).not.toContain('referenceVideo');
+    expect(getNativeVideoFeatureKeys('kling-v2-6')).toContain('subjectReference');
+    expect(getNativeVideoFeatureKeys('minimax-hailuo')).toContain('subjectReference');
+    expect(getNativeVideoFeatureKeys('wan2.6-i2v')).not.toContain('textToVideo');
+    expect(getNativeVideoFeatureKeys('wan2.6-i2v')).toContain('audio');
+    expect(getNativeVideoFeatureKeys('jimeng-4.5')).toContain('startEndFrame');
+    expect(getNativeVideoFeatureKeys('kling-v3')).toContain('referenceVideo');
+  });
+
+  it('exposes native model notes for UI clarification', () => {
+    expect(getNativeVideoModelNotes('sora-2')[0]).toContain('音频');
+    expect(getNativeVideoModelNotes('veo3.1')[0]).toContain('首尾帧');
+    expect(getNativeVideoModelNotes('wan2.6-i2v')[0]).toContain('比例跟随首帧');
+  });
+
+  it('exposes official source links for native capability assertions', () => {
+    expect(getNativeVideoModelSources('veo3.1')[0]).toContain('cloud.google.com');
+    expect(getNativeVideoModelSources('sora-2')[0]).toContain('openai.com');
+    expect(getNativeVideoModelSources('minimax-hailuo')[0]).toContain('minimax');
+  });
+
+  it('keeps per-SKU native capability overrides narrow for wan image-to-video models', () => {
+    expect(getNativeVideoCapability('wan2.6-i2v')?.modes.standard.supportsTextToVideo).toBe(false);
+    expect(getNativeVideoCapability('wan2.6-i2v')?.modes.motionControl.enabled).toBe(false);
+    expect(getNativeVideoCapability('wan2.6-i2v')?.modes.standard.defaultAspectRatio).toBe('Auto');
   });
 
   it('returns a known voice capability by registry id', () => {
@@ -58,7 +98,6 @@ describe('model capabilities', () => {
     expect(mapRegistryVideoIdToServerVideoId('veo3.1-fast-components')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('minimax-hailuo')).toBe('hailuo-2.3');
     expect(mapRegistryVideoIdToServerVideoId('kling-v2-6')).toBe('kling-v2-6');
-    expect(mapRegistryVideoIdToServerVideoId('wan2.5-i2v-preview')).toBe('wan2.5-i2v-preview');
     expect(mapRegistryVideoIdToServerVideoId('wan2.6-i2v')).toBe('wan2.6-i2v');
     expect(mapRegistryVideoIdToServerVideoId('wan2.6-i2v-flash')).toBe('wan2.6-i2v-flash');
     expect(mapRegistryVideoIdToServerVideoId('jimeng-seedance-2')).toBe('jimeng-seedance-2');
@@ -88,7 +127,6 @@ describe('model capabilities', () => {
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-6'].serverModelId).toBe('kling-v2-6');
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-5-turbo'].serverModelId).toBe('kling-v2-5-turbo');
     expect(LOCAL_VIDEO_CAPABILITIES['minimax-hailuo'].serverModelId).toBe('hailuo-2.3');
-    expect(LOCAL_VIDEO_CAPABILITIES['wan2.5-i2v-preview'].serverModelId).toBe('wan2.5-i2v-preview');
     expect(LOCAL_VIDEO_CAPABILITIES['wan2.6-i2v'].serverModelId).toBe('wan2.6-i2v');
     expect(LOCAL_VIDEO_CAPABILITIES['wan2.6-i2v-flash'].serverModelId).toBe('wan2.6-i2v-flash');
     expect(LOCAL_VIDEO_CAPABILITIES['jimeng-seedance-2'].serverModelId).toBe('jimeng-seedance-2');
@@ -156,6 +194,14 @@ describe('model capabilities', () => {
     expect(capability.modes.motionControl.enabled).toBe(false);
   });
 
+  it('documents native sora-2 official capability layer separately from the wired backend contract', () => {
+    const capability = getNativeVideoCapability('sora-2');
+
+    expect(capability?.modes.standard.supportsFullReference).toBe(true);
+    expect(capability?.modes.standard.supportsAudio).toBe(true);
+    expect(capability?.modes.standard.durations).toEqual([10, 16, 20]);
+  });
+
   it('documents grok-video-3 semantic contract', () => {
     const capability = LOCAL_VIDEO_CAPABILITIES['grok-video-3'];
 
@@ -187,17 +233,9 @@ describe('model capabilities', () => {
     expect(capability.modes.motionControl.enabled).toBe(false);
   });
 
-  it('documents wan 2.5 preview image-to-video semantic contract', () => {
-    const capability = LOCAL_VIDEO_CAPABILITIES['wan2.5-i2v-preview'];
-
-    expect(capability.modes.standard.enabled).toBe(true);
-    expect(capability.modes.standard.supportsTextToVideo).toBe(false);
-    expect(capability.modes.standard.supportsImageToVideo).toBe(true);
-    expect(capability.modes.standard.durations).toEqual([5, 10]);
-    expect(capability.modes.standard.aspectRatios).toEqual(['Auto']);
-    expect(capability.modes.standard.resolutions).toEqual(['480p', '720p', '1080p']);
-    expect(capability.modes.frameToFrame.enabled).toBe(false);
-    expect(capability.modes.motionControl.enabled).toBe(false);
+  it('documents native wan image-to-video capability layer separately from the wired backend contract', () => {
+    expect(getNativeVideoCapability('wan2.6-i2v')?.modes.standard.supportsAudio).toBe(true);
+    expect(getNativeVideoCapability('wan2.6-i2v-flash')?.modes.standard.durations).toEqual([2, 5, 10, 15]);
   });
 
   it('documents jimeng-seedance-2 semantic contract', () => {
@@ -207,13 +245,31 @@ describe('model capabilities', () => {
     expect(capability.modes.standard.supportsTextToVideo).toBe(true);
     expect(capability.modes.standard.supportsImageToVideo).toBe(true);
     expect(capability.modes.standard.supportsAudio).toBe(true);
-    expect(capability.modes.standard.durations).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(capability.modes.standard.aspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']);
+    expect(capability.modes.standard.durations).toEqual([5, 10]);
+    expect(capability.modes.standard.aspectRatios).toEqual(['16:9', '9:16']);
     expect(capability.modes.standard.resolutions).toEqual(['720p', '1080p']);
     expect(capability.modes.frameToFrame.enabled).toBe(true);
     expect(capability.modes.frameToFrame.supportsStartEndFrames).toBe(true);
     expect(capability.modes.frameToFrame.supportsAudio).toBe(true);
+    expect(capability.modes.frameToFrame.durations).toEqual([5, 10]);
+    expect(capability.modes.frameToFrame.aspectRatios).toEqual(['16:9', '9:16']);
     expect(capability.modes.motionControl.enabled).toBe(false);
+  });
+
+  it('documents native seedance / jimeng capability layer separately from the wired backend contract', () => {
+    expect(getNativeVideoCapability('jimeng-seedance-2')?.modes.standard.durations).toEqual([2, 5, 10, 12, 15]);
+    expect(getNativeVideoCapability('jimeng-seedance-2')?.modes.standard.supportsAudio).toBe(true);
+    expect(getNativeVideoCapability('jimeng-4.0')?.modes.standard.supportsFullReference).toBe(true);
+    expect(getNativeVideoCapability('jimeng-4.5')?.modes.frameToFrame.supportsStartEndFrames).toBe(true);
+    expect(getNativeVideoCapability('jimeng-4.5')?.modes.standard.supportsAudio).toBe(false);
+    expect(getNativeVideoCapability('jimeng-4.1')?.modes.standard.supportsAudio).toBe(false);
+  });
+
+  it('documents native Kling / Hailuo official capability layer separately from the wired backend contract', () => {
+    expect(getNativeVideoCapability('kling-v2-5-turbo')?.modes.standard.supportsFullReference).toBe(true);
+    expect(getNativeVideoCapability('kling-v3')?.modes.standard.supportsMultiImage).toBe(true);
+    expect(getNativeVideoCapability('minimax-hailuo')?.modes.standard.supportsAudio).toBe(false);
+    expect(getNativeVideoCapability('minimax-hailuo')?.modes.frameToFrame.enabled).toBe(false);
   });
 
   it('documents jimeng-4.1 semantic contract', () => {
@@ -223,10 +279,19 @@ describe('model capabilities', () => {
     expect(capability.modes.standard.supportsTextToVideo).toBe(true);
     expect(capability.modes.standard.supportsImageToVideo).toBe(true);
     expect(capability.modes.standard.supportsAudio).toBe(true);
-    expect(capability.modes.standard.durations).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
-    expect(capability.modes.standard.aspectRatios).toEqual(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']);
+    expect(capability.modes.standard.durations).toEqual([5, 10]);
+    expect(capability.modes.standard.aspectRatios).toEqual(['16:9', '9:16']);
     expect(capability.modes.frameToFrame.enabled).toBe(false);
     expect(capability.modes.motionControl.enabled).toBe(false);
+  });
+
+  it('keeps the whole jimeng family narrowed to currently safe standard durations and ratios', () => {
+    for (const modelId of ['jimeng-seedance-2', 'jimeng-4.5', 'jimeng-4.1', 'jimeng-4.0', 'jimeng-video-3-fast'] as const) {
+      const capability = LOCAL_VIDEO_CAPABILITIES[modelId];
+      expect(capability.modes.standard.durations).toEqual([5, 10]);
+      expect(capability.modes.standard.aspectRatios).toEqual(['16:9', '9:16']);
+      expect(capability.modes.motionControl.enabled).toBe(false);
+    }
   });
 
   it('keeps all jimeng family audio flags aligned with Seedance runtime support', () => {

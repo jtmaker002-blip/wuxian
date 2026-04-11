@@ -9,6 +9,12 @@ describe('seedance service helpers', () => {
     expect(resolveSeedanceVideoModel('jimeng-4.1')).toBe('jimeng-4.1');
   });
 
+  it('rejects missing seedance video model ids instead of silently defaulting', async () => {
+    const { resolveSeedanceVideoModel } = await import('./seedance.js');
+
+    expect(() => resolveSeedanceVideoModel()).toThrow(/missing seedance video model/i);
+  });
+
   it('rejects unknown seedance video models', async () => {
     const { resolveSeedanceVideoModel } = await import('./seedance.js');
 
@@ -165,8 +171,8 @@ describe('generateSeedanceVideo', () => {
     const { generateSeedanceVideo } = await import('./seedance.js');
     const buffer = await generateSeedanceVideo({
       prompt: '城市夜景延时摄影',
-      duration: 6,
-      aspectRatio: '21:9',
+      duration: 10,
+      aspectRatio: '9:16',
       resolution: '1080p',
       videoModel: 'jimeng-4.1',
       generateAudio: true,
@@ -244,8 +250,8 @@ describe('generateSeedanceVideo', () => {
     const buffer = await generateSeedanceVideo({
       prompt: '镜头推进到角色脸部',
       imageBase64: 'data:image/png;base64,start-image',
-      duration: 4,
-      aspectRatio: '4:3',
+      duration: 5,
+      aspectRatio: '16:9',
       resolution: '720p',
       videoModel: 'jimeng-4.0',
       apiKey: 'seedance-key',
@@ -258,5 +264,14 @@ describe('generateSeedanceVideo', () => {
       ])
     );
     expect(buffer.toString()).toBe('seedance-image');
+  });
+
+  it('normalizes unsupported seedance durations and ratios back to the safe defaults', async () => {
+    const { mapSeedanceDuration, mapSeedanceRatio } = await import('./seedance.js');
+
+    expect(mapSeedanceDuration(8)).toBe(5);
+    expect(mapSeedanceDuration(10)).toBe(10);
+    expect(mapSeedanceRatio('21:9')).toBe('16:9');
+    expect(mapSeedanceRatio('9:16')).toBe('9:16');
   });
 });

@@ -19,8 +19,10 @@ export const useVideoFrameExtraction = ({
     nodes,
     updateNode
 }: UseVideoFrameExtractionOptions) => {
-    // Track which nodes we've attempted extraction for (to avoid infinite loops)
-    const extractedNodesRef = useRef<Set<string>>(new Set());
+    const completedNodesRef = useRef<Set<string>>(new Set());
+    const inFlightNodesRef = useRef<Set<string>>(new Set());
+    const retryCountRef = useRef<Map<string, number>>(new Map());
+    const MAX_RETRIES = 3;
 
     useEffect(() => {
         // Find video nodes with resultUrl but no lastFrame
@@ -29,7 +31,9 @@ export const useVideoFrameExtraction = ({
             node.status === NodeStatus.SUCCESS &&
             node.resultUrl &&
             !node.lastFrame &&
-            !extractedNodesRef.current.has(node.id)
+            !completedNodesRef.current.has(node.id) &&
+            !inFlightNodesRef.current.has(node.id) &&
+            (retryCountRef.current.get(node.id) ?? 0) < MAX_RETRIES
         );
 
         if (videosNeedingExtraction.length === 0) return;
@@ -38,17 +42,21 @@ export const useVideoFrameExtraction = ({
 
         // Extract lastFrame for each video
         videosNeedingExtraction.forEach(async (node) => {
-            // Mark as being processed to avoid duplicate attempts
-            extractedNodesRef.current.add(node.id);
+            inFlightNodesRef.current.add(node.id);
 
             try {
                 console.log(`[VideoFrameExtraction] Extracting lastFrame for video node ${node.id}...`);
                 const lastFrame = await extractVideoLastFrame(node.resultUrl!);
                 updateNode(node.id, { lastFrame });
+                completedNodesRef.current.add(node.id);
+                retryCountRef.current.delete(node.id);
                 console.log(`[VideoFrameExtraction] Successfully extracted lastFrame for node ${node.id}`);
             } catch (error) {
+                const nextRetryCount = (retryCountRef.current.get(node.id) ?? 0) + 1;
+                retryCountRef.current.set(node.id, nextRetryCount);
                 console.error(`[VideoFrameExtraction] Failed to extract lastFrame for node ${node.id}:`, error);
-                // Don't remove from extractedNodesRef so we don't retry infinitely on failure
+            } finally {
+                inFlightNodesRef.current.delete(node.id);
             }
         });
     }, [nodes, updateNode]);
@@ -56,12 +64,18 @@ export const useVideoFrameExtraction = ({
     // Reset tracked nodes when nodes array changes drastically (new workflow loaded)
     useEffect(() => {
         const currentNodeIds = new Set(nodes.map(n => n.id));
-        const trackedIds: string[] = Array.from(extractedNodesRef.current);
+        const trackedIds: string[] = Array.from(new Set([
+            ...completedNodesRef.current,
+            ...inFlightNodesRef.current,
+            ...retryCountRef.current.keys(),
+        ]));
 
         // Remove tracked IDs that no longer exist in nodes
         trackedIds.forEach(id => {
             if (!currentNodeIds.has(id)) {
-                extractedNodesRef.current.delete(id);
+                completedNodesRef.current.delete(id);
+                inFlightNodesRef.current.delete(id);
+                retryCountRef.current.delete(id);
             }
         });
     }, [nodes]);

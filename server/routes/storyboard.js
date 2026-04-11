@@ -7,8 +7,21 @@
 
 import express from 'express';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateOpenAIImage, generateOpenAIText } from '../services/openai.js';
+import { saveBufferToFile } from '../utils/imageHelpers.js';
 
 const router = express.Router();
+
+function getHostedStoryboardFallbackMessage(providerApiKey, featureLabel) {
+    if (typeof providerApiKey !== 'string' || !providerApiKey.trim()) {
+        return null;
+    }
+    return `${featureLabel} 当前后端尚未接通 OpenAiTeach Token 托管执行链；若要继续使用当前实现，请先配置本地 GEMINI_API_KEY。`;
+}
+
+function hasHostedStoryboardProvider(providerApiKey) {
+    return typeof providerApiKey === 'string' && providerApiKey.trim().length > 0;
+}
 
 /**
  * Helper to retry async operations with exponential backoff
@@ -31,6 +44,40 @@ async function retryOperation(operation, maxRetries = 3, initialDelayMs = 2000) 
     }
 }
 
+async function runStoryboardTextModel({
+    promptParts,
+    systemPrompt,
+    apiKey,
+    providerApiKey,
+    providerBaseUrl,
+    fallbackModel = 'gemini-2.0-flash',
+}) {
+    const hostedProviderBaseUrl =
+        typeof providerBaseUrl === 'string' && providerBaseUrl.trim()
+            ? providerBaseUrl.trim()
+            : 'https://openaiteach.com/v1';
+
+    if (typeof providerApiKey === 'string' && providerApiKey.trim()) {
+        const normalizedParts = Array.isArray(promptParts) ? promptParts : [promptParts];
+        return retryOperation(() => generateOpenAIText({
+            model: 'gpt-4o-mini',
+            apiKey: providerApiKey.trim(),
+            baseUrl: hostedProviderBaseUrl,
+            temperature: 0.7,
+            maxTokens: 4096,
+            messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: normalizedParts },
+            ],
+        }));
+    }
+
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const model = genAI.getGenerativeModel({ model: fallbackModel });
+    const result = await retryOperation(() => model.generateContent(promptParts));
+    return result.response.text().trim();
+}
+
 // ============================================================================
 // SCRIPT GENERATION
 // ============================================================================
@@ -44,13 +91,15 @@ async function retryOperation(operation, maxRetries = 3, initialDelayMs = 2000) 
  */
 router.post('/generate-scripts', async (req, res) => {
     try {
-        const { story, characterDescriptions, sceneCount, referenceImages, characterImages } = req.body;
+        const { story, characterDescriptions, sceneCount, referenceImages, characterImages, providerApiKey, providerBaseUrl } = req.body;
         const { GEMINI_API_KEY } = req.app.locals;
         const { resolveImageToBase64 } = await import('../utils/imageHelpers.js');
 
-        if (!GEMINI_API_KEY) {
+        if (!GEMINI_API_KEY && !hasHostedStoryboardProvider(providerApiKey)) {
             return res.status(500).json({
-                error: "Gemini API key not configured. Add GEMINI_API_KEY to .env"
+                error:
+                    getHostedStoryboardFallbackMessage(providerApiKey, 'Storyboard 脚本生成') ||
+                    "Gemini API key not configured. Add GEMINI_API_KEY to .env"
             });
         }
 
@@ -69,10 +118,6 @@ router.post('/generate-scripts', async (req, res) => {
         }
 
         console.log(`[Storyboard] Generating ${count} scene scripts`);
-
-        // Initialize Gemini
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         // Categorize reference images
         const refs = referenceImages || [];
@@ -253,9 +298,13 @@ Respond ONLY with valid JSON, no other text.`;
             }
         }
 
-        // Call Gemini with RETRY logic
-        const result = await retryOperation(() => model.generateContent(promptParts));
-        const responseText = result.response.text();
+        const responseText = await runStoryboardTextModel({
+            promptParts,
+            systemPrompt,
+            apiKey: GEMINI_API_KEY,
+            providerApiKey,
+            providerBaseUrl,
+        });
 
         // Parse JSON from response
         let parsed;
@@ -315,21 +364,19 @@ Respond ONLY with valid JSON, no other text.`;
  */
 router.post('/brainstorm-story', async (req, res) => {
     try {
-        const { characterDescriptions, genre, referenceImages, characterImages } = req.body;
+        const { characterDescriptions, genre, referenceImages, characterImages, providerApiKey, providerBaseUrl } = req.body;
         const { GEMINI_API_KEY } = req.app.locals;
         const { resolveImageToBase64 } = await import('../utils/imageHelpers.js');
 
-        if (!GEMINI_API_KEY) {
+        if (!GEMINI_API_KEY && !hasHostedStoryboardProvider(providerApiKey)) {
             return res.status(500).json({
-                error: "Gemini API key not configured. Add GEMINI_API_KEY to .env"
+                error:
+                    getHostedStoryboardFallbackMessage(providerApiKey, 'Storyboard 故事脑暴') ||
+                    "Gemini API key not configured. Add GEMINI_API_KEY to .env"
             });
         }
 
         console.log(`[Storyboard] Brainstorming story with ${characterDescriptions?.length || 0} characters`);
-
-        // Initialize Gemini
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         // Build character context
         const characterContext = characterDescriptions && characterDescriptions.length > 0
@@ -400,9 +447,13 @@ Respond with ONLY the story synopsis, no additional text or formatting.`;
             }
         }
 
-        // Call Gemini with RETRY
-        const result = await retryOperation(() => model.generateContent(promptParts));
-        const story = result.response.text().trim();
+        const story = await runStoryboardTextModel({
+            promptParts,
+            systemPrompt,
+            apiKey: GEMINI_API_KEY,
+            providerApiKey,
+            providerBaseUrl,
+        });
 
         console.log(`[Storyboard] Generated story: ${story.substring(0, 100)}...`);
 
@@ -427,12 +478,14 @@ Respond with ONLY the story synopsis, no additional text or formatting.`;
  */
 router.post('/optimize-story', async (req, res) => {
     try {
-        const { story, characterNames } = req.body;
+        const { story, characterNames, providerApiKey, providerBaseUrl } = req.body;
         const { GEMINI_API_KEY } = req.app.locals;
 
-        if (!GEMINI_API_KEY) {
+        if (!GEMINI_API_KEY && !hasHostedStoryboardProvider(providerApiKey)) {
             return res.status(500).json({
-                error: "Gemini API key not configured. Add GEMINI_API_KEY to .env"
+                error:
+                    getHostedStoryboardFallbackMessage(providerApiKey, 'Storyboard 文案优化') ||
+                    "Gemini API key not configured. Add GEMINI_API_KEY to .env"
             });
         }
 
@@ -443,10 +496,6 @@ router.post('/optimize-story', async (req, res) => {
         }
 
         console.log(`[Storyboard] Optimizing story length: ${story.length} chars`);
-
-        // Initialize Gemini
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
         const systemPrompt = `You are an expert storyboard artist and writer.
         
@@ -465,8 +514,13 @@ INSTRUCTIONS:
 
 Respond with ONLY the optimized story text.`;
 
-        const result = await retryOperation(() => model.generateContent(systemPrompt));
-        const optimizedStory = result.response.text().trim();
+        const optimizedStory = await runStoryboardTextModel({
+            promptParts: systemPrompt,
+            systemPrompt: 'You are an expert storyboard artist and writer.',
+            apiKey: GEMINI_API_KEY,
+            providerApiKey,
+            providerBaseUrl,
+        });
 
         console.log(`[Storyboard] Optimized story: ${optimizedStory.substring(0, 50)}...`);
 
@@ -491,13 +545,19 @@ Respond with ONLY the optimized story text.`;
  */
 router.post('/generate-composite', async (req, res) => {
     try {
-        const { scripts, styleAnchor, characterDNA, sceneCount, referenceImages, characterImages } = req.body;
+        const { scripts, styleAnchor, characterDNA, sceneCount, referenceImages, characterImages, providerApiKey, providerBaseUrl } = req.body;
         const { GEMINI_API_KEY } = req.app.locals;
         const { resolveImageToBase64 } = await import('../utils/imageHelpers.js');
+        const hostedProviderBaseUrl =
+            typeof providerBaseUrl === 'string' && providerBaseUrl.trim()
+                ? providerBaseUrl.trim()
+                : 'https://openaiteach.com/v1';
 
-        if (!GEMINI_API_KEY) {
+        if (!GEMINI_API_KEY && !hasHostedStoryboardProvider(providerApiKey)) {
             return res.status(500).json({
-                error: "Gemini API key not configured. Add GEMINI_API_KEY to .env"
+                error:
+                    getHostedStoryboardFallbackMessage(providerApiKey, 'Storyboard 合成预览') ||
+                    "Gemini API key not configured. Add GEMINI_API_KEY to .env"
             });
         }
 
@@ -732,41 +792,55 @@ CRITICAL:
 
         promptParts.push({ text: compositePrompt });
 
-        // Initialize Gemini for image generation
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-3-pro-image-preview',
-            generationConfig: {
-                // Adjusting timeout by NOT setting it (default is usually reasonable, but 503 suggests server-side limit)
-                responseModalities: ['Text', 'Image']
-            }
-        });
-
-        // Generate the composite image with RETRY
-        const startTime = Date.now();
-        const result = await retryOperation(() => model.generateContent(promptParts));
-        const duration = Date.now() - startTime;
-        console.log(`[Storyboard] Gemini response received in ${duration}ms`);
-
-        const response = result.response;
-
-        // Extract image from response
         let imageUrl = null;
-        for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
-                // Save the image
-                const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
-                const timestamp = Date.now();
-                const fileName = `storyboard_composite_${timestamp}.png`;
-                const fs = await import('fs/promises');
-                const path = await import('path');
-                const assetsDir = req.app.locals.IMAGES_DIR || './library/images';
-                const filePath = path.join(assetsDir, fileName);
 
-                await fs.writeFile(filePath, imageBuffer);
-                imageUrl = `/library/images/${fileName}`;
-                console.log(`[Storyboard] Composite image saved: ${imageUrl}`);
-                break;
+        if (typeof providerApiKey === 'string' && providerApiKey.trim()) {
+            const hostedReferenceImages = [];
+            for (const part of promptParts) {
+                if (part && typeof part === 'object' && part.inlineData?.data) {
+                    hostedReferenceImages.push(`data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`);
+                }
+            }
+
+            const imageBuffer = await generateOpenAIImage({
+                prompt: compositePrompt,
+                imageBase64Array: hostedReferenceImages.length > 0 ? hostedReferenceImages : undefined,
+                aspectRatio: '16:9',
+                resolution: '1K',
+                imageModel: 'gemini-3-pro-image-preview',
+                apiKey: providerApiKey.trim(),
+                baseUrl: hostedProviderBaseUrl,
+            });
+
+            const assetsDir = req.app.locals.IMAGES_DIR || './library/images';
+            const saved = saveBufferToFile(imageBuffer, assetsDir, 'storyboard_composite', 'png');
+            imageUrl = `/library/images/${saved.filename}`;
+            console.log(`[Storyboard] Hosted composite image saved: ${imageUrl}`);
+        } else {
+            // Initialize Gemini for image generation
+            const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+            const model = genAI.getGenerativeModel({
+                model: 'gemini-3-pro-image-preview',
+                generationConfig: {
+                    responseModalities: ['Text', 'Image']
+                }
+            });
+
+            const startTime = Date.now();
+            const result = await retryOperation(() => model.generateContent(promptParts));
+            const duration = Date.now() - startTime;
+            console.log(`[Storyboard] Gemini response received in ${duration}ms`);
+
+            const response = result.response;
+            for (const part of response.candidates[0].content.parts) {
+                if (part.inlineData) {
+                    const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
+                    const assetsDir = req.app.locals.IMAGES_DIR || './library/images';
+                    const saved = saveBufferToFile(imageBuffer, assetsDir, 'storyboard_composite', 'png');
+                    imageUrl = `/library/images/${saved.filename}`;
+                    console.log(`[Storyboard] Composite image saved: ${imageUrl}`);
+                    break;
+                }
             }
         }
 

@@ -26,7 +26,6 @@ const SEEDANCE_MODEL_MATRIX = Object.freeze({
 });
 
 export const SUPPORTED_SEEDANCE_VIDEO_MODELS = Object.freeze(Object.keys(SEEDANCE_MODEL_MATRIX));
-export const DEFAULT_SEEDANCE_VIDEO_MODEL = 'jimeng-seedance-2';
 export const SEEDANCE_START_END_FRAME_MODELS = Object.freeze(
   SUPPORTED_SEEDANCE_VIDEO_MODELS.filter((id) => Boolean(SEEDANCE_MODEL_MATRIX[id].frameToFrame))
 );
@@ -36,7 +35,7 @@ export const SEEDANCE_STANDARD_ONLY_MODELS = Object.freeze(
 
 export function resolveSeedanceVideoModel(videoModel) {
   if (!videoModel) {
-    return DEFAULT_SEEDANCE_VIDEO_MODEL;
+    throw new Error('Missing Seedance video model');
   }
 
   if (SUPPORTED_SEEDANCE_VIDEO_MODELS.includes(videoModel)) {
@@ -48,7 +47,7 @@ export function resolveSeedanceVideoModel(videoModel) {
 
 export function mapSeedanceDuration(duration) {
   const seconds = Number(duration || 0);
-  if (Number.isFinite(seconds) && seconds >= 2 && seconds <= 12) {
+  if (Number.isFinite(seconds) && [5, 10].includes(seconds)) {
     return seconds;
   }
   return 5;
@@ -57,7 +56,7 @@ export function mapSeedanceDuration(duration) {
 export function mapSeedanceRatio(aspectRatio) {
   const ratio = String(aspectRatio || '').trim();
   if (!ratio) return '16:9';
-  if (['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'].includes(ratio)) {
+  if (['16:9', '9:16'].includes(ratio)) {
     return ratio;
   }
   return '16:9';

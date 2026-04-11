@@ -7,6 +7,12 @@ describe('resolveXAIVideoModel', () => {
     expect(resolveXAIVideoModel('grok-video-3')).toBe('grok-video-3');
   });
 
+  it('rejects missing xAI video model ids instead of silently defaulting', async () => {
+    const { resolveXAIVideoModel } = await import('./xai.js');
+
+    expect(() => resolveXAIVideoModel()).toThrow(/missing xai video model/i);
+  });
+
   it('rejects unsupported xAI video models', async () => {
     const { resolveXAIVideoModel } = await import('./xai.js');
 

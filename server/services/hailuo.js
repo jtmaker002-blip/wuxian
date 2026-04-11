@@ -38,6 +38,23 @@ function mapHailuoModelName(modelId, hasFirstFrame, hasLastFrame) {
     return mapping[modelId] || 'MiniMax-Hailuo-2.3';
 }
 
+export function resolveHailuoVideoExecutionDetails({ modelId, imageBase64, lastFrameBase64 }) {
+    const hasFirstFrame = Boolean(imageBase64);
+    const hasLastFrame = Boolean(lastFrameBase64);
+
+    return {
+        executedModel: mapHailuoModelName(modelId, hasFirstFrame, hasLastFrame),
+        executedMode: hasLastFrame ? 'FL2V' : hasFirstFrame ? 'I2V' : 'T2V'
+    };
+}
+
+export function resolveHailuoSubjectExecutionDetails() {
+    return {
+        executedModel: 'S2V-01',
+        executedMode: 'S2V'
+    };
+}
+
 /**
  * Map resolution to Hailuo format
  */
@@ -187,7 +204,11 @@ export async function generateHailuoVideo({
 
     const hasFirstFrame = !!imageBase64;
     const hasLastFrame = !!lastFrameBase64;
-    const modelName = mapHailuoModelName(modelId, hasFirstFrame, hasLastFrame);
+    const { executedModel: modelName, executedMode } = resolveHailuoVideoExecutionDetails({
+        modelId,
+        imageBase64,
+        lastFrameBase64
+    });
     const mappedResolution = mapResolution(resolution);
     const mappedDuration = mapHailuoDuration(duration);
 
@@ -226,13 +247,15 @@ export async function generateHailuoVideo({
         }
     }
 
-    const mode = hasLastFrame ? 'FL2V (First+Last Frame)' :
-        hasFirstFrame ? 'I2V (Image-to-Video)' :
-            'T2V (Text-to-Video)';
+    const modeLabel = executedMode === 'FL2V'
+        ? 'FL2V (First+Last Frame)'
+        : executedMode === 'I2V'
+            ? 'I2V (Image-to-Video)'
+            : 'T2V (Text-to-Video)';
 
     console.log('=== Hailuo Video Generation ===');
     console.log('Model:', modelName);
-    console.log('Mode:', mode);
+    console.log('Mode:', modeLabel);
     console.log('First frame imageBase64 received:', hasFirstFrame ? `Yes (${(imageBase64 || '').substring(0, 50)}...)` : 'No');
     console.log('Last frame imageBase64 received:', hasLastFrame ? 'Yes' : 'No');
     console.log('Prompt:', (prompt || '').substring(0, 100) + '...');
@@ -310,6 +333,7 @@ export async function generateHailuoSubjectVideo({
         throw new Error('Subject reference image required for S2V mode');
     }
 
+    const { executedModel, executedMode } = resolveHailuoSubjectExecutionDetails();
     const mappedResolution = mapResolution(resolution);
     const mappedDuration = mapHailuoDuration(duration);
     const mappedAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
@@ -322,7 +346,7 @@ export async function generateHailuoSubjectVideo({
     });
 
     const body = {
-        model: 'S2V-01',
+        model: executedModel,
         prompt: prompt || '',
         duration: mappedDuration,
         resolution: mappedResolution,
@@ -335,7 +359,7 @@ export async function generateHailuoSubjectVideo({
         ]
     };
 
-    console.log(`Hailuo S2V Gen: Subject reference video`);
+    console.log(`Hailuo ${executedMode} Gen: Subject reference video`);
 
     const response = await fetch(`${HAILUO_BASE_URL}/video_generation`, {
         method: 'POST',

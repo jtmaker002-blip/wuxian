@@ -7,6 +7,7 @@
 
 import { useState, useCallback } from 'react';
 import { NodeData, NodeStatus, NodeType, Viewport } from '../types';
+import { readStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
 
 // ============================================================================
 // TYPES
@@ -189,10 +190,12 @@ export const useStoryboardGenerator = ({ onCreateNodes, viewport }: UseStoryboar
         }));
 
         try {
+            const providerConfig = readStoredOpenAiTeachProviderConfig();
             const response = await fetch('/api/storyboard/generate-scripts', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    ...providerConfig,
                     story: state.story,
                     characterDescriptions: state.selectedCharacters.map(c => ({
                         name: c.name,
@@ -237,10 +240,12 @@ export const useStoryboardGenerator = ({ onCreateNodes, viewport }: UseStoryboar
         setState(prev => ({ ...prev, isBrainstorming: true, error: null }));
 
         try {
+            const providerConfig = readStoredOpenAiTeachProviderConfig();
             const response = await fetch('/api/storyboard/brainstorm-story', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    ...providerConfig,
                     characterDescriptions: state.selectedCharacters.map(c => ({
                         name: c.name,
                         description: c.description || 'A character'
@@ -284,10 +289,12 @@ export const useStoryboardGenerator = ({ onCreateNodes, viewport }: UseStoryboar
         setState(prev => ({ ...prev, isOptimizing: true, error: null }));
 
         try {
+            const providerConfig = readStoredOpenAiTeachProviderConfig();
             const response = await fetch('/api/storyboard/optimize-story', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    ...providerConfig,
                     story: state.story,
                     characterNames: state.selectedCharacters.map(c => c.name)
                 })
@@ -319,10 +326,12 @@ export const useStoryboardGenerator = ({ onCreateNodes, viewport }: UseStoryboar
         setState(prev => ({ ...prev, isGeneratingPreview: true, error: null }));
 
         try {
+            const providerConfig = readStoredOpenAiTeachProviderConfig();
             const response = await fetch('/api/storyboard/generate-composite', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    ...providerConfig,
                     scripts: state.scripts,
                     styleAnchor: state.styleAnchor,
                     characterDNA: state.characterDNA,

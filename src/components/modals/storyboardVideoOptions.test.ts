@@ -7,6 +7,7 @@ import {
 import {
   getStoryboardVideoModalState,
   getStoryboardVideoOptions,
+  getStoryboardVideoSections,
   normalizeStoryboardVideoSettings,
 } from './storyboardVideoOptions';
 
@@ -131,5 +132,30 @@ describe('storyboardVideoOptions', () => {
       duration: 10,
       resolution: '1080p',
     });
+  });
+
+  it('keeps xAI, Wan, and Seedance models in storyboard provider sections instead of dropping them', () => {
+    const options = getStoryboardVideoOptions(
+      new Set(['grok-video-3', 'wan2.6-i2v', 'jimeng-seedance-2'])
+    );
+    const sections = getStoryboardVideoSections(options);
+
+    expect(sections).toEqual([
+      {
+        provider: 'xai',
+        label: 'xAI',
+        models: [expect.objectContaining({ id: 'grok-video-3' })],
+      },
+      {
+        provider: 'wan',
+        label: 'Wan',
+        models: [expect.objectContaining({ id: 'wan2.6-i2v' })],
+      },
+      {
+        provider: 'seedance',
+        label: '即梦 / Seedance',
+        models: [expect.objectContaining({ id: 'jimeng-seedance-2' })],
+      },
+    ]);
   });
 });

@@ -89,16 +89,25 @@ export const useContextMenu = ({ viewport, handleSelectTypeFromMenu }: UseContex
     /**
      * Open connector context menu for a node
      */
-    const openConnectorMenu = useCallback((nodeId: string, direction: 'left' | 'right') => {
-        setContextMenu({
-            isOpen: true,
+    const openConnectorMenu = useCallback((nodeId: string, direction: 'left' | 'right', sourceNodeType?: NodeType, screenPosition?: { x: number; y: number }) => {
+        const resolvedScreenPosition = screenPosition ?? {
             x: window.innerWidth / 2,
             y: window.innerHeight / 2,
+        };
+        setContextMenu({
+            isOpen: true,
+            x: resolvedScreenPosition.x,
+            y: resolvedScreenPosition.y,
             type: 'node-connector',
             sourceNodeId: nodeId,
-            connectorSide: direction
+            connectorSide: direction,
+            sourceNodeType,
+            dropCanvasPosition: {
+                x: (resolvedScreenPosition.x - viewport.x) / viewport.zoom,
+                y: (resolvedScreenPosition.y - viewport.y) / viewport.zoom,
+            },
         });
-    }, []);
+    }, [viewport.x, viewport.y, viewport.zoom]);
 
     /**
      * Open node options context menu

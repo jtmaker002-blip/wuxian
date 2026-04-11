@@ -180,6 +180,12 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
     onEdgeClick,
     canvasTheme = 'dark'
 }) => {
+    const connectionStroke = canvasTheme === 'dark' ? '#d9dde3' : '#94a3b8';
+    const glowStroke = canvasTheme === 'dark' ? '#67b7ff' : '#3b82f6';
+    const lineShadow = canvasTheme === 'dark'
+        ? 'drop-shadow(0 0 10px rgba(96,184,255,0.36))'
+        : 'drop-shadow(0 0 8px rgba(59,130,246,0.26))';
+
     // Render permanent connections between nodes
     const connections: React.ReactNode[] = [];
 
@@ -207,12 +213,23 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
                     <path d={path} stroke="transparent" strokeWidth="20" fill="none" />
                     <path
                         d={path}
-                        stroke={isSelected
-                            ? (canvasTheme === 'dark' ? '#fff' : '#2563eb')
-                            : (canvasTheme === 'dark' ? '#444' : '#d1d5db')}
-                        strokeWidth="2"
+                        stroke={connectionStroke}
+                        strokeWidth={isSelected ? '3.35' : '2.85'}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
                         fill="none"
-                        className={`transition-colors ${!isSelected ? (canvasTheme === 'dark' ? 'group-hover:stroke-neutral-300' : 'group-hover:stroke-neutral-500') : ''}`}
+                        className={`transition-colors ${!isSelected ? (canvasTheme === 'dark' ? 'group-hover:stroke-neutral-200' : 'group-hover:stroke-slate-500') : ''}`}
+                    />
+                    <path
+                        d={path}
+                        stroke={glowStroke}
+                        strokeWidth={isSelected ? '5.4' : '4.4'}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeDasharray={isSelected ? '24 82 30 118' : '20 108 26 124'}
+                        fill="none"
+                        opacity={isSelected ? 0.98 : 0.9}
+                        style={{ filter: lineShadow }}
                     />
                 </g>
             );
@@ -238,14 +255,28 @@ export const ConnectionsLayer: React.FC<ConnectionsLayerProps> = ({
             );
 
             tempLine = (
-                <path
-                    d={path}
-                    stroke={canvasTheme === 'dark' ? '#fff' : '#2563eb'}
-                    strokeWidth="2"
-                    strokeDasharray="5,5"
-                    fill="none"
-                    className="pointer-events-none opacity-50"
-                />
+                <>
+                    <path
+                        d={path}
+                        stroke={connectionStroke}
+                        strokeWidth="2.85"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        fill="none"
+                        className="pointer-events-none opacity-90"
+                    />
+                    <path
+                        d={path}
+                        stroke={glowStroke}
+                        strokeWidth="4.8"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeDasharray="22 92 28 112"
+                        fill="none"
+                        className="pointer-events-none"
+                        style={{ filter: lineShadow }}
+                    />
+                </>
             );
         }
     }

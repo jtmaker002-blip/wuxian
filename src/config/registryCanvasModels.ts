@@ -5,7 +5,7 @@
 import { MODEL_REGISTRY, type ModelEntry } from './modelRegistry';
 import { getVideoCapability } from './modelCapabilities';
 
-export type VideoUiProvider = 'openai' | 'google' | 'xai' | 'kling' | 'hailuo' | 'wan' | 'other';
+export type VideoUiProvider = 'openai' | 'google' | 'xai' | 'kling' | 'hailuo' | 'wan' | 'seedance' | 'other';
 
 export interface CanvasVideoModel {
   id: string;
@@ -24,7 +24,7 @@ export interface CanvasVideoModel {
 export interface CanvasImageModel {
   id: string;
   name: string;
-  provider: 'openai' | 'google' | 'kling' | 'other';
+  provider: 'openai' | 'google' | 'hosted' | 'kling' | 'other';
   supportsImageToImage: boolean;
   supportsMultiImage: boolean;
   resolutions: string[];
@@ -42,6 +42,7 @@ function inferVideoProvider(id: string): VideoUiProvider {
   if (id === 'minimax-hailuo') return 'hailuo';
   if (id.startsWith('wan')) return 'wan';
   if (id === 'grok-video-3') return 'xai';
+  if (id.startsWith('jimeng') || id.startsWith('seedance')) return 'seedance';
   if (id === 'sora-2') return 'openai';
   if (id.startsWith('veo')) return 'google';
   return 'other';
@@ -154,7 +155,7 @@ function buildImageFromRegistry(e: ModelEntry): CanvasImageModel {
   return {
     id: e.id,
     name: e.name,
-    provider: 'other',
+    provider: e.providerId === 'openaiteach' ? 'hosted' : 'other',
     supportsImageToImage: true,
     supportsMultiImage: true,
     resolutions: ['1K', '2K', '4K'],
@@ -191,5 +192,5 @@ export function getRegistryVideoModels(): CanvasVideoModel[] {
 export const REGISTRY_VIDEO_MODELS: CanvasVideoModel[] = getRegistryVideoModels();
 
 export const REGISTRY_IMAGE_MODELS: CanvasImageModel[] = MODEL_REGISTRY.filter(
-  (m) => m.category === 'image' && isExecutableImageModelId(m.id)
+  (m) => m.category === 'image'
 ).map(buildImageFromRegistry);

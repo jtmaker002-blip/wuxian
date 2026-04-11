@@ -70,6 +70,11 @@ export function mapRegistryVideoIdToServerVideoId(registryId: string | undefined
 /** 发给 POST /api/generate-image 的 imageModel */
 export function mapRegistryImageIdToServerImageId(registryId: string | undefined): string | undefined {
   if (!registryId) return undefined;
-  if (!isExecutableImageModelId(registryId)) return undefined;
-  return EXECUTABLE_IMAGE_MODEL_CONFIG[registryId].serverModelId;
+  if (isExecutableImageModelId(registryId)) {
+    return EXECUTABLE_IMAGE_MODEL_CONFIG[registryId].serverModelId;
+  }
+  if (registryImageIdSet.has(registryId)) {
+    return registryId;
+  }
+  return undefined;
 }

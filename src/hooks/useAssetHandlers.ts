@@ -8,12 +8,14 @@
 
 import React, { useState, useCallback } from 'react';
 import { NodeData, NodeType, NodeStatus, Viewport, ContextMenuState } from '../types';
+import { getDefaultModelForNodeType } from '../config/nodeTypeRegistry';
 
 interface UseAssetHandlersOptions {
     nodes: NodeData[];
     viewport: Viewport;
     contextMenu: ContextMenuState;
     setNodes: React.Dispatch<React.SetStateAction<NodeData[]>>;
+    setSelectedNodeIds: React.Dispatch<React.SetStateAction<string[]>>;
 }
 
 export const useAssetHandlers = ({
@@ -21,6 +23,7 @@ export const useAssetHandlers = ({
     viewport,
     contextMenu,
     setNodes,
+    setSelectedNodeIds,
 }: UseAssetHandlersOptions) => {
     // ============================================================================
     // CREATE ASSET MODAL STATE
@@ -96,9 +99,10 @@ export const useAssetHandlers = ({
                 status: NodeStatus.SUCCESS,
                 resultUrl: url,
                 resultAspectRatio,
-                model: isVideo ? 'veo3.1' : 'gemini-2.5-flash-image-preview',
-                videoModel: isVideo ? 'veo3.1' : undefined,
-                imageModel: !isVideo ? 'gemini-2.5-flash-image-preview' : undefined,
+                model: isVideo ? getDefaultModelForNodeType(NodeType.VIDEO) : getDefaultModelForNodeType(NodeType.IMAGE),
+                videoModel: isVideo ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
+                videoMode: isVideo ? 'standard' : undefined,
+                imageModel: !isVideo ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
                 aspectRatio: aspectRatio || '16:9',
                 resolution: isVideo ? 'Auto' : '1024x1024'
             };
@@ -271,18 +275,23 @@ export const useAssetHandlers = ({
                     const newNode: NodeData = {
                         id: crypto.randomUUID(),
                         type: isVideo ? NodeType.VIDEO : NodeType.IMAGE,
+                        title: file.name,
                         x: canvasX,
                         y: canvasY,
                         prompt: file.name,
                         status: NodeStatus.SUCCESS,
                         resultUrl: resultUrl,
                         resultAspectRatio,
-                        model: 'Upload',
+                        model: isVideo ? getDefaultModelForNodeType(NodeType.VIDEO) : getDefaultModelForNodeType(NodeType.IMAGE),
+                        videoModel: isVideo ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
+                        videoMode: isVideo ? 'standard' : undefined,
+                        imageModel: isVideo ? undefined : getDefaultModelForNodeType(NodeType.IMAGE),
                         aspectRatio,
                         resolution: 'Auto',
                     };
 
                     setNodes(prev => [...prev, newNode]);
+                    setSelectedNodeIds([newNode.id]);
                 };
 
                 await detectAndCreateNode();
@@ -293,7 +302,7 @@ export const useAssetHandlers = ({
             }
         };
         reader.readAsDataURL(file);
-    }, [contextMenu.x, contextMenu.y, viewport.x, viewport.y, viewport.zoom, setNodes]);
+    }, [contextMenu.x, contextMenu.y, viewport.x, viewport.y, viewport.zoom, setNodes, setSelectedNodeIds]);
 
     // ============================================================================
     // RETURN

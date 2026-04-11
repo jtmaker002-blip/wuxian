@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { readStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
 
 // ============================================================================
 // TYPES
@@ -194,10 +195,12 @@ export function useChatAgent(): UseChatAgentReturn {
         setMessages(prev => [...prev, userMessage]);
 
         try {
+            const providerConfig = readStoredOpenAiTeachProviderConfig();
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    ...providerConfig,
                     sessionId: currentSessionId,
                     message: content,
                     media: media ? media.map(m => ({

@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useRef } from 'react';
-import { NodeData, NodeType, Viewport } from '../types';
+import { NodeData, NodeStatus, NodeType, Viewport } from '../types';
 
 interface ConnectionStart {
     nodeId: string;
@@ -25,6 +25,28 @@ export const useConnectionDragging = () => {
     const [hoveredSide, setHoveredSide] = useState<'left' | 'right' | null>(null);
     const [selectedConnection, setSelectedConnection] = useState<{ parentId: string; childId: string } | null>(null);
     const dragStartTime = useRef<number>(0);
+    const CONNECTOR_SNAP_RADIUS = 104;
+
+    const getNodeDimensions = (node: NodeData) => {
+        const width = node.type === NodeType.VIDEO ? 385 : 365;
+
+        if (node.type === NodeType.AUDIO) {
+            return { width, height: width / (16 / 7) };
+        }
+
+        if (node.type === NodeType.VIDEO || node.type === NodeType.LOCAL_VIDEO_MODEL) {
+            return { width, height: width / (16 / 9) };
+        }
+
+        if (node.resultAspectRatio && node.status === NodeStatus.SUCCESS) {
+            const [w, h] = node.resultAspectRatio.split('/').map(Number);
+            if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
+                return { width, height: width / (w / h) };
+            }
+        }
+
+        return { width, height: width / (4 / 3) };
+    };
 
     // ============================================================================
     // HELPERS
@@ -46,25 +68,84 @@ export const useConnectionDragging = () => {
     ) => {
         const canvasX = (mouseX - viewport.x) / viewport.zoom;
         const canvasY = (mouseY - viewport.y) / viewport.zoom;
+        const sourceNode = nodes.find((node) => node.id === connectionStart?.nodeId);
+
+        const connectorCandidates = nodes.flatMap((n) => {
+            if (n.id === connectionStart?.nodeId) return [];
+            const dimensions = getNodeDimensions(n);
+            const leftX = n.x;
+            const rightX = n.x + dimensions.width;
+            const centerY = n.y + dimensions.height / 2;
+            const sourceFeedsVideo =
+                sourceNode &&
+                (sourceNode.type === NodeType.IMAGE || sourceNode.type === NodeType.IMAGE_EDITOR) &&
+                (n.type === NodeType.VIDEO || n.type === NodeType.LOCAL_VIDEO_MODEL);
+            return [
+                {
+                    nodeId: n.id,
+                    side: 'left' as const,
+                    distance: Math.hypot(canvasX - leftX, canvasY - centerY) * (sourceFeedsVideo ? 0.56 : 1),
+                },
+                {
+                    nodeId: n.id,
+                    side: 'right' as const,
+                    distance: Math.hypot(canvasX - rightX, canvasY - centerY) * (sourceFeedsVideo ? 1.08 : 1),
+                },
+            ];
+        });
+
+        const nearestConnector = connectorCandidates
+            .filter((candidate) => candidate.distance <= CONNECTOR_SNAP_RADIUS)
+            .sort((a, b) => a.distance - b.distance)[0];
+
+        if (nearestConnector) {
+            setHoveredNodeId(nearestConnector.nodeId);
+            setHoveredSide(nearestConnector.side);
+            const targetNode = nodes.find((node) => node.id === nearestConnector.nodeId);
+            if (targetNode) {
+                const dimensions = getNodeDimensions(targetNode);
+                const snappedCanvasX = nearestConnector.side === 'left' ? targetNode.x : targetNode.x + dimensions.width;
+                const snappedCanvasY = targetNode.y + dimensions.height / 2;
+                return {
+                    nodeId: nearestConnector.nodeId,
+                    side: nearestConnector.side,
+                    x: snappedCanvasX * viewport.zoom + viewport.x,
+                    y: snappedCanvasY * viewport.zoom + viewport.y,
+                };
+            }
+            return null;
+        }
 
         const found = nodes.find(n => {
             if (n.id === connectionStart?.nodeId) return false;
+            const dimensions = getNodeDimensions(n);
             return (
-                canvasX >= n.x && canvasX <= n.x + 340 &&
-                canvasY >= n.y && canvasY <= n.y + 400
+                canvasX >= n.x && canvasX <= n.x + dimensions.width &&
+                canvasY >= n.y && canvasY <= n.y + dimensions.height
             );
         });
 
         if (found) {
             setHoveredNodeId(found.id);
 
-            // Determine which side is being hovered
-            // Left connector is at x position, right connector is at x + 340
-            const nodeCenter = found.x + 170; // Middle of the node
-            setHoveredSide(canvasX < nodeCenter ? 'left' : 'right');
+            const dimensions = getNodeDimensions(found);
+            const nodeCenter = found.x + dimensions.width / 2;
+            const sourceFeedsVideo =
+                sourceNode &&
+                (sourceNode.type === NodeType.IMAGE || sourceNode.type === NodeType.IMAGE_EDITOR) &&
+                (found.type === NodeType.VIDEO || found.type === NodeType.LOCAL_VIDEO_MODEL);
+            const side = sourceFeedsVideo ? 'left' : (canvasX < nodeCenter ? 'left' : 'right');
+            setHoveredSide(side);
+            return {
+                nodeId: found.id,
+                side,
+                x: (side === 'left' ? found.x : found.x + dimensions.width) * viewport.zoom + viewport.x,
+                y: (found.y + dimensions.height / 2) * viewport.zoom + viewport.y,
+            };
         } else {
             setHoveredNodeId(null);
             setHoveredSide(null);
+            return null;
         }
     };
 
@@ -98,8 +179,12 @@ export const useConnectionDragging = () => {
     ) => {
         if (!isDraggingConnection) return false;
 
-        setTempConnectionEnd({ x: e.clientX, y: e.clientY });
-        checkHoveredNode(e.clientX, e.clientY, nodes, viewport);
+        const hoveredTarget = checkHoveredNode(e.clientX, e.clientY, nodes, viewport);
+        setTempConnectionEnd(
+            hoveredTarget
+                ? { x: hoveredTarget.x, y: hoveredTarget.y }
+                : { x: e.clientX, y: e.clientY }
+        );
         return true;
     };
 
@@ -110,7 +195,7 @@ export const useConnectionDragging = () => {
      * @param onConnectionMade - Optional callback called with (parentId, childId) when connection is created
      */
     const completeConnectionDrag = (
-        onAddNext: (nodeId: string, direction: 'left' | 'right') => void,
+        onAddNext: (nodeId: string, direction: 'left' | 'right', screenPosition?: { x: number; y: number }) => void,
         onUpdateNodes: (updater: (prev: NodeData[]) => NodeData[]) => void,
         nodes: NodeData[],
         onConnectionMade?: (parentId: string, childId: string) => void
@@ -185,8 +270,11 @@ export const useConnectionDragging = () => {
         };
 
         // Short click - open menu
-        if (dragDuration < 200 && !hoveredNodeId) {
-            onAddNext(connectionStart.nodeId, connectionStart.handle);
+        if (!hoveredNodeId) {
+            const menuPosition = tempConnectionEnd
+                ? { x: tempConnectionEnd.x, y: tempConnectionEnd.y }
+                : undefined;
+            onAddNext(connectionStart.nodeId, connectionStart.handle, menuPosition);
         }
         // Drag to node - create connection based on target side
         else if (hoveredNodeId && hoveredSide) {

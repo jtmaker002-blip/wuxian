@@ -42,7 +42,7 @@ describe('parseTokenItems', () => {
     ]);
   });
 
-  it('keeps the upstream token name even when it is numeric', () => {
+  it('keeps the upstream token name when it is numeric but the token is directly usable', () => {
     const tokens = parseTokenItems([
       {
         id: 54656546,
@@ -59,18 +59,18 @@ describe('parseTokenItems', () => {
     });
   });
 
-  it('keeps masked tokens for display but marks them unusable', () => {
+  it('keeps the upstream numeric name when the upstream only returns an unusable masked token', () => {
     const tokens = parseTokenItems([
       {
         id: 'masked-1',
-        name: '121313213',
+        name: '1',
         secret: 'aUnd******tiWU',
       },
     ]);
 
     expect(tokens[0]).toEqual({
       id: 'masked-1',
-      name: '121313213',
+      name: '1',
       value: '',
       isUsable: false,
     });

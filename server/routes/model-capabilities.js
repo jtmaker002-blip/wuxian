@@ -5,6 +5,10 @@ import { loadCapabilityOverride, mergeCapabilityPayloads, sanitizeCapabilityPayl
 const router = express.Router();
 const OAT_API = 'https://openaiteach.com/api';
 
+function buildCapabilityResponse(kind, mergedScoped) {
+  return { [kind]: sanitizeCapabilityPayload(kind, mergedScoped) };
+}
+
 async function proxyCapabilities(req, res, path) {
   try {
     const kind = path.endsWith('/voice') ? 'voice' : 'video';
@@ -31,15 +35,12 @@ async function proxyCapabilities(req, res, path) {
       kind === 'video' ? normalizedPayload?.video || normalizedPayload : normalizedPayload?.voice || normalizedPayload
     );
 
-    const merged =
-      kind === 'video'
-        ? { ...(normalizedPayload || {}), video: mergeCapabilityPayloads(upstreamScoped, localOverride) }
-        : { ...(normalizedPayload || {}), voice: mergeCapabilityPayloads(upstreamScoped, localOverride) };
-    return res.json(merged);
+    const mergedScoped = mergeCapabilityPayloads(upstreamScoped, localOverride);
+    return res.json(buildCapabilityResponse(kind, mergedScoped));
   } catch (error) {
     console.warn('[model-capabilities] upstream unavailable:', error?.message || error);
     const kind = path.endsWith('/voice') ? 'voice' : 'video';
-    return res.json({ [kind]: sanitizeCapabilityPayload(kind, loadCapabilityOverride(kind) || {}) });
+    return res.json(buildCapabilityResponse(kind, loadCapabilityOverride(kind) || {}));
   }
 }
 

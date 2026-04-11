@@ -61,6 +61,10 @@ function isValidMode(mode: VideoModeCapability): boolean {
   );
 }
 
+function mergeBoolean(localValue: boolean, remoteValue: unknown): boolean {
+  return typeof remoteValue === 'boolean' ? remoteValue : localValue;
+}
+
 function mergeMode(
   localMode: VideoModeCapability,
   remoteMode?: PartialVideoModeCapability
@@ -70,14 +74,14 @@ function mergeMode(
     ...localMode,
     ...remoteMode,
   };
-  next.enabled = localMode.enabled && next.enabled !== false;
-  next.supportsTextToVideo = localMode.supportsTextToVideo && next.supportsTextToVideo !== false;
-  next.supportsImageToVideo = localMode.supportsImageToVideo && next.supportsImageToVideo !== false;
-  next.supportsMultiImage = localMode.supportsMultiImage && next.supportsMultiImage !== false;
-  next.supportsStartEndFrames = localMode.supportsStartEndFrames && next.supportsStartEndFrames !== false;
-  next.supportsFullReference = localMode.supportsFullReference && next.supportsFullReference !== false;
-  next.supportsMotionReference = localMode.supportsMotionReference && next.supportsMotionReference !== false;
-  next.supportsAudio = localMode.supportsAudio && next.supportsAudio !== false;
+  next.enabled = mergeBoolean(localMode.enabled, remoteMode.enabled);
+  next.supportsTextToVideo = mergeBoolean(localMode.supportsTextToVideo, remoteMode.supportsTextToVideo);
+  next.supportsImageToVideo = mergeBoolean(localMode.supportsImageToVideo, remoteMode.supportsImageToVideo);
+  next.supportsMultiImage = mergeBoolean(localMode.supportsMultiImage, remoteMode.supportsMultiImage);
+  next.supportsStartEndFrames = mergeBoolean(localMode.supportsStartEndFrames, remoteMode.supportsStartEndFrames);
+  next.supportsFullReference = mergeBoolean(localMode.supportsFullReference, remoteMode.supportsFullReference);
+  next.supportsMotionReference = mergeBoolean(localMode.supportsMotionReference, remoteMode.supportsMotionReference);
+  next.supportsAudio = mergeBoolean(localMode.supportsAudio, remoteMode.supportsAudio);
   return isValidMode(next) ? next : localMode;
 }
 

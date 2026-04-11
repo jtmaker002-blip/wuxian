@@ -38,8 +38,11 @@ const STORYBOARD_VIDEO_SECTION_ORDER: Array<{
 }> = [
   { provider: 'openai', label: 'OpenAI' },
   { provider: 'google', label: 'Google' },
+  { provider: 'xai', label: 'xAI' },
   { provider: 'kling', label: 'Kling AI' },
   { provider: 'hailuo', label: 'Hailuo AI' },
+  { provider: 'wan', label: 'Wan' },
+  { provider: 'seedance', label: '即梦 / Seedance' },
   { provider: 'other', label: '其他' },
 ];
 

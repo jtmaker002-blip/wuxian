@@ -216,6 +216,19 @@ describe('validateVideoRequest', () => {
     ).not.toThrow();
   });
 
+  it('rejects sora-2 frame-to-frame requests instead of silently dropping the tail frame', () => {
+    expect(() =>
+      validateVideoRequest({
+        videoModel: 'sora-2',
+        imageBase64: 'start',
+        lastFrameBase64: 'end',
+        duration: 4,
+        aspectRatio: '16:9',
+        resolution: '720p',
+      })
+    ).toThrow(/Sora 2 当前不支持首尾帧模式/i);
+  });
+
   it('rejects generateAudio for non-kling-v2-6 models', () => {
     expect(() =>
       validateVideoRequest({
@@ -271,42 +284,6 @@ describe('validateVideoRequest', () => {
     ).toThrow(/原图比例/i);
   });
 
-  it('allows wan preview image-to-video when当前后端将它视为可执行 wan 路径', () => {
-    expect(() =>
-      validateVideoRequest({
-        videoModel: 'wan2.5-i2v-preview',
-        imageBase64: 'img',
-        duration: 10,
-        aspectRatio: 'Auto',
-        resolution: '1080p',
-      })
-    ).not.toThrow();
-  });
-
-  it('rejects unsupported wan 2.5 preview durations', () => {
-    expect(() =>
-      validateVideoRequest({
-        videoModel: 'wan2.5-i2v-preview',
-        imageBase64: 'img',
-        duration: 15,
-        aspectRatio: 'Auto',
-        resolution: '1080p',
-      })
-    ).toThrow(/wan 2\.5 i2v preview 当前仅支持 5 或 10 秒/i);
-  });
-
-  it('rejects unsupported wan 2.5 preview resolutions', () => {
-    expect(() =>
-      validateVideoRequest({
-        videoModel: 'wan2.5-i2v-preview',
-        imageBase64: 'img',
-        duration: 10,
-        aspectRatio: 'Auto',
-        resolution: '2K',
-      })
-    ).toThrow(/wan 2\.5 i2v preview 当前仅支持 480p、720p 或 1080p/i);
-  });
-
   it('rejects grok reference-images request because当前后端还没接通这条链', () => {
     expect(() =>
       validateVideoRequest({
@@ -330,12 +307,12 @@ describe('validateVideoRequest', () => {
     ).not.toThrow();
   });
 
-  it('allows jimeng-seedance-2 standard 10-second square request', () => {
+  it('allows jimeng-seedance-2 standard 10-second portrait request inside the safe boundary', () => {
     expect(() =>
       validateVideoRequest({
         videoModel: 'jimeng-seedance-2',
         duration: 10,
-        aspectRatio: '1:1',
+        aspectRatio: '9:16',
         resolution: '1080p',
       })
     ).not.toThrow();
@@ -345,8 +322,8 @@ describe('validateVideoRequest', () => {
     expect(() =>
       validateVideoRequest({
         videoModel: 'jimeng-4.1',
-        duration: 6,
-        aspectRatio: '21:9',
+        duration: 10,
+        aspectRatio: '9:16',
         resolution: '720p',
         generateAudio: true,
       })
@@ -388,15 +365,26 @@ describe('validateVideoRequest', () => {
     ).toThrow(/只支持 kling 2\.6|尚未接通模式|不支持运动参考模式/i);
   });
 
-  it('rejects unsupported jimeng duration outside 2 to 12 seconds', () => {
+  it('rejects unsupported jimeng duration outside the narrowed safe boundary', () => {
     expect(() =>
       validateVideoRequest({
         videoModel: 'jimeng-4.5',
-        duration: 15,
+        duration: 8,
         aspectRatio: '16:9',
         resolution: '720p',
       })
-    ).toThrow(/仅支持 2 到 12 秒/i);
+    ).toThrow(/仅支持 5 或 10 秒/i);
+  });
+
+  it('rejects unsupported jimeng aspect ratios outside the narrowed safe boundary', () => {
+    expect(() =>
+      validateVideoRequest({
+        videoModel: 'jimeng-4.5',
+        duration: 5,
+        aspectRatio: '1:1',
+        resolution: '720p',
+      })
+    ).toThrow(/仅支持 16:9 或 9:16/i);
   });
 
   it('rejects jimeng models without frame-to-frame support when end frame is present', () => {

@@ -17,7 +17,6 @@ const IMAGE_TO_VIDEO_MODEL = 'fal-ai/kling-video/v2.6/pro/image-to-video';
 const TEXT_TO_VIDEO_MODEL = 'fal-ai/kling-video/v2.6/pro/text-to-video';
 const WAN_IMAGE_TO_VIDEO_MODEL = 'wan/v2.6/image-to-video';
 const WAN_IMAGE_TO_VIDEO_FLASH_MODEL = 'wan/v2.6/image-to-video/flash';
-const WAN_25_PREVIEW_IMAGE_TO_VIDEO_MODEL = 'fal-ai/wan-25-preview/image-to-video';
 
 // Fal.ai upload limit is 10MB
 const MAX_FILE_SIZE = 9 * 1024 * 1024; // 9MB to be safe (under 10MB limit)
@@ -575,13 +574,5 @@ export async function generateFalWanImageToVideoFlash(params) {
         ...params,
         modelPath: WAN_IMAGE_TO_VIDEO_FLASH_MODEL,
         logLabel: 'Fal.ai WAN 2.6 I2V Flash',
-    });
-}
-
-export async function generateFalWan25PreviewImageToVideo(params) {
-    return generateFalWanImageToVideoInternal({
-        ...params,
-        modelPath: WAN_25_PREVIEW_IMAGE_TO_VIDEO_MODEL,
-        logLabel: 'Fal.ai WAN 2.5 I2V Preview',
     });
 }

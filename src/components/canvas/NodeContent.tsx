@@ -10,15 +10,40 @@ import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { useTranslation } from 'react-i18next';
 
+function formatExecutionProviderLabel(provider?: string): string | undefined {
+    if (!provider) return undefined;
+    switch (provider) {
+        case 'fal':
+            return 'FAL';
+        case 'fal-wan':
+            return 'FAL / Wan';
+        case 'hailuo':
+            return 'Hailuo';
+        case 'kling':
+            return 'Kling';
+        case 'openai-video':
+            return 'OpenAI';
+        case 'xai-video':
+            return 'xAI';
+        case 'seedance':
+            return '即梦 / Seedance';
+        case 'veo':
+            return 'Google Veo';
+        default:
+            return provider;
+    }
+}
+
 interface NodeContentProps {
     data: NodeData;
     inputUrl?: string;
+    inputMediaType?: NodeType;
     selected: boolean;
     isIdle: boolean;
     isLoading: boolean;
     isSuccess: boolean;
     getAspectRatioStyle: () => { aspectRatio: string };
-    onUpload?: (nodeId: string, imageDataUrl: string) => void;
+    onUpload?: (nodeId: string, dataUrl: string) => void;
     onExpand?: (imageUrl: string) => void;
     onDragStart?: (nodeId: string, hasContent: boolean) => void;
     onDragEnd?: () => void;
@@ -38,6 +63,7 @@ interface NodeContentProps {
 export const NodeContent: React.FC<NodeContentProps> = ({
     data,
     inputUrl,
+    inputMediaType,
     selected,
     isIdle,
     isLoading,
@@ -72,6 +98,65 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const isAudioType = data.type === NodeType.AUDIO;
     // Helper: Check if node is local model
     const isLocalModel = data.type === NodeType.LOCAL_IMAGE_MODEL || data.type === NodeType.LOCAL_VIDEO_MODEL;
+    const effectiveInputUrl = inputUrl || data.inputUrl;
+    const effectiveInputMediaType = inputMediaType || (data.inputUrl ? NodeType.IMAGE : undefined);
+    const isVideoFromImageFlow = isVideoType && Boolean(effectiveInputUrl);
+    const requestedVideoModelLabel = isVideoType ? (data.requestedVideoModel || data.videoModel) : undefined;
+    const actualVideoModelLabel = isVideoType ? data.executedVideoModel : undefined;
+    const executedVideoModeLabel = isVideoType ? data.executedVideoMode : undefined;
+    const executionProviderLabel = isVideoType ? formatExecutionProviderLabel(data.executionProvider) : undefined;
+    const shouldShowVideoModelDiff =
+        Boolean(requestedVideoModelLabel) &&
+        Boolean(actualVideoModelLabel) &&
+        requestedVideoModelLabel !== actualVideoModelLabel;
+
+    const renderVideoModelBadges = (extraClassName = '') => {
+        if (!isVideoType) return null;
+
+        if (shouldShowVideoModelDiff && requestedVideoModelLabel && actualVideoModelLabel) {
+            return (
+                <div className={`absolute left-2 top-2 z-10 flex flex-col gap-1 ${extraClassName}`.trim()}>
+                    <span className="rounded-md bg-black/65 px-2 py-1 text-[10px] font-medium text-white/90">
+                        请求模型：{requestedVideoModelLabel}
+                    </span>
+                    <span className="rounded-md bg-amber-500/85 px-2 py-1 text-[10px] font-medium text-white">
+                        实际执行：{actualVideoModelLabel}
+                    </span>
+                    {executedVideoModeLabel && (
+                        <span className="rounded-md bg-sky-500/85 px-2 py-1 text-[10px] font-medium text-white">
+                            执行档位：{executedVideoModeLabel}
+                        </span>
+                    )}
+                    {executionProviderLabel && (
+                        <span className="rounded-md bg-indigo-500/85 px-2 py-1 text-[10px] font-medium text-white">
+                            执行通道：{executionProviderLabel}
+                        </span>
+                    )}
+                </div>
+            );
+        }
+
+        const singleModelLabel = actualVideoModelLabel || requestedVideoModelLabel;
+        if (!singleModelLabel) return null;
+
+        return (
+            <div className={`absolute left-2 top-2 z-10 flex flex-col gap-1 ${extraClassName}`.trim()}>
+                <span className="rounded-md bg-black/65 px-2 py-1 text-[10px] font-medium text-white/90">
+                    模型：{singleModelLabel}
+                </span>
+                {executedVideoModeLabel && (
+                    <span className="rounded-md bg-sky-500/85 px-2 py-1 text-[10px] font-medium text-white">
+                        执行档位：{executedVideoModeLabel}
+                    </span>
+                )}
+                {executionProviderLabel && (
+                    <span className="rounded-md bg-indigo-500/85 px-2 py-1 text-[10px] font-medium text-white">
+                        执行通道：{executionProviderLabel}
+                    </span>
+                )}
+            </div>
+        );
+    };
 
     // Sync local state ONLY when data.prompt changes externally (not from our own update)
     useEffect(() => {
@@ -106,6 +191,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !onUpload) return;
+        onUpdate?.(data.id, { title: file.name.replace(/\.[^.]+$/, '') || file.name });
 
         const reader = new FileReader();
         reader.onloadend = () => {
@@ -115,13 +201,13 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     };
 
     return (
-        <div className={`transition-all duration-200 ${!selected ? 'p-0 rounded-2xl overflow-hidden' : 'p-1'}`}>
-            {/* Hidden File Input - Always rendered for upload functionality (image types only) */}
-            {isImageType && onUpload && (
+        <div className={`transition-all duration-200 ${!selected ? 'p-0 rounded-[28px] overflow-hidden' : 'p-0'}`}>
+            {/* Hidden File Input - Always rendered for upload functionality */}
+            {(isImageType || isVideoType) && onUpload && (
                 <input
                     ref={fileInputRef}
                     type="file"
-                    accept="image/*"
+                    accept={isVideoType ? 'video/*' : 'image/*'}
                     className="hidden"
                     onChange={handleFileChange}
                 />
@@ -130,7 +216,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
             {/* Result View - Show when successful OR when regenerating (loading with existing content) */}
             {(isSuccess || isLoading) && data.resultUrl ? (
                 <div
-                    className={`relative w-full bg-black group/image ${!selected ? '' : 'rounded-xl overflow-hidden'}`}
+                    className={`relative w-full bg-black group/image ${!selected ? '' : 'rounded-[28px] overflow-hidden'}`}
                     style={getAspectRatioStyle()}
                 >
                     {isAudioType ? (
@@ -138,9 +224,26 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             <audio src={data.resultUrl} controls className="w-full max-w-[280px]" />
                         </div>
                     ) : isVideoType ? (
-                        <video src={data.resultUrl} controls loop className="w-full h-full object-cover" />
+                        <>
+                            <video src={data.resultUrl} controls loop className="w-full h-full object-cover" />
+                            {renderVideoModelBadges()}
+                        </>
                     ) : (
-                        <img src={data.resultUrl} alt="Generated" className="w-full h-full object-cover pointer-events-none" />
+                        <>
+                            <img src={data.resultUrl} alt="Generated" className="w-full h-full object-cover pointer-events-none" />
+                            {selected && onUpload && (
+                                <button
+                                    type="button"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        fileInputRef.current?.click();
+                                    }}
+                                    className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-[16px] border border-white/12 bg-[#3a3a3a]/88 text-white shadow-[0_16px_34px_rgba(0,0,0,0.28)] backdrop-blur hover:bg-[#4a4a4a]"
+                                >
+                                    <Upload size={18} />
+                                </button>
+                            )}
+                        </>
                     )}
 
                     {/* Regenerating Overlay - Shows when loading with existing content */}
@@ -225,18 +328,52 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                 /* Placeholder / Empty State for Image/Video */
                 <div className={`relative w-full ${isAudioType ? 'aspect-[16/7]' : 'aspect-[4/3]'} flex flex-col items-center justify-center gap-3 overflow-hidden
             ${isLoading ? 'animate-pulse' : ''} 
-            ${!selected ? 'rounded-2xl' : `rounded-xl border border-dashed ${isDark ? 'border-neutral-800' : 'border-neutral-300'}`}
-            ${isDark ? 'bg-[#141414]' : 'bg-neutral-50'}`
+            ${!selected
+                ? 'rounded-[28px]'
+                : isImageType && !isLocalModel
+                    ? (isDark ? 'rounded-[28px] border border-white/35' : 'rounded-[28px] border border-neutral-300')
+                    : `rounded-xl border border-dashed ${isDark ? 'border-white/10' : 'border-neutral-300'}`}
+            ${isDark ? (isImageType && !isLocalModel && selected ? 'bg-[#1b1b1b]' : 'bg-[#141414]') : 'bg-neutral-50'}`
                 }>
+                    {renderVideoModelBadges()}
+
                     {/* Input Image Preview for Video Nodes */}
-                    {isVideoType && inputUrl && (
+                    {isVideoType && effectiveInputUrl && (
                         <div className="absolute inset-0 z-0">
-                            <img src={inputUrl} alt="Input Frame" className="w-full h-full object-cover opacity-30 blur-sm" />
-                            <div className="absolute inset-0 bg-black/40" />
+                            {effectiveInputMediaType === NodeType.VIDEO ? (
+                                <video
+                                    src={effectiveInputUrl}
+                                    className="w-full h-full object-cover opacity-65 blur-[1px] saturate-[0.9]"
+                                    muted
+                                    playsInline
+                                    preload="metadata"
+                                />
+                            ) : (
+                                <img src={effectiveInputUrl} alt="Input Frame" className="w-full h-full object-cover opacity-65 blur-[1px] saturate-[0.9]" />
+                            )}
+                            <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.04),transparent_42%),linear-gradient(180deg,rgba(0,0,0,0.36),rgba(0,0,0,0.64))]" />
                             <div className="absolute top-2 left-2 px-2 py-1 bg-black/60 rounded text-[10px] text-white font-medium flex items-center gap-1">
-                                <ImageIcon size={10} />
-                                {t('nodeContent.inputFrame')}
+                                {effectiveInputMediaType === NodeType.VIDEO ? <Film size={10} /> : <ImageIcon size={10} />}
+                                {effectiveInputMediaType === NodeType.VIDEO ? t('nodeControls.motionRef') : t('nodeContent.inputFrame')}
                             </div>
+                            {!selected && (
+                                <div className="absolute bottom-3 left-3 rounded-full border border-white/15 bg-black/38 px-3 py-1 text-[10px] font-medium tracking-[0.02em] text-white/88">
+                                    图生视频
+                                </div>
+                            )}
+                            {selected && (
+                                <>
+                                    <div className="absolute inset-x-5 top-1/2 -translate-y-1/2 rounded-2xl border border-white/12 bg-black/42 px-4 py-4 text-center text-white shadow-[0_20px_60px_rgba(0,0,0,0.28)] backdrop-blur-sm">
+                                        <div className="text-[13px] font-semibold tracking-[0.02em]">图生视频主路径</div>
+                                        <div className="mt-1 text-[11px] text-white/82">
+                                            素材已接入，继续补充镜头、动作、运镜描述后即可生成
+                                        </div>
+                                    </div>
+                                    <div className="absolute bottom-3 left-3 right-3 rounded-xl border border-white/15 bg-black/35 px-3 py-2 text-[11px] text-white/90">
+                                        已引用图片素材，继续描述视频内容后即可生成
+                                    </div>
+                                </>
+                            )}
                         </div>
                     )}
 
@@ -247,20 +384,20 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                         </div>
                     ) : (
                         <div className="relative z-10 flex flex-col items-center gap-3">
-                            {/* Upload Button for Image Nodes (including local image models) */}
-                            {isImageType && onUpload && (
+                            {/* Upload Button for Image/Video Nodes */}
+                            {(isImageType || isVideoType) && onUpload && !isVideoFromImageFlow && !(selected && isImageType && !isLocalModel) && (
                                 <>
                                     <input
                                         ref={fileInputRef}
                                         type="file"
-                                        accept="image/*"
+                                        accept={isVideoType ? 'video/*' : 'image/*'}
                                         className="hidden"
                                         onChange={handleFileChange}
                                     />
                                     <button
                                         onClick={() => fileInputRef.current?.click()}
                                         onPointerDown={(e) => e.stopPropagation()}
-                                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${isDark ? 'bg-neutral-800/80 hover:bg-neutral-700 text-white' : 'bg-white hover:bg-neutral-100 text-neutral-900 border border-neutral-200'}`}
+                                        className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium transition-colors ${isDark ? 'border border-white/10 bg-[#2a2a2a] hover:bg-[#343434] text-white' : 'bg-white hover:bg-neutral-100 text-neutral-900 border border-neutral-200'}`}
                                     >
                                         <Upload size={16} />
                                         {t('nodeContent.upload')}
@@ -280,39 +417,35 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                 </>
                             )}
 
-                            <div className="text-neutral-700">
+                            <div className={`${selected && isImageType && !isLocalModel ? 'text-neutral-500/55 opacity-55' : 'text-neutral-700'}`}>
                                 {isVideoType ? (
-                                    isLocalModel ? <><Film size={40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <Film size={40} />
+                                    isLocalModel ? <><Film size={selected ? 44 : 40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <Film size={selected ? 44 : 40} />
                                 ) : (
-                                    isLocalModel ? <><ImageIcon size={40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <ImageIcon size={40} />
+                                    isLocalModel ? <><ImageIcon size={selected ? 48 : 40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <ImageIcon size={selected ? 48 : 40} />
                                 )}
                             </div>
                             {selected && (
                                 <>
-                                    <div className="text-neutral-500 text-sm font-medium">
-                                        {isVideoType && inputUrl
-                                            ? t('nodeContent.readyToAnimate')
+                                    {(() => {
+                                        const placeholderHeadline = isVideoFromImageFlow
+                                            ? '图生视频准备就绪'
                                             : isVideoType
                                                 ? t('nodeContent.waitingForInput')
+                                                : isImageType && !isLocalModel
+                                                    ? ''
                                                 : isLocalModel
                                                     ? t('nodeContent.selectModelAndPrompt')
-                                                    : t('nodeContent.tryTo')
-                                        }
-                                    </div>
-                                    {!isVideoType && !isLocalModel && (
-                                        <div className="flex flex-col gap-1 w-full px-2">
-                                            <TextNodeMenuItem
-                                                icon={<ImageIcon size={16} />}
-                                                label={t('nodeContent.imageToImage')}
-                                                onClick={() => onImageToImage?.(data.id)}
-                                                canvasTheme={canvasTheme}
-                                            />
-                                            <TextNodeMenuItem
-                                                icon={<Film size={16} />}
-                                                label={t('nodeContent.imageToVideo')}
-                                                onClick={() => onImageToVideo?.(data.id)}
-                                                canvasTheme={canvasTheme}
-                                            />
+                                                    : t('nodeContent.tryTo');
+
+                                        return placeholderHeadline ? (
+                                            <div className={`${isDark ? 'text-neutral-400' : 'text-neutral-500'} text-sm font-medium`}>
+                                                {placeholderHeadline}
+                                            </div>
+                                        ) : null;
+                                    })()}
+                                    {isVideoFromImageFlow && (
+                                        <div className={`rounded-xl border px-3 py-2 text-center text-xs ${isDark ? 'border-white/10 bg-black/25 text-neutral-200' : 'border-neutral-200 bg-white text-neutral-700'}`}>
+                                            当前节点已切入图生视频主路径。保留连接素材，直接在下方描述镜头与动作即可。
                                         </div>
                                     )}
                                 </>

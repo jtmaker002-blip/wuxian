@@ -28,9 +28,9 @@ export const calculateConnectionPath = (
 ): string => {
     const dist = Math.abs(endX - startX);
     const cpDir = direction === 'right' ? 1 : -1;
-
-    const cp1x = startX + (dist / 2 * cpDir);
-    const cp2x = endX - (dist / 2 * cpDir);
+    const controlOffset = Math.min(220, Math.max(120, dist * 0.45));
+    const cp1x = startX + (controlOffset * cpDir);
+    const cp2x = endX - (controlOffset * cpDir);
 
     return `M ${startX} ${startY} C ${cp1x} ${startY}, ${cp2x} ${endY}, ${endX} ${endY}`;
 };

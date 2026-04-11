@@ -17,7 +17,6 @@ const KNOWN_VIDEO_CAPABILITY_IDS = Object.freeze([
   'minimax-hailuo',
   'wan2.6-i2v',
   'wan2.6-i2v-flash',
-  'wan2.5-i2v-preview',
   'jimeng-seedance-2',
   'jimeng-4.5',
   'jimeng-4.1',

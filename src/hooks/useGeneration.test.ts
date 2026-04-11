@@ -12,6 +12,7 @@ const generateVideoMock = vi.fn();
 const generateAudioMock = vi.fn();
 const generateLocalImageMock = vi.fn();
 const extractVideoLastFrameMock = vi.fn();
+const readStoredOpenAiTeachProviderConfigMock = vi.fn();
 
 vi.mock('../services/generationService', () => ({
   generateImage: (...args: unknown[]) => generateImageMock(...args),
@@ -25,6 +26,11 @@ vi.mock('../services/localModelService', () => ({
 
 vi.mock('../utils/videoHelpers', () => ({
   extractVideoLastFrame: (...args: unknown[]) => extractVideoLastFrameMock(...args),
+}));
+
+vi.mock('../shared/provider/openaiteach-config', () => ({
+  readStoredOpenAiTeachProviderConfig: (...args: unknown[]) => readStoredOpenAiTeachProviderConfigMock(...args),
+  useStoredOpenAiTeachProviderConfig: (...args: unknown[]) => readStoredOpenAiTeachProviderConfigMock(...args),
 }));
 
 function createVideoNode(overrides: Partial<NodeData> = {}): NodeData {
@@ -128,33 +134,13 @@ describe('useGeneration 视频链路保护', () => {
     generateAudioMock.mockReset();
     generateLocalImageMock.mockReset();
     extractVideoLastFrameMock.mockReset();
+    readStoredOpenAiTeachProviderConfigMock.mockReset();
+    readStoredOpenAiTeachProviderConfigMock.mockReturnValue({
+      providerApiKey: 'sk-test-token',
+      providerBaseUrl: 'https://openaiteach.com/v1',
+    });
     installVideoMetadataStub();
     resetRuntimeVideoCapabilities();
-  });
-
-  it('wan2.5-i2v-preview 已接通后会保留自身模型发起请求，而不是静默回退成 Veo', async () => {
-    const updateNode = vi.fn();
-    generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
-    extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
-    const nodes = [
-      createImageNode('image-a', 'data:image/png;base64,wan-image'),
-      createVideoNode({
-        videoModel: 'wan2.5-i2v-preview',
-        model: 'wan2.5-i2v-preview',
-        parentIds: ['image-a'],
-      }),
-    ];
-
-    const { handleGenerate } = useGeneration({ nodes, updateNode });
-
-    await handleGenerate('video-node');
-
-    expect(generateVideoMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        videoModel: 'wan2.5-i2v-preview',
-        imageBase64: 'data:image/png;base64,wan-image',
-      })
-    );
   });
 
   it('首尾帧模式缺少两张图片时会阻止生成，而不是静默按 standard 执行', async () => {
@@ -343,7 +329,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'veo-3.1-fast-generate-preview',
+        videoModel: 'veo3.1',
         duration: 4,
         aspectRatio: '16:9',
         resolution: '720p',
@@ -504,7 +490,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'hailuo-2.3',
+        videoModel: 'minimax-hailuo',
         referenceImagesBase64: [
           'data:image/png;base64:image-a',
           'data:image/png;base64:image-b',
@@ -533,7 +519,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'hailuo-2.3',
+        videoModel: 'minimax-hailuo',
         referenceImagesBase64: ['data:image/png;base64:image-a'],
         imageBase64: undefined,
       })
@@ -575,7 +561,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'veo-3.1-fast-generate-preview',
+        videoModel: 'veo3.1',
         referenceImagesBase64: [
           'data:image/png;base64,image-a',
           'data:image/png;base64,image-b',
@@ -645,10 +631,8 @@ describe('useGeneration 视频链路保护', () => {
     );
   });
 
-  it('视频节点没有显式 videoModel 时会回落到默认可执行模型路径', async () => {
+  it('视频节点没有显式 videoModel 时会直接报错，而不是静默回落到默认模型', async () => {
     const updateNode = vi.fn();
-    generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
-    extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
 
     const nodes = [
       createVideoNode({
@@ -661,14 +645,70 @@ describe('useGeneration 视频链路保护', () => {
 
     await handleGenerate('video-node');
 
-    expect(generateVideoMock).toHaveBeenCalledWith(
+    expect(generateVideoMock).not.toHaveBeenCalled();
+    expect(updateNode).toHaveBeenLastCalledWith(
+      'video-node',
       expect.objectContaining({
-        videoModel: 'veo-3.1-fast-generate-preview',
+        status: NodeStatus.ERROR,
+        errorMessage: '请先为当前视频节点选择模型，再开始生成。',
       })
     );
   });
 
-  it('语音节点会走统一生成入口并透传语音模型', async () => {
+  it('hosted 图片模型未绑定 OpenAiTeach token 时会在前端直接拦住', async () => {
+    readStoredOpenAiTeachProviderConfigMock.mockReturnValue({});
+    const updateNode = vi.fn();
+    const nodes = [
+      {
+        ...createImageNode('image-node'),
+        id: 'image-node',
+        status: NodeStatus.IDLE,
+        prompt: '测试出图',
+        imageModel: 'midjourney-v6',
+        model: 'Midjourney',
+        resultUrl: undefined,
+      },
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('image-node');
+
+    expect(generateImageMock).not.toHaveBeenCalled();
+    expect(updateNode).toHaveBeenCalledWith(
+      'image-node',
+      expect.objectContaining({
+        status: NodeStatus.ERROR,
+        errorMessage: '当前图片模型需要先在设置里绑定 OpenAiTeach Token 后才能生成。',
+      })
+    );
+  });
+
+  it('hosted 标准视频模式未绑定 OpenAiTeach token 时会在前端直接拦住', async () => {
+    readStoredOpenAiTeachProviderConfigMock.mockReturnValue({});
+    const updateNode = vi.fn();
+    const nodes = [
+      createVideoNode({
+        videoModel: 'veo3.1',
+        videoMode: 'standard',
+      }),
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('video-node');
+
+    expect(generateVideoMock).not.toHaveBeenCalled();
+    expect(updateNode).toHaveBeenCalledWith(
+      'video-node',
+      expect.objectContaining({
+        status: NodeStatus.ERROR,
+        errorMessage: '当前视频模式需要先在设置里绑定 OpenAiTeach Token 后才能生成。',
+      })
+    );
+  });
+
+  it('语音节点当前会在前端直接拦住，不再继续请求后端', async () => {
     const updateNode = vi.fn();
     generateAudioMock.mockResolvedValue('https://example.com/result.mp3');
 
@@ -677,19 +717,12 @@ describe('useGeneration 视频链路保护', () => {
 
     await handleGenerate('audio-node');
 
-    expect(generateAudioMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        prompt: '测试语音生成',
-        audioModel: 'qwen3-tts-flash',
-        nodeId: 'audio-node',
-      })
-    );
+    expect(generateAudioMock).not.toHaveBeenCalled();
     expect(updateNode).toHaveBeenCalledWith(
       'audio-node',
       expect.objectContaining({
-        status: NodeStatus.SUCCESS,
-        resultUrl: expect.stringContaining('https://example.com/result.mp3'),
-        errorMessage: undefined,
+        status: NodeStatus.ERROR,
+        errorMessage: '语音 provider 仍未实现；即使绑定了 OpenAiTeach token，当前也无法执行。',
       })
     );
   });
@@ -707,7 +740,48 @@ describe('useGeneration 视频链路保护', () => {
       'audio-node',
       expect.objectContaining({
         status: NodeStatus.ERROR,
-        errorMessage: '语音模型 qwen3-tts-flash 当前后端尚未接通 provider，请先完成语音 provider 接入。',
+        errorMessage: '语音 provider 仍未实现；即使绑定了 OpenAiTeach token，当前也无法执行。',
+      })
+    );
+  });
+
+  it('语音节点未实现时会在前端直接拦住，而不是继续请求后端', async () => {
+    const updateNode = vi.fn();
+    const nodes = [createAudioNode()];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('audio-node');
+
+    expect(generateAudioMock).not.toHaveBeenCalled();
+    expect(updateNode).toHaveBeenCalledWith(
+      'audio-node',
+      expect.objectContaining({
+        status: NodeStatus.ERROR,
+        errorMessage: '语音 provider 仍未实现；即使绑定了 OpenAiTeach token，当前也无法执行。',
+      })
+    );
+  });
+
+  it('语音节点没有显式模型时会直接报错，而不是静默回退到第一个语音模型', async () => {
+    const updateNode = vi.fn();
+    const nodes = [
+      createAudioNode({
+        model: undefined,
+        audioModel: undefined,
+      }),
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('audio-node');
+
+    expect(generateAudioMock).not.toHaveBeenCalled();
+    expect(updateNode).toHaveBeenCalledWith(
+      'audio-node',
+      expect.objectContaining({
+        status: NodeStatus.ERROR,
+        errorMessage: '请先为当前语音节点选择模型，再开始生成。',
       })
     );
   });

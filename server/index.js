@@ -1185,10 +1185,18 @@ app.post('/api/trim-video', async (req, res) => {
 // Send a message to the chat agent
 app.post('/api/chat', async (req, res) => {
     try {
-        const { sessionId, message, media } = req.body;
+        const { sessionId, message, media, providerApiKey, providerBaseUrl } = req.body;
+        const effectiveApiKey =
+            typeof providerApiKey === 'string' && providerApiKey.trim()
+                ? providerApiKey.trim()
+                : API_KEY;
+        const effectiveBaseUrl =
+            typeof providerBaseUrl === 'string' && providerBaseUrl.trim()
+                ? providerBaseUrl.trim()
+                : 'https://openaiteach.com/v1';
 
-        if (!API_KEY) {
-            return res.status(500).json({ error: "Server missing API Key config" });
+        if (!effectiveApiKey) {
+            return res.status(500).json({ error: "聊天模型当前既没有本地 GEMINI_API_KEY，也没有可用的 OpenAiTeach Token。" });
         }
 
         if (!sessionId) {
@@ -1199,7 +1207,7 @@ app.post('/api/chat', async (req, res) => {
             return res.status(400).json({ error: "message or media is required" });
         }
 
-        const result = await chatAgent.sendMessage(sessionId, message, media, API_KEY);
+        const result = await chatAgent.sendMessage(sessionId, message, media, effectiveApiKey, effectiveBaseUrl);
 
         res.json({
             success: true,

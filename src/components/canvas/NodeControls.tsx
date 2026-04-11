@@ -7,11 +7,12 @@
  */
 
 import React, { useState, useRef, useEffect, memo } from 'react';
-import { Sparkles, Banana, Settings2, Check, ChevronDown, ChevronUp, GripVertical, Image as ImageIcon, Film, Clock, Expand, Shrink, Monitor, Crop, HardDrive } from 'lucide-react';
+import { Sparkles, Banana, Settings2, Check, ChevronDown, ChevronUp, GripVertical, Image as ImageIcon, Film, Clock, Expand, Shrink, Monitor, Crop, HardDrive, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { OpenAIIcon, GoogleIcon, KlingIcon, HailuoIcon } from '../icons/BrandIcons';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
+import { LightingPanel } from './image-node/LightingPanel';
 import { LocalModel, getLocalModels } from '../../services/localModelService';
 import { useEnabledModelIdsFromStorage } from '../../hooks/useApiSettings';
 import {
@@ -20,6 +21,7 @@ import {
     type CanvasVideoModel,
 } from '../../config/registryCanvasModels';
 import { MODEL_REGISTRY } from '../../config/modelRegistry';
+import { getImageExecutionSupport, getVideoExecutionSupportForContext, getVoiceExecutionSupport } from '../../config/modelExecutionSupport';
 import {
     getNodeTypeOptionLabels,
     isSwitchableNodeType,
@@ -28,12 +30,13 @@ import {
 import {
     canonicalizeVideoModelId,
     canonicalizeImageModelId,
-    DEFAULT_REGISTRY_VIDEO_ID,
     DEFAULT_REGISTRY_IMAGE_ID,
+    DEFAULT_REGISTRY_VIDEO_ID,
 } from '../../config/registryModelBridge';
-import { getAllVoiceCapabilities, getVideoCapability } from '../../config/modelCapabilities';
-import { getEnabledVideoModes, resolveStandardVideoExecutionState, sanitizeVideoNodeState } from '../../utils/videoCapabilityState';
+import { getAllVoiceCapabilities, getNativeVideoCapability, getNativeVideoFeatureKeys, getNativeVideoModelNotes, getNativeVideoModelSources, getVideoCapability, type NativeVideoFeatureKey } from '../../config/modelCapabilities';
+import { canQuickAddStandardVideoImage, getEnabledVideoModes, resolveStandardVideoCapabilityState, sanitizeVideoNodeState } from '../../utils/videoCapabilityState';
 import { getVideoModeAvailabilityState, resolveEffectiveVideoMode } from '../../utils/videoModeResolution';
+import { useStoredOpenAiTeachProviderConfig } from '../../shared/provider/openaiteach-config';
 
 const TIKTOK_VIDEO_MODEL_PLACEHOLDER: CanvasVideoModel = {
     id: 'tiktok-import',
@@ -47,6 +50,49 @@ const TIKTOK_VIDEO_MODEL_PLACEHOLDER: CanvasVideoModel = {
     aspectRatios: ['9:16', '16:9'],
 };
 
+function renderExecutionBadge(
+    support: { mode: 'hosted-token' | 'local-key' | 'unimplemented' } | undefined
+) {
+    if (!support) return null;
+
+    const config =
+        support.mode === 'hosted-token'
+            ? { label: 'Token', className: 'bg-emerald-600/20 text-emerald-300' }
+            : support.mode === 'local-key'
+                ? { label: '本地', className: 'bg-amber-600/20 text-amber-300' }
+                : { label: '未实现', className: 'bg-rose-600/20 text-rose-300' };
+
+    return (
+        <span className={`text-[9px] px-1 py-0.5 rounded ${config.className}`}>
+            {config.label}
+        </span>
+    );
+}
+
+function getExecutionSupportBadgeClasses(
+    mode: 'hosted-token' | 'local-key' | 'unimplemented' | undefined
+) {
+    if (mode === 'hosted-token') {
+        return 'bg-emerald-600/20 text-emerald-400';
+    }
+    if (mode === 'local-key') {
+        return 'bg-amber-600/20 text-amber-400';
+    }
+    if (mode === 'unimplemented') {
+        return 'bg-rose-600/20 text-rose-400';
+    }
+    return 'bg-neutral-700/40 text-neutral-400';
+}
+
+function getExecutionSupportBadgeLabel(
+    mode: 'hosted-token' | 'local-key' | 'unimplemented' | undefined
+) {
+    if (mode === 'hosted-token') return 'TOKEN';
+    if (mode === 'local-key') return '本地Key';
+    if (mode === 'unimplemented') return '未实现';
+    return null;
+}
+
 interface NodeControlsProps {
     data: NodeData;
     inputUrl?: string;
@@ -56,7 +102,9 @@ interface NodeControlsProps {
     onUpdate: (id: string, updates: Partial<NodeData>) => void;
     onSwitchType?: (id: string, nextType: SwitchableNodeType) => void;
     onGenerate: (id: string) => void;
+    onUploadAsset?: () => void;
     onChangeAngleGenerate?: (nodeId: string) => void;
+    onQuickAddInputNode?: (nodeId: string, inputType: 'image' | 'video') => void;
     onSelect: (id: string) => void;
     zoom: number;
     canvasTheme?: 'dark' | 'light';
@@ -126,7 +174,9 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     onUpdate,
     onSwitchType,
     onGenerate,
+    onUploadAsset,
     onChangeAngleGenerate,
+    onQuickAddInputNode,
     onSelect,
     zoom,
     canvasTheme = 'dark'
@@ -138,6 +188,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const [showAspectRatioDropdown, setShowAspectRatioDropdown] = useState(false);
     const [showDurationDropdown, setShowDurationDropdown] = useState(false);
     const [showResolutionDropdown, setShowResolutionDropdown] = useState(false);
+    const [showImageCountDropdown, setShowImageCountDropdown] = useState(false);
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [localPrompt, setLocalPrompt] = useState(data.prompt || '');
@@ -145,6 +196,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const aspectRatioDropdownRef = useRef<HTMLDivElement>(null);
     const durationDropdownRef = useRef<HTMLDivElement>(null);
     const resolutionDropdownRef = useRef<HTMLDivElement>(null);
+    const imageCountDropdownRef = useRef<HTMLDivElement>(null);
     const modelDropdownRef = useRef<HTMLDivElement>(null);
     const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     const lastSentPromptRef = useRef<string | undefined>(data.prompt); // Track what we sent
@@ -193,6 +245,9 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             if (resolutionDropdownRef.current && !resolutionDropdownRef.current.contains(event.target as Node)) {
                 setShowResolutionDropdown(false);
             }
+            if (imageCountDropdownRef.current && !imageCountDropdownRef.current.contains(event.target as Node)) {
+                setShowImageCountDropdown(false);
+            }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -220,9 +275,9 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         if (data.type !== NodeType.VIDEO) return;
         if (data.videoModel === 'tiktok-import') return;
         const next = data.videoModel
-            ? canonicalizeVideoModelId(data.videoModel)!
+            ? canonicalizeVideoModelId(data.videoModel)
             : DEFAULT_REGISTRY_VIDEO_ID;
-        if (next !== data.videoModel) {
+        if (next && next !== data.videoModel) {
             onUpdate(data.id, { videoModel: next });
         }
     }, [data.type, data.videoModel, data.id, onUpdate]);
@@ -306,16 +361,22 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         ? (data.resolution || "Auto")
         : (data.aspectRatio || "Auto");
 
+    const executableRegistryVideoModels = React.useMemo(
+        () => getRegistryVideoModels(),
+        []
+    );
     const registryVideoPool = React.useMemo(
         () =>
-            getRegistryVideoModels().filter((m) => enabledIds === null || enabledIds.has(m.id)),
-        [enabledIds]
+            executableRegistryVideoModels.filter((m) => enabledIds === null || enabledIds.has(m.id)),
+        [enabledIds, executableRegistryVideoModels]
     );
     const registryImagePool = React.useMemo(
         () =>
             REGISTRY_IMAGE_MODELS.filter((m) => enabledIds === null || enabledIds.has(m.id)),
         [enabledIds]
     );
+    const hostedProviderConfig = useStoredOpenAiTeachProviderConfig();
+    const hasHostedToken = Boolean(hostedProviderConfig.providerApiKey);
 
     const isVideoNode = data.type === NodeType.VIDEO;
     const isAudioNode = data.type === NodeType.AUDIO;
@@ -324,10 +385,19 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const isImageNode = isRegistryImageNode || data.type === NodeType.LOCAL_IMAGE_MODEL;
     const hasConnectedImages = connectedImageNodes.length > 0;
 
-    const imageInputCount = connectedImageNodes.filter(n => n.type === NodeType.IMAGE).length;
     const connectedFrameSourceNodes = connectedImageNodes.filter(n => n.type === NodeType.IMAGE);
     const hasVideoReferenceInput = connectedImageNodes.some(n => n.type === NodeType.VIDEO);
     const hasCharacterImageInput = connectedFrameSourceNodes.length > 0;
+    const standardVideoSources = isVideoNode
+        ? connectedImageNodes
+            .filter((node) => node.type === NodeType.IMAGE)
+            .map((node) => ({
+                nodeId: node.id,
+                type: 'image' as const,
+                url: node.url,
+                previewUrl: node.url,
+            }))
+        : [];
     const selectedVideoMode = resolveEffectiveVideoMode(data, connectedImageNodes);
     const capabilityMode =
         selectedVideoMode === 'frame-to-frame' ? 'frameToFrame'
@@ -338,51 +408,83 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const currentVideoModel =
         data.videoModel === 'tiktok-import'
             ? TIKTOK_VIDEO_MODEL_PLACEHOLDER
-            : registryVideoPool.find((model) => model.id === data.videoModel)
-            || (!data.videoModel ? registryVideoPool[0] : undefined);
+            : executableRegistryVideoModels.find((model) => model.id === data.videoModel)
+            || undefined;
     const currentVideoCapability =
         data.videoModel === 'tiktok-import' ? undefined : getVideoCapability(currentVideoModel?.id);
-    const currentVideoModeCapability = currentVideoCapability?.modes[capabilityMode]
-        ?? currentVideoCapability?.modes.standard;
-    const standardVideoInputState = isVideoNode
-        ? resolveStandardVideoExecutionState(currentVideoCapability, {
-            imageUrls: connectedFrameSourceNodes.map((node) => node.url),
-            hasInputSource: Boolean(inputUrl) || imageInputCount > 0,
+    const nativeVideoCapability =
+        data.videoModel === 'tiktok-import' ? undefined : getNativeVideoCapability(currentVideoModel?.id || data.videoModel);
+    const nativeVideoFeatureKeys = getNativeVideoFeatureKeys(currentVideoModel?.id || data.videoModel);
+    const nativeVideoModelNotes = getNativeVideoModelNotes(currentVideoModel?.id || data.videoModel);
+    const nativeVideoModelSources = getNativeVideoModelSources(currentVideoModel?.id || data.videoModel);
+    const nativeVideoModeCapability =
+        nativeVideoCapability?.modes[capabilityMode]
+        ?? nativeVideoCapability?.modes.standard;
+    const rawCurrentVideoModeCapability = currentVideoCapability?.modes[capabilityMode];
+    const currentVideoModeCapability =
+        selectedVideoMode === 'standard'
+            ? rawCurrentVideoModeCapability ?? currentVideoCapability?.modes.standard
+            : rawCurrentVideoModeCapability?.enabled
+                ? rawCurrentVideoModeCapability
+                : undefined;
+    const standardVideoCapabilityState = isVideoNode
+        ? resolveStandardVideoCapabilityState(currentVideoCapability, {
+            sources: standardVideoSources,
         })
         : undefined;
-    const standardVideoInputMode = standardVideoInputState?.inputMode ?? (!inputUrl && imageInputCount === 0 ? 'text-to-video' : 'image-to-video');
+    const standardVideoInputMode = standardVideoCapabilityState?.inputMode ?? 'text-to-video';
+    const currentVideoExecutionSupport =
+        data.videoModel === 'tiktok-import'
+            ? undefined
+            : getVideoExecutionSupportForContext(currentVideoModel?.id || data.videoModel, {
+                videoMode: selectedVideoMode,
+                usesReferenceImages: Boolean(standardVideoCapabilityState?.usesReferenceImages),
+                hasHostedToken,
+            });
 
     // Auto-open Advanced Settings when the current capability exposes extra controls.
     useEffect(() => {
         if (data.type === NodeType.VIDEO) {
             const shouldAutoExpand =
                 connectedImageNodes.length >= 2 ||
+                Boolean(currentVideoCapability?.modes.frameToFrame.enabled && currentVideoCapability?.modes.frameToFrame.supportsStartEndFrames) ||
+                Boolean(currentVideoCapability?.modes.standard.supportsFullReference) ||
+                Boolean(currentVideoCapability?.modes.standard.supportsMultiImage) ||
                 Boolean(currentVideoModeCapability?.supportsAudio) ||
                 Boolean(currentVideoModeCapability?.supportsMotionReference);
             if (shouldAutoExpand) {
                 setShowAdvanced(true);
             }
         }
-    }, [data.type, connectedImageNodes.length, currentVideoModeCapability?.supportsAudio, currentVideoModeCapability?.supportsMotionReference]);
+    }, [
+        data.type,
+        connectedImageNodes.length,
+        currentVideoCapability?.modes.frameToFrame.enabled,
+        currentVideoCapability?.modes.frameToFrame.supportsStartEndFrames,
+        currentVideoCapability?.modes.standard.supportsFullReference,
+        currentVideoCapability?.modes.standard.supportsMultiImage,
+        currentVideoModeCapability?.supportsAudio,
+        currentVideoModeCapability?.supportsMotionReference,
+    ]);
 
     const videoGenerationMode = selectedVideoMode === 'motion-control'
         ? 'motion-control'
         : selectedVideoMode === 'frame-to-frame'
             ? 'frame-to-frame'
             : standardVideoInputMode;
-    const supportsCurrentStandardReferenceImages =
-        Boolean(isVideoNode && standardVideoInputState?.supportsReferenceImages);
-    const supportsCurrentStandardInputMode = selectedVideoMode !== 'standard'
-        ? true
-        : Boolean(standardVideoInputState?.supportsCurrentInputMode);
+    const standardReferenceSources =
+        selectedVideoMode === 'standard'
+            ? (standardVideoCapabilityState?.referenceImageSources ?? [])
+            : [];
     const standardReferencePreviewItems =
-        selectedVideoMode === 'standard' && standardVideoInputState?.usesReferenceImages
-            ? connectedFrameSourceNodes
-                .map((node, index) => ({
-                    nodeId: node.id,
-                    url: node.url,
+        standardReferenceSources.length > 0
+            ? standardReferenceSources
+                .map((source, index) => ({
+                    nodeId: source.nodeId ?? `standard-reference-${index}`,
+                    url: source.previewUrl,
+                    type: source.type === 'video' ? NodeType.VIDEO : NodeType.IMAGE,
                     label:
-                        connectedFrameSourceNodes.length > 1
+                        standardReferenceSources.length > 1
                             ? `参考图 ${index + 1}`
                             : currentVideoModeCapability?.supportsFullReference
                                 ? '全图参考'
@@ -395,14 +497,14 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             : currentVideoModeCapability?.supportsFullReference
                 ? '全图参考'
                 : '参考图';
-    const hasUnavailableCurrentStandardVideoInput =
-        isVideoNode &&
-        selectedVideoMode === 'standard' &&
-        !supportsCurrentStandardInputMode;
-    const hasUnsupportedMultipleImageInputs =
-        isVideoNode &&
-        selectedVideoMode === 'standard' &&
-        Boolean(standardVideoInputState?.hasUnsupportedMultipleImageInputs);
+    const standardVideoBlockedReason =
+        selectedVideoMode === 'standard' ? standardVideoCapabilityState?.blockedReason : undefined;
+    const getVideoDropdownExecutionSupport = (modelId: string) =>
+        getVideoExecutionSupportForContext(modelId, {
+            videoMode: selectedVideoMode,
+            usesReferenceImages: Boolean(standardVideoCapabilityState?.usesReferenceImages),
+            hasHostedToken,
+        });
 
     const availableVideoModels = registryVideoPool.filter((model) => {
         const capability = getVideoCapability(model.id);
@@ -414,17 +516,10 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                     : capability.modes.standard;
 
         if (!modeCapability.enabled) return false;
-        if (selectedVideoMode === 'standard' && videoGenerationMode === 'text-to-video') {
-            return resolveStandardVideoInputState(capability, {
-                imageInputCount,
-                hasInputSource: Boolean(inputUrl) || imageInputCount > 0,
-            }).supportsCurrentInputMode;
-        }
-        if (selectedVideoMode === 'standard' && videoGenerationMode === 'image-to-video') {
-            return resolveStandardVideoInputState(capability, {
-                imageInputCount,
-                hasInputSource: Boolean(inputUrl) || imageInputCount > 0,
-            }).supportsCurrentInputMode;
+        if (selectedVideoMode === 'standard') {
+            return !resolveStandardVideoCapabilityState(capability, {
+                sources: standardVideoSources,
+            }).isBlocked;
         }
         if (selectedVideoMode === 'frame-to-frame') {
             return modeCapability.supportsStartEndFrames;
@@ -437,8 +532,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const selectedVideoModel =
         data.videoModel === 'tiktok-import'
             ? TIKTOK_VIDEO_MODEL_PLACEHOLDER
-            : availableVideoModels.find((model) => model.id === data.videoModel)
-            || currentVideoModel;
+            : availableVideoModels.find((model) => model.id === data.videoModel);
     const selectedVideoCapability =
         data.videoModel === 'tiktok-import' ? undefined : getVideoCapability(selectedVideoModel?.id);
     const selectedVideoModeAvailability = isVideoNode
@@ -460,24 +554,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         isVideoNode &&
         data.videoModel !== 'tiktok-import' &&
         Boolean(data.videoModel) &&
-        !registryVideoPool.some((model) => model.id === data.videoModel);
-
-    // Only self-heal truly empty model ids.
-    // If the current model has been removed from the executable list, keep it visible
-    // as unavailable instead of silently swapping the node to the first available model.
-    useEffect(() => {
-        if (data.type !== NodeType.VIDEO) return;
-        if (data.videoModel === 'tiktok-import') return;
-
-        const pool = registryVideoPool;
-        if (!data.videoModel && pool.length > 0) {
-            const fallbackCapability = getVideoCapability(pool[0].id);
-            const sanitized = fallbackCapability
-                ? sanitizeVideoNodeState({ ...data, videoModel: pool[0].id }, fallbackCapability)
-                : {};
-            onUpdate(data.id, { videoModel: pool[0].id, ...sanitized });
-        }
-    }, [data, data.videoModel, data.type, data.id, registryVideoPool, onUpdate]);
+        !executableRegistryVideoModels.some((model) => model.id === data.videoModel);
 
     useEffect(() => {
         if (data.type !== NodeType.VIDEO) return;
@@ -506,21 +583,140 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         setShowModelDropdown(false);
     };
 
+    const shouldLockVideoParameterControls = Boolean(isCurrentVideoModelOffline);
+    const canEditVideoParameters = !shouldLockVideoParameterControls;
+    const isOfflineReadonlyVideoNode = isVideoNode && shouldLockVideoParameterControls;
+    const hailuoFrameExecutionNotice =
+        isVideoNode &&
+        selectedVideoMode === 'frame-to-frame' &&
+        selectedVideoModel?.provider === 'hailuo'
+            ? '当前首尾帧模式会实际使用 Hailuo-02 执行。'
+            : undefined;
+    const hailuoStandardReferenceNotice =
+        isVideoNode &&
+        selectedVideoMode === 'standard' &&
+        selectedVideoModel?.provider === 'hailuo' &&
+        standardVideoCapabilityState?.usesReferenceImages
+            ? '当前标准模式会按 Hailuo 参考图链执行（S2V），不是普通单图图生视频。'
+            : undefined;
     const currentVideoModelLabel =
         currentVideoModel?.name
-        ?? (data.videoModel ? `模型已下线：${data.videoModel}` : 'No available models');
+            ? (hailuoFrameExecutionNotice
+                ? `${currentVideoModel.name}（首尾帧执行 Hailuo-02）`
+                : currentVideoModel.name)
+            : (data.videoModel ? `模型已下线：${data.videoModel}` : '请选择视频模型');
+    const nativeFeatureLabelMap: Record<NativeVideoFeatureKey, string> = {
+        textToVideo: '文生视频',
+        imageToVideo: '图生视频',
+        multiImage: '多图参考',
+        fullReference: '全图参考',
+        startEndFrame: '首尾帧',
+        motionReference: '运动参考',
+        audio: '音频',
+        subjectReference: '主体参考',
+        referenceVideo: '参考视频',
+        characterConsistency: '角色一致性',
+    };
+    const nativeFeatureConnectedMap: Record<NativeVideoFeatureKey, boolean> = {
+        textToVideo: Boolean(currentVideoCapability?.modes.standard.supportsTextToVideo),
+        imageToVideo: Boolean(currentVideoCapability?.modes.standard.supportsImageToVideo),
+        multiImage: Boolean(currentVideoCapability?.modes.standard.supportsMultiImage),
+        fullReference: Boolean(currentVideoCapability?.modes.standard.supportsFullReference),
+        startEndFrame: Boolean(currentVideoCapability?.modes.frameToFrame.enabled && currentVideoCapability?.modes.frameToFrame.supportsStartEndFrames),
+        motionReference: Boolean(currentVideoCapability?.modes.motionControl.enabled && currentVideoCapability?.modes.motionControl.supportsMotionReference),
+        audio: Boolean(currentVideoCapability && Object.values(currentVideoCapability.modes).some((mode) => mode.supportsAudio)),
+        subjectReference: Boolean(
+            (selectedVideoModel?.provider === 'hailuo' &&
+                (currentVideoCapability?.modes.standard.supportsFullReference || currentVideoCapability?.modes.standard.supportsMultiImage)) ||
+            Boolean(currentVideoCapability?.modes.motionControl.enabled && currentVideoCapability?.modes.motionControl.supportsMotionReference)
+        ),
+        referenceVideo: false,
+        characterConsistency: false,
+    };
+    const backendConnectedFeatureKeys = (Object.entries(nativeFeatureConnectedMap) as Array<[NativeVideoFeatureKey, boolean]>)
+        .filter(([, connected]) => connected)
+        .map(([key]) => key);
+    const capabilityFeatureKeys = Array.from(new Set([
+        ...backendConnectedFeatureKeys,
+        ...nativeVideoFeatureKeys,
+    ]));
+    const currentVideoCapabilitySummary = nativeVideoModeCapability
+        ? {
+            durations: nativeVideoModeCapability.durations.join(' / '),
+            resolutions: nativeVideoModeCapability.resolutions.join(' / '),
+            aspectRatios: nativeVideoModeCapability.aspectRatios.join(' / '),
+          }
+        : undefined;
+    const shouldShowVideoCapabilitySummary = isVideoNode && (capabilityFeatureKeys.length > 0 || Boolean(currentVideoCapabilitySummary));
+    const videoFeatureChips = isVideoNode
+        ? capabilityFeatureKeys.map((key) => {
+            const onClick =
+                key === 'textToVideo' || key === 'imageToVideo' || key === 'multiImage' || key === 'fullReference'
+                    ? () => handleVideoModeChange('standard')
+                    : key === 'subjectReference'
+                        ? () => handleVideoModeChange('standard')
+                    : key === 'startEndFrame'
+                        ? () => handleVideoModeChange('frame-to-frame')
+                    : key === 'motionReference'
+                            ? () => handleVideoModeChange('motion-control')
+                        : key === 'audio' && currentVideoCapability && Object.values(currentVideoCapability.modes).some((mode) => mode.supportsAudio)
+                            ? () => {
+                                if (currentVideoModeCapability?.supportsAudio) {
+                                    onUpdate(data.id, { generateAudio: !Boolean(data.generateAudio) });
+                                    return;
+                                }
+                                if (currentVideoCapability.modes.standard.supportsAudio) {
+                                    onUpdate(data.id, {
+                                        videoMode: 'standard',
+                                        generateAudio: true,
+                                    });
+                                }
+                            }
+                            : undefined;
+            const active =
+                (key === 'textToVideo' && selectedVideoMode === 'standard' && standardVideoInputMode === 'text-to-video' && !standardVideoCapabilityState?.usesReferenceImages) ||
+                (key === 'imageToVideo' && selectedVideoMode === 'standard' && standardVideoInputMode === 'image-to-video' && !standardVideoCapabilityState?.usesReferenceImages) ||
+                ((key === 'multiImage' || key === 'fullReference') && selectedVideoMode === 'standard' && Boolean(standardVideoCapabilityState?.usesReferenceImages)) ||
+                (key === 'subjectReference' && selectedVideoMode === 'standard' && Boolean(standardVideoCapabilityState?.usesReferenceImages)) ||
+                (key === 'startEndFrame' && selectedVideoMode === 'frame-to-frame') ||
+                (key === 'motionReference' && selectedVideoMode === 'motion-control') ||
+                (key === 'audio' && Boolean(data.generateAudio));
+
+            return {
+                id: key,
+                key,
+                label: nativeFeatureLabelMap[key],
+                active,
+                onClick,
+                disabled: !nativeFeatureConnectedMap[key] || !onClick,
+                connected: nativeFeatureConnectedMap[key],
+            };
+        })
+        : [];
+    const connectedVideoFeatureChips = videoFeatureChips.filter((chip) => chip.connected);
+    const pendingVideoFeatureChips = videoFeatureChips.filter((chip) => !chip.connected);
+    const hasOnlyPendingCapabilities = connectedVideoFeatureChips.length === 0 && pendingVideoFeatureChips.length > 0;
+    const canQuickAddStandardImage =
+        selectedVideoMode === 'standard'
+            && canQuickAddStandardVideoImage(
+                currentVideoCapability,
+                standardVideoCapabilityState,
+                connectedFrameSourceNodes.length
+            );
+    const shouldShowQuickAddImage = Boolean(onQuickAddInputNode) && isVideoNode && (
+        canQuickAddStandardImage ||
+        (selectedVideoMode === 'frame-to-frame' && connectedFrameSourceNodes.length < 2) ||
+        (selectedVideoMode === 'motion-control' && !hasCharacterImageInput)
+    );
+    const shouldShowQuickAddVideo = Boolean(onQuickAddInputNode) && isVideoNode && selectedVideoMode === 'motion-control' && !hasVideoReferenceInput;
 
     // Get available durations for current model
-    const availableDurations = currentVideoModeCapability?.durations || currentVideoModel?.durations || [5];
-    const currentDuration = data.videoDuration || currentVideoModeCapability?.defaultDuration || availableDurations[0];
-    const availableResolutions = currentVideoModeCapability?.resolutions || currentVideoModel?.resolutions || ['Auto'];
-    const availableVideoAspectRatios = currentVideoModeCapability?.aspectRatios || currentVideoModel?.aspectRatios || ['16:9', '9:16'];
-    const shouldLockVideoParameterControls = Boolean(isCurrentVideoModelOffline);
-
-    // sizeOptions: For video nodes use model-specific resolutions, for image nodes use aspect ratios
-    const sizeOptions = (data.type === NodeType.VIDEO || data.type === NodeType.LOCAL_VIDEO_MODEL)
-        ? availableResolutions
-        : imageAspectRatioOptions;
+    const availableDurations = shouldLockVideoParameterControls ? [] : currentVideoModeCapability?.durations ?? [];
+    const currentDuration = shouldLockVideoParameterControls
+        ? (data.videoDuration || 5)
+        : data.videoDuration || currentVideoModeCapability?.defaultDuration || availableDurations[0] || 5;
+    const availableResolutions = shouldLockVideoParameterControls ? [] : currentVideoModeCapability?.resolutions ?? [];
+    const availableVideoAspectRatios = shouldLockVideoParameterControls ? [] : currentVideoModeCapability?.aspectRatios ?? [];
 
     const handleDurationChange = (duration: number) => {
         onUpdate(data.id, { videoDuration: duration });
@@ -538,8 +734,14 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         || availableImageModels[0]
         || registryImagePool.find((model) => model.id === data.imageModel)
         || registryImagePool[0];
+    const currentImageExecutionSupport = getImageExecutionSupport(currentImageModel?.id || data.imageModel);
     const imageAspectRatioOptions = currentImageModel?.aspectRatios || IMAGE_RATIOS;
     const hasAvailableImageModels = data.type === NodeType.LOCAL_IMAGE_MODEL || availableImageModels.length > 0;
+
+    // sizeOptions: For video nodes use model-specific resolutions, for image nodes use aspect ratios
+    const sizeOptions = (data.type === NodeType.VIDEO || data.type === NodeType.LOCAL_VIDEO_MODEL)
+        ? availableResolutions
+        : imageAspectRatioOptions;
 
     useEffect(() => {
         if (data.type !== NodeType.IMAGE && data.type !== NodeType.IMAGE_EDITOR) return;
@@ -568,6 +770,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const currentVoiceModel =
         availableVoiceModels.find((model) => model.id === (data.audioModel || data.model))
         || availableVoiceModels[0];
+    const currentVoiceExecutionSupport = getVoiceExecutionSupport(currentVoiceModel?.id || data.audioModel || data.model);
     const hasAvailableVoiceModels = availableVoiceModels.length > 0;
 
     useEffect(() => {
@@ -624,6 +827,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         setShowResolutionDropdown(false);
     };
 
+    const handleImageCountSelect = (value: number) => {
+        onUpdate(data.id, { imageCount: value });
+        setShowImageCountDropdown(false);
+    };
+
     // Get frame inputs with their image URLs
     // Auto-assign order: first connected = start, second = end
     // If user has explicitly set frameInputs, use those orders, otherwise auto-assign
@@ -660,7 +868,22 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
     // Theme helper
     const isDark = canvasTheme === 'dark';
-    const panelBg = isDark ? 'bg-[#1a1a1a] border-neutral-800' : 'bg-white border-neutral-200';
+    const isLiblibImagePanel = isImageNode && !isLocalModelNode;
+    const imageToolMode = data.imageToolMode || null;
+    const imageReferenceCount = connectedImageNodes.length || (inputUrl || data.resultUrl ? 1 : 0);
+    const imageModeHint =
+        imageToolMode === 'focus'
+            ? data.focusSelection
+                ? '已记录聚焦区域，可继续描述局部改动意图'
+                : '请在图片上框选聚焦区域'
+            : imageToolMode === 'style'
+                ? '风格模式已启用，选择预设后会写入当前图片节点提示词'
+                : imageToolMode === 'mark'
+                    ? '标记模式已启用，可继续标注当前图片的局部意图'
+                    : null;
+    const panelBg = isLiblibImagePanel
+        ? 'bg-[#232323]/98 border-white/10 text-white shadow-[0_26px_80px_rgba(0,0,0,0.52)] backdrop-blur-xl'
+        : isDark ? 'bg-[#1a1a1a] border-neutral-800' : 'bg-white border-neutral-200';
     const promptText = isDark ? 'text-white placeholder-neutral-600' : 'text-neutral-900 placeholder-neutral-400';
     const selectBtn = isDark
         ? 'bg-[#252525] hover:bg-[#333] border-neutral-700 text-white'
@@ -670,6 +893,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         ? 'bg-[#1a1a1a] border-neutral-700 text-neutral-400'
         : 'bg-neutral-50 border-neutral-200 text-neutral-500';
     const switchableOptions = getNodeTypeOptionLabels();
+    const isStoryboardGeneratedScene = Boolean(data.prompt && data.prompt.startsWith('Extract panel #'));
 
     // Handle angle mode generate - creates a new connected node
     const handleAngleGenerate = () => {
@@ -694,10 +918,39 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                     imageUrl={data.resultUrl}
                     settings={data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false }}
                     onSettingsChange={(settings) => onUpdate(data.id, { angleSettings: settings })}
-                    onClose={() => onUpdate(data.id, { angleMode: false })}
+                    onClose={() => onUpdate(data.id, { angleMode: false, imageToolMode: null })}
                     onGenerate={handleAngleGenerate}
                     isLoading={isLoading}
                     canvasTheme={canvasTheme}
+                    titleLabel="多角度编辑器"
+                />
+            </div>
+        );
+    }
+
+    if (imageToolMode === 'lighting' && data.type === NodeType.IMAGE && isSuccess && data.resultUrl) {
+        return (
+            <div
+                style={{
+                    transform: `scale(${localScale})`,
+                    transformOrigin: 'top center',
+                    transition: 'transform 0.1s ease-out'
+                }}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => onSelect(data.id)}
+            >
+                <LightingPanel
+                    settings={data.imageLightingSettings || {
+                        mode: 'global',
+                        smartMode: false,
+                        brightness: 50,
+                        color: '#ffffff',
+                        keyLight: 'front',
+                        rimLight: false,
+                    }}
+                    onChange={(settings) => onUpdate(data.id, { imageLightingSettings: settings })}
+                    onClose={() => onUpdate(data.id, { imageToolMode: null })}
+                    onGenerate={() => onGenerate(data.id)}
                 />
             </div>
         );
@@ -705,7 +958,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
     return (
         <div
-            className={`p-4 rounded-2xl shadow-2xl cursor-default w-full transition-colors duration-300 border ${panelBg}`}
+            className={`${isLiblibImagePanel ? 'relative p-5 rounded-[28px]' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
             style={{
                 transform: `scale(${localScale})`,
                 transformOrigin: 'top center',
@@ -715,18 +968,450 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             onClick={() => onSelect(data.id)} // Ensure clicking here selects the node
         >
             {/* Prompt Textarea with Expand Button - Hidden for storyboard-generated scenes */}
-            {!(data.prompt && data.prompt.startsWith('Extract panel #')) && (
+            {!isOfflineReadonlyVideoNode && !isStoryboardGeneratedScene && (
                 <div className="mb-3">
+                    {isLiblibImagePanel && (
+                        <div className="mb-4 space-y-4">
+                            <button
+                                type="button"
+                                onClick={() => onUpdate(data.id, { isPromptExpanded: !data.isPromptExpanded })}
+                                className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-xl border border-white/8 bg-[#2b2b2b] text-neutral-400 transition-colors hover:bg-[#313131] hover:text-white"
+                                title={data.isPromptExpanded ? '收起面板' : '展开面板'}
+                            >
+                                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <polyline points="15 3 21 3 21 9" />
+                                    <polyline points="9 21 3 21 3 15" />
+                                    <line x1="21" y1="3" x2="14" y2="10" />
+                                    <line x1="3" y1="21" x2="10" y2="14" />
+                                </svg>
+                            </button>
+                            <div className="flex items-start justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    {[
+                                        { key: 'style' as const, label: '风格', icon: <Sparkles size={16} /> },
+                                        { key: 'mark' as const, label: '标记', icon: <Settings2 size={16} /> },
+                                        { key: 'focus' as const, label: '聚焦', icon: <Crop size={16} /> },
+                                    ].map((tool) => {
+                                        const active = imageToolMode === tool.key;
+                                        return (
+                                            <button
+                                                key={tool.key}
+                                                type="button"
+                                                onClick={() => onUpdate(data.id, { imageToolMode: active ? null : tool.key })}
+                                                className={`flex h-[74px] w-[74px] shrink-0 flex-col items-center justify-center gap-2 rounded-[18px] border text-xs font-medium transition-all ${
+                                                    active
+                                                        ? 'border-white/70 bg-white text-black shadow-[0_12px_28px_rgba(255,255,255,0.12)]'
+                                                        : 'border-white/10 bg-[#2b2b2b] text-neutral-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)] hover:bg-[#343434] hover:border-white/14'
+                                                }`}
+                                            >
+                                                <span className={active ? 'text-black' : 'text-neutral-300'}>{tool.icon}</span>
+                                                <span>{tool.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                    {(inputUrl || data.resultUrl) ? (
+                                        <div className="relative flex h-[74px] w-[74px] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-[#2b2b2b] p-1.5 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
+                                            <img
+                                                src={inputUrl || data.resultUrl}
+                                                alt="素材缩略图"
+                                                className="h-full w-full rounded-[12px] object-cover"
+                                            />
+                                            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#3a3a3a] px-1 text-[10px] font-medium text-white">
+                                                {imageReferenceCount}
+                                            </span>
+                                        </div>
+                                    ) : onUploadAsset ? (
+                                        <button
+                                            type="button"
+                                            onClick={onUploadAsset}
+                                            className="flex h-[74px] w-[74px] shrink-0 flex-col items-center justify-center gap-1 rounded-[18px] border border-dashed border-white/14 bg-[#2b2b2b] text-[11px] font-medium text-neutral-300 transition-colors hover:bg-[#343434] hover:border-white/20 hover:text-white"
+                                        >
+                                            <ImageIcon size={18} />
+                                            <span>上传素材</span>
+                                        </button>
+                                    ) : null}
+                                </div>
+                                <div className="flex min-h-[74px] items-center gap-2 pr-12">
+                                    <div className="flex flex-col items-end gap-2">
+                                        {imageReferenceCount > 0 && (
+                                            <div className="rounded-full border border-white/8 bg-[#2b2b2b] px-3 py-1 text-[11px] font-medium text-neutral-300 shadow-[0_10px_18px_rgba(0,0,0,0.18)]">
+                                                已引用素材 · {imageReferenceCount}
+                                            </div>
+                                        )}
+                                        {data.focusSelection && imageToolMode !== 'focus' && (
+                                            <div className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-[11px] font-medium text-sky-200 shadow-[0_10px_18px_rgba(12,74,110,0.18)]">
+                                                已聚焦局部
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            {imageModeHint && (
+                                imageToolMode === 'focus' ? (
+                                    <div className="inline-flex h-11 items-center self-start rounded-2xl border border-white/8 bg-black px-5 text-[16px] font-medium text-white shadow-[0_16px_40px_rgba(0,0,0,0.35)]">
+                                        请在图片上框选聚焦区域
+                                    </div>
+                                ) : (
+                                    <div className="flex min-h-11 items-center rounded-[18px] border border-white/10 bg-[#2a2a2a] px-4 text-sm text-neutral-200">
+                                        {imageModeHint}
+                                    </div>
+                                )
+                            )}
+                            {data.focusSelection && imageToolMode !== 'focus' && (
+                                <div className="flex min-h-11 items-center rounded-[18px] border border-sky-400/10 bg-sky-500/5 px-4 text-sm text-sky-100">
+                                    已记录聚焦区域。继续在下方描述你希望局部变化的内容后再生成。
+                                </div>
+                            )}
+                            <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-[#262626] px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.22)]">
+                                <div className="flex flex-wrap items-center gap-3 text-sm text-neutral-100">
+                                    <div className="relative" ref={modelDropdownRef}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowModelDropdown(!showModelDropdown)}
+                                            className="flex items-center gap-2 text-sm font-medium text-neutral-100"
+                                        >
+                                            <Banana size={15} className="text-yellow-400" />
+                                            <span>{currentImageModel?.name ?? 'Lib Nano Pro'}</span>
+                                            {renderExecutionBadge(currentImageExecutionSupport)}
+                                            <ChevronDown size={12} className="opacity-60" />
+                                        </button>
+                                        {showModelDropdown && (
+                                            <div className={`absolute bottom-full mb-2 left-0 w-56 rounded-2xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto border ${dropdownPanel}`}>
+                                                {availableImageModels.filter(m => m.provider === 'openai').length > 0 && (
+                                                    <>
+                                                        <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f]">
+                                                            OpenAI
+                                                        </div>
+                                                        {availableImageModels.filter(m => m.provider === 'openai').map(model => (
+                                                            <button
+                                                                key={model.id}
+                                                                onClick={() => handleImageModelChange(model.id)}
+                                                                className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentImageModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'}`}
+                                                            >
+                                                                <span className="flex items-center gap-2">
+                                                                    <OpenAIIcon size={12} className="text-green-400" />
+                                                                    {model.name}
+                                                                    {renderExecutionBadge(getImageExecutionSupport(model.id))}
+                                                                </span>
+                                                                {currentImageModel?.id === model.id && <Check size={12} />}
+                                                            </button>
+                                                        ))}
+                                                    </>
+                                                )}
+                                                {availableImageModels.filter(m => m.provider === 'google').length > 0 && (
+                                                    <>
+                                                        <div className={`px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] ${availableImageModels.some((m) => m.provider === 'openai') ? 'border-t border-neutral-700' : ''}`}>
+                                                            Google
+                                                        </div>
+                                                        {availableImageModels.filter(m => m.provider === 'google').map(model => (
+                                                            <button
+                                                                key={model.id}
+                                                                onClick={() => handleImageModelChange(model.id)}
+                                                                className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentImageModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'}`}
+                                                            >
+                                                                <span className="flex items-center gap-2">
+                                                                    <Banana size={12} className="text-yellow-400" />
+                                                                    {model.name}
+                                                                    {renderExecutionBadge(getImageExecutionSupport(model.id))}
+                                                                </span>
+                                                                {currentImageModel?.id === model.id && <Check size={12} />}
+                                                            </button>
+                                                        ))}
+                                                    </>
+                                                )}
+                                                {availableImageModels.filter(m => m.provider === 'other').length > 0 && (
+                                                    <>
+                                                        <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
+                                                            其他
+                                                        </div>
+                                                        {availableImageModels.filter(m => m.provider === 'other').map(model => (
+                                                            <button
+                                                                key={model.id}
+                                                                onClick={() => handleImageModelChange(model.id)}
+                                                                className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentImageModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'}`}
+                                                            >
+                                                                <span className="flex items-center gap-2">
+                                                                    <ImageIcon size={12} className="text-cyan-400" />
+                                                                    {model.name}
+                                                                    {renderExecutionBadge(getImageExecutionSupport(model.id))}
+                                                                </span>
+                                                                {currentImageModel?.id === model.id && <Check size={12} />}
+                                                            </button>
+                                                        ))}
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-neutral-500">•</div>
+                                    <div className="relative" ref={dropdownRef}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowSizeDropdown(!showSizeDropdown)}
+                                            className="flex items-center gap-2 text-sm font-medium text-neutral-100"
+                                        >
+                                            <Crop size={14} className="text-neutral-300" />
+                                            <span>{data.aspectRatio || '16:9'}</span>
+                                            <ChevronDown size={12} className="opacity-60" />
+                                        </button>
+                                        {showSizeDropdown && (
+                                            <div className={`absolute bottom-full mb-2 right-0 w-28 rounded-2xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100 border ${dropdownPanel}`}>
+                                                <div className="px-3 py-2 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f]">
+                                                    比例
+                                                </div>
+                                                {sizeOptions.map((option) => (
+                                                    <button
+                                                        key={option}
+                                                        onClick={() => handleSizeSelect(option)}
+                                                        className={`flex items-center justify-between w-full px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentSizeLabel === option ? 'text-blue-400' : 'text-neutral-300'}`}
+                                                    >
+                                                        <span>{option}</span>
+                                                        {currentSizeLabel === option && <Check size={12} />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="text-neutral-500">•</div>
+                                    <div className="relative" ref={resolutionDropdownRef}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowResolutionDropdown(!showResolutionDropdown)}
+                                            className="flex items-center gap-2 text-sm font-medium text-neutral-100"
+                                        >
+                                            <Monitor size={14} className="text-neutral-300" />
+                                            <span>{data.resolution || '2K'}</span>
+                                            <ChevronDown size={12} className="opacity-60" />
+                                        </button>
+                                        {showResolutionDropdown && (
+                                            <div className={`absolute bottom-full mb-2 right-0 w-24 rounded-2xl shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100 border ${dropdownPanel}`}>
+                                                <div className="px-3 py-2 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f]">
+                                                    清晰度
+                                                </div>
+                                                {(currentImageModel?.resolutions ?? []).map((res: string) => (
+                                                    <button
+                                                        key={res}
+                                                        onClick={() => handleResolutionSelect(res)}
+                                                        className={`flex items-center justify-between w-full px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${(data.resolution || 'Auto') === res ? 'text-blue-400' : 'text-neutral-300'}`}
+                                                    >
+                                                        <span>{res}</span>
+                                                        {(data.resolution || 'Auto') === res && <Check size={12} />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => onUpdate(data.id, {
+                                            angleMode: true,
+                                            imageToolMode: 'multi-angle',
+                                            angleSettings: data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false },
+                                        })}
+                                        className="flex items-center gap-2 rounded-full border border-white/8 bg-white/5 px-3 py-1.5 text-sm text-neutral-100 transition-colors hover:bg-white/10"
+                                    >
+                                        <Film size={14} className="text-neutral-300" />
+                                        <span>摄像机控制</span>
+                                    </button>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="relative" ref={imageCountDropdownRef}>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowImageCountDropdown(!showImageCountDropdown)}
+                                            className="flex items-center gap-1 text-sm font-medium text-neutral-200"
+                                        >
+                                            {data.imageCount || 1}张
+                                            <ChevronDown size={12} className="opacity-60" />
+                                        </button>
+                                        {showImageCountDropdown && (
+                                            <div className="absolute bottom-full mb-2 right-0 w-20 rounded-2xl border border-neutral-700 bg-[#2b2b2b] py-1 shadow-xl">
+                                                {[1, 2, 3, 4].map((count) => (
+                                                    <button
+                                                        key={count}
+                                                        type="button"
+                                                        onClick={() => handleImageCountSelect(count)}
+                                                        className={`flex w-full items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#363636] ${(data.imageCount || 1) === count ? 'text-white' : 'text-neutral-300'}`}
+                                                    >
+                                                        <span>{count}张</span>
+                                                        {(data.imageCount || 1) === count && <Check size={12} />}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-1 rounded-full border border-white/8 bg-white/5 px-2.5 py-1 text-sm font-medium text-neutral-400">
+                                        <Zap size={12} className="text-neutral-500" />
+                                        <span>{Math.max(14, (data.imageCount || 1) * 14)}</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => onGenerate(data.id)}
+                                        className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#9b9b9b] text-white transition-colors hover:bg-[#b8b8b8]"
+                                    >
+                                        <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 19V5" />
+                                            <path d="m7 10 5-5 5 5" />
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {shouldShowVideoCapabilitySummary && (
+                        <div className="mb-3 space-y-2">
+                            <div className="space-y-2">
+                                {connectedVideoFeatureChips.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <div className={`text-[10px] uppercase tracking-[0.18em] ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                            当前已接通
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 items-center">
+                                            {connectedVideoFeatureChips.map((chip) => (
+                                                <button
+                                                    key={chip.id}
+                                                    type="button"
+                                                    disabled={chip.disabled}
+                                                    onClick={chip.onClick}
+                                                    className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors ${
+                                                        chip.active
+                                                            ? 'bg-blue-600 text-white border-blue-500'
+                                                            : chip.disabled
+                                                                ? (isDark ? 'bg-neutral-900 text-neutral-500 border-neutral-800 cursor-default' : 'bg-neutral-100 text-neutral-400 border-neutral-200 cursor-default')
+                                                                : (isDark ? 'bg-neutral-900 text-neutral-300 border-neutral-700 hover:bg-neutral-800' : 'bg-neutral-50 text-neutral-700 border-neutral-200 hover:bg-neutral-100')
+                                                    }`}
+                                                >
+                                                    {chip.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {pendingVideoFeatureChips.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        <div className={`text-[10px] uppercase tracking-[0.18em] ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                            官方原生支持
+                                        </div>
+                                        <div className="flex flex-wrap gap-1.5 items-center">
+                                            {pendingVideoFeatureChips.map((tag) => (
+                                                <span
+                                                    key={`native-${tag.key}`}
+                                                    className={`px-2.5 py-1 rounded-full text-[11px] border border-dashed ${isDark ? 'bg-neutral-950 text-amber-300 border-amber-700/60' : 'bg-amber-50 text-amber-700 border-amber-300'}`}
+                                                    title="模型原生支持，但当前后端未接通"
+                                                >
+                                                    {tag.label}·待接入
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {connectedVideoFeatureChips.length === 0 && pendingVideoFeatureChips.length === 0 && (
+                                    <span className={`text-[10px] ${isDark ? 'text-neutral-500' : 'text-neutral-400'}`}>
+                                        当前模型能力表暂无可展示能力
+                                    </span>
+                                )}
+                                {hasOnlyPendingCapabilities && (
+                                    <div className={`text-[10px] ${isDark ? 'text-amber-300' : 'text-amber-700'}`}>
+                                        当前模型官方有这些能力，但你这个版本后端还没全部接通。
+                                    </div>
+                                )}
+                                {shouldShowQuickAddImage && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onQuickAddInputNode?.(data.id, 'image')}
+                                        className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors ${isDark ? 'bg-emerald-950/40 text-emerald-300 border-emerald-700 hover:bg-emerald-900/40' : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'}`}
+                                    >
+                                        添加图片
+                                    </button>
+                                )}
+                                {shouldShowQuickAddVideo && (
+                                    <button
+                                        type="button"
+                                        onClick={() => onQuickAddInputNode?.(data.id, 'video')}
+                                        className={`px-2.5 py-1 rounded-full text-[11px] border transition-colors ${isDark ? 'bg-violet-950/40 text-violet-300 border-violet-700 hover:bg-violet-900/40' : 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'}`}
+                                    >
+                                        添加视频
+                                    </button>
+                                )}
+                            </div>
+                            {currentVideoCapabilitySummary && (
+                                <div className={`space-y-1 text-[10px] ${isDark ? 'text-neutral-500' : 'text-neutral-500'}`}>
+                                    <div>时长：{currentVideoCapabilitySummary.durations}s</div>
+                                    <div>分辨率：{currentVideoCapabilitySummary.resolutions}</div>
+                                    <div>比例：{currentVideoCapabilitySummary.aspectRatios}</div>
+                                </div>
+                            )}
+                            {nativeVideoModelNotes.length > 0 && (
+                                <div className={`space-y-1 text-[10px] leading-5 ${isDark ? 'text-neutral-500' : 'text-neutral-500'}`}>
+                                    {nativeVideoModelNotes.map((note) => (
+                                        <div key={note}>官方备注：{note}</div>
+                                    ))}
+                                </div>
+                            )}
+                            {nativeVideoModelSources.length > 0 && (
+                                <div className={`space-y-1 text-[10px] leading-5 ${isDark ? 'text-neutral-500' : 'text-neutral-500'}`}>
+                                    <div>官方来源：</div>
+                                    <div className="flex flex-col gap-1">
+                                        {nativeVideoModelSources.map((source) => (
+                                            <a
+                                                key={source}
+                                                href={source}
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                className={isDark ? 'text-sky-300 hover:text-sky-200 underline break-all' : 'text-sky-700 hover:text-sky-800 underline break-all'}
+                                                onClick={(event) => event.stopPropagation()}
+                                            >
+                                                {source}
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {currentVideoExecutionSupport && (
+                                <div className={`space-y-1 text-[10px] leading-5 ${currentVideoExecutionSupport.mode === 'hosted-token'
+                                    ? (isDark ? 'text-emerald-300' : 'text-emerald-700')
+                                    : currentVideoExecutionSupport.mode === 'local-key'
+                                        ? (isDark ? 'text-amber-300' : 'text-amber-700')
+                                        : (isDark ? 'text-rose-300' : 'text-rose-700')
+                                    }`}>
+                                    <div>执行说明：{currentVideoExecutionSupport.note}</div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                    {isRegistryImageNode && currentImageExecutionSupport && !isLiblibImagePanel && (
+                        <div className={`mb-3 text-[10px] leading-5 ${currentImageExecutionSupport.mode === 'hosted-token'
+                            ? (isDark ? 'text-emerald-300' : 'text-emerald-700')
+                            : currentImageExecutionSupport.mode === 'local-key'
+                                ? (isDark ? 'text-amber-300' : 'text-amber-700')
+                                : (isDark ? 'text-rose-300' : 'text-rose-700')
+                            }`}>
+                            执行说明：{currentImageExecutionSupport.note}
+                        </div>
+                    )}
+                    {isAudioNode && currentVoiceExecutionSupport && (
+                        <div className={`mb-3 text-[10px] leading-5 ${currentVoiceExecutionSupport.mode === 'hosted-token'
+                            ? (isDark ? 'text-emerald-300' : 'text-emerald-700')
+                            : currentVoiceExecutionSupport.mode === 'local-key'
+                                ? (isDark ? 'text-amber-300' : 'text-amber-700')
+                                : (isDark ? 'text-rose-300' : 'text-rose-700')
+                            }`}>
+                            执行说明：{currentVoiceExecutionSupport.note}
+                        </div>
+                    )}
                     <textarea
-                        className={`w-full bg-transparent text-sm outline-none resize-none font-light ${promptText}`}
+                        className={`w-full text-sm outline-none resize-none font-light ${isLiblibImagePanel ? 'min-h-[148px] bg-transparent text-[16px] leading-8 text-neutral-100 placeholder:text-neutral-500' : `bg-transparent ${promptText}`}`}
                         placeholder={
-                            data.type === NodeType.VIDEO && selectedVideoMode === 'frame-to-frame'
+                            isLiblibImagePanel
+                                ? '描述你想要生成的画面内容，按/呼出指令，@引用素材'
+                                : data.type === NodeType.VIDEO && selectedVideoMode === 'frame-to-frame'
                                 ? t('nodeControls.promptOptionalKling')
                                 : data.type === NodeType.VIDEO && inputUrl
                                     ? t('nodeControls.describeAnimation')
                                     : t('nodeControls.describeGeneration')
                         }
                         rows={data.isPromptExpanded ? 12 : 4}
+                        style={isLiblibImagePanel ? { minHeight: data.isPromptExpanded ? 220 : 148 } : undefined}
                         value={localPrompt}
                         onChange={(e) => handlePromptChange(e.target.value)}
                         onWheel={(e) => e.stopPropagation()}
@@ -741,33 +1426,35 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         }}
                     />
                     {/* Expand/Shrink Button - Below textarea */}
-                    <div className="flex justify-end mt-1">
-                        <button
-                            onClick={() => onUpdate(data.id, { isPromptExpanded: !data.isPromptExpanded })}
-                            className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded transition-colors ${isDark ? 'text-neutral-500 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200'}`}
-                            title={data.isPromptExpanded ? 'Shrink prompt' : 'Expand prompt'}
-                        >
-                            {data.isPromptExpanded ? <Shrink size={12} /> : <Expand size={12} />}
-                            <span>{data.isPromptExpanded ? 'Shrink' : 'Expand'}</span>
-                        </button>
-                    </div>
+                    {!isLiblibImagePanel && (
+                        <div className="flex justify-end mt-1">
+                            <button
+                                onClick={() => onUpdate(data.id, { isPromptExpanded: !data.isPromptExpanded })}
+                                className={`flex items-center gap-1 px-1.5 py-0.5 text-[10px] rounded transition-colors ${isDark ? 'text-neutral-500 hover:text-white hover:bg-neutral-700' : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200'}`}
+                                title={data.isPromptExpanded ? 'Shrink prompt' : 'Expand prompt'}
+                            >
+                                {data.isPromptExpanded ? <Shrink size={12} /> : <Expand size={12} />}
+                                <span>{data.isPromptExpanded ? 'Shrink' : 'Expand'}</span>
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
 
-            {data.errorMessage && (
+            {!isOfflineReadonlyVideoNode && data.errorMessage && (
                 <div className="text-red-400 text-xs mb-2 p-1 bg-red-900/20 rounded border border-red-900/50">
                     {data.errorMessage}
                 </div>
             )}
 
-            {isUnsupportedSelectedMode && (
+            {!isOfflineReadonlyVideoNode && isSelectedVideoModeUnsupported && (
                 <div className="text-amber-400 text-xs mb-2 p-2 bg-amber-900/20 rounded border border-amber-700/50">
                     当前模型尚未接通{selectedModeUnsupportedLabel}模式，设置已保留，请切换到支持该模式的模型后再生成。
                 </div>
             )}
 
             {/* Motion Control Warning - when motion mode detected but prerequisites are missing */}
-            {isVideoNode && videoGenerationMode === 'motion-control' && !canUseMotionMode && (
+            {!isOfflineReadonlyVideoNode && isVideoNode && videoGenerationMode === 'motion-control' && !canUseMotionMode && (
                 <div className="text-amber-400 text-xs mb-2 p-2 bg-amber-900/20 rounded border border-amber-700/50 flex items-start gap-2">
                     <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -778,21 +1465,15 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                 </div>
             )}
 
-            {isVideoNode && selectedVideoMode === 'frame-to-frame' && frameInputsWithUrls.length < 2 && (
+            {!isOfflineReadonlyVideoNode && isVideoNode && selectedVideoMode === 'frame-to-frame' && frameInputsWithUrls.length < 2 && (
                 <div className="text-amber-400 text-xs mb-2 p-2 bg-amber-900/20 rounded border border-amber-700/50">
                     请先连接两张图片，再使用首尾帧模式。
                 </div>
             )}
 
-            {isVideoNode && hasUnsupportedMultipleImageInputs && (
+            {!isOfflineReadonlyVideoNode && isVideoNode && selectedVideoMode === 'standard' && standardVideoBlockedReason && (
                 <div className="text-amber-400 text-xs mb-2 p-2 bg-amber-900/20 rounded border border-amber-700/50">
-                    当前后端尚未接通标准模式的多图/全图参考，请先减少为单图，或改用已接通的专用模式。
-                </div>
-            )}
-
-            {isVideoNode && hasUnavailableCurrentStandardVideoInput && !hasUnsupportedMultipleImageInputs && (
-                <div className="text-amber-400 text-xs mb-2 p-2 bg-amber-900/20 rounded border border-amber-700/50">
-                    当前模型在现有输入条件下不可用，请手动切换到支持该模式的模型。
+                    {standardVideoBlockedReason}
                 </div>
             )}
 
@@ -803,10 +1484,10 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             )}
 
             {/* Controls - Hidden for storyboard-generated scenes */}
-            {!(data.prompt && data.prompt.startsWith('Extract panel #')) && (
+            {!isStoryboardGeneratedScene && !isLiblibImagePanel && (
                 <div className="flex items-center justify-between relative">
                     <div className="flex items-center gap-2">
-                        {isSwitchableNodeType(data.type) && onSwitchType && (
+                        {!isOfflineReadonlyVideoNode && isSwitchableNodeType(data.type) && onSwitchType && !isLiblibImagePanel && (
                             <select
                                 value={data.type}
                                 onChange={(e) => onSwitchType(data.id, e.target.value as SwitchableNodeType)}
@@ -887,6 +1568,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <GoogleIcon size={12} className="text-white" />
                                     ) : currentVideoModel?.provider === 'xai' ? (
                                         <Sparkles size={12} className="text-orange-400" />
+                                    ) : currentVideoModel?.provider === 'seedance' ? (
+                                        <Sparkles size={12} className="text-violet-400" />
                                     ) : currentVideoModel?.provider === 'kling' ? (
                                         <KlingIcon size={14} />
                                     ) : currentVideoModel?.provider === 'hailuo' ? (
@@ -895,6 +1578,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <Film size={12} className="text-cyan-400" />
                                     )}
                                     <span className="font-medium">{currentVideoModelLabel}</span>
+                                    {renderExecutionBadge(currentVideoExecutionSupport)}
                                     <ChevronDown size={12} className="ml-0.5 opacity-50" />
                                 </button>
 
@@ -922,14 +1606,15 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     <button
                                                         key={model.id}
                                                         onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
                                                             }`}
                                                     >
                                                         <span className="flex items-center gap-2">
                                                             <OpenAIIcon size={12} className="text-green-400" />
                                                             {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
                                                         </span>
-                                                        {currentVideoModel?.id === model.id && <Check size={12} />}
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
                                                     </button>
                                                 ))}
                                             </>
@@ -944,7 +1629,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     <button
                                                         key={model.id}
                                                         onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
                                                             }`}
                                                     >
                                                         <span className="flex items-center gap-2">
@@ -954,8 +1639,9 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                                 <Film size={12} className="text-cyan-400" />
                                                             )}
                                                             {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
                                                         </span>
-                                                        {currentVideoModel?.id === model.id && <Check size={12} />}
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
                                                     </button>
                                                 ))}
                                             </>
@@ -971,14 +1657,15 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     <button
                                                         key={model.id}
                                                         onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
                                                             }`}
                                                     >
                                                         <span className="flex items-center gap-2">
                                                             <Sparkles size={12} className="text-orange-400" />
                                                             {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
                                                         </span>
-                                                        {currentVideoModel?.id === model.id && <Check size={12} />}
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
                                                     </button>
                                                 ))}
                                             </>
@@ -994,17 +1681,18 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     <button
                                                         key={model.id}
                                                         onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
                                                             }`}
                                                     >
                                                         <span className="flex items-center gap-2">
                                                             <KlingIcon size={14} />
                                                             {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
                                                             {model.recommended && (
                                                                 <span className="text-[9px] px-1 py-0.5 bg-green-600/30 text-green-400 rounded">REC</span>
                                                             )}
                                                         </span>
-                                                        {currentVideoModel?.id === model.id && <Check size={12} />}
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
                                                     </button>
                                                 ))}
                                             </>
@@ -1020,14 +1708,15 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     <button
                                                         key={model.id}
                                                         onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
                                                             }`}
                                                     >
                                                         <span className="flex items-center gap-2">
                                                             <HailuoIcon size={14} />
                                                             {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
                                                         </span>
-                                                        {currentVideoModel?.id === model.id && <Check size={12} />}
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
                                                     </button>
                                                 ))}
                                             </>
@@ -1042,14 +1731,38 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     <button
                                                         key={model.id}
                                                         onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
                                                             }`}
                                                     >
                                                         <span className="flex items-center gap-2">
                                                             <Film size={12} className="text-cyan-400" />
                                                             {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
                                                         </span>
-                                                        {currentVideoModel?.id === model.id && <Check size={12} />}
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
+                                                    </button>
+                                                ))}
+                                            </>
+                                        )}
+
+                                        {availableVideoModels.filter(m => m.provider === 'seedance').length > 0 && (
+                                            <>
+                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
+                                                    即梦 / Seedance
+                                                </div>
+                                                {availableVideoModels.filter(m => m.provider === 'seedance').map(model => (
+                                                    <button
+                                                        key={model.id}
+                                                        onClick={() => handleVideoModelChange(model.id)}
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                            }`}
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            <Sparkles size={12} className="text-violet-400" />
+                                                            {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
+                                                        </span>
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
                                                     </button>
                                                 ))}
                                             </>
@@ -1064,14 +1777,15 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     <button
                                                         key={model.id}
                                                         onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
                                                             }`}
                                                     >
                                                         <span className="flex items-center gap-2">
                                                             <Film size={12} className="text-cyan-400" />
                                                             {model.name}
+                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
                                                         </span>
-                                                        {currentVideoModel?.id === model.id && <Check size={12} />}
+                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
                                                     </button>
                                                 ))}
                                             </>
@@ -1088,6 +1802,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 >
                                     <Sparkles size={12} className="text-cyan-400" />
                                     <span className="font-medium">{currentVoiceModel?.name ?? 'No available voice models'}</span>
+                                    {renderExecutionBadge(currentVoiceExecutionSupport)}
                                     <ChevronDown size={12} className="ml-0.5 opacity-50" />
                                 </button>
 
@@ -1106,6 +1821,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                 <span className="flex items-center gap-2">
                                                     <Sparkles size={12} className="text-cyan-400" />
                                                     {model.name}
+                                                    {renderExecutionBadge(getVoiceExecutionSupport(model.id))}
                                                 </span>
                                                 {currentVoiceModel?.id === model.id && <Check size={12} />}
                                             </button>
@@ -1113,7 +1829,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </div>
                                 )}
                             </div>
-                        ) : (
+                        ) : !isLiblibImagePanel ? (
                             <div className="relative" ref={modelDropdownRef}>
                                 <button
                                     onClick={() => setShowModelDropdown(!showModelDropdown)}
@@ -1124,10 +1840,13 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <Banana size={12} className="text-yellow-400" />
                                     ) : currentImageModel?.provider === 'openai' ? (
                                         <OpenAIIcon size={12} className="text-green-400" />
+                                    ) : currentImageModel?.provider === 'hosted' ? (
+                                        <Sparkles size={12} className="text-violet-400" />
                                     ) : (
                                         <ImageIcon size={12} className="text-cyan-400" />
                                     )}
                                     <span className="font-medium">{currentImageModel?.name ?? 'No available models'}</span>
+                                    {renderExecutionBadge(currentImageExecutionSupport)}
                                     <ChevronDown size={12} className="ml-0.5 opacity-50" />
                                 </button>
 
@@ -1159,9 +1878,32 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                         <span className="flex items-center gap-2">
                                                             <OpenAIIcon size={12} className="text-green-400" />
                                                             {model.name}
+                                                            {renderExecutionBadge(getImageExecutionSupport(model.id))}
                                                             {model.recommended && (
                                                                 <span className="text-[9px] px-1 py-0.5 bg-green-600/30 text-green-400 rounded">REC</span>
                                                             )}
+                                                        </span>
+                                                        {currentImageModel?.id === model.id && <Check size={12} />}
+                                                    </button>
+                                                ))}
+                                            </>
+                                        )}
+                                        {availableImageModels.filter(m => m.provider === 'hosted').length > 0 && (
+                                            <>
+                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
+                                                    OpenAiTeach
+                                                </div>
+                                                {availableImageModels.filter(m => m.provider === 'hosted').map(model => (
+                                                    <button
+                                                        key={model.id}
+                                                        onClick={() => handleImageModelChange(model.id)}
+                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentImageModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
+                                                            }`}
+                                                    >
+                                                        <span className="flex items-center gap-2">
+                                                            <Sparkles size={12} className="text-violet-400" />
+                                                            {model.name}
+                                                            {renderExecutionBadge(getImageExecutionSupport(model.id))}
                                                         </span>
                                                         {currentImageModel?.id === model.id && <Check size={12} />}
                                                     </button>
@@ -1184,6 +1926,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                         <span className="flex items-center gap-2">
                                                             <Banana size={12} className="text-yellow-400" />
                                                             {model.name}
+                                                            {renderExecutionBadge(getImageExecutionSupport(model.id))}
                                                         </span>
                                                         {currentImageModel?.id === model.id && <Check size={12} />}
                                                     </button>
@@ -1206,6 +1949,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                         <span className="flex items-center gap-2">
                                                             <ImageIcon size={12} className="text-cyan-400" />
                                                             {model.name}
+                                                            {renderExecutionBadge(getImageExecutionSupport(model.id))}
                                                         </span>
                                                         {currentImageModel?.id === model.id && <Check size={12} />}
                                                     </button>
@@ -1215,55 +1959,62 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </div>
                                 )}
                             </div>
-                        )}
+                        ) : null}
 
-                        {isCurrentVideoModelOffline && (
-                            <div className={`px-2.5 py-1.5 rounded-lg text-[11px] border ${isDark ? 'bg-amber-500/10 border-amber-500/30 text-amber-200' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-                                当前视频模型已下线，参数区已锁定。请先从模型下拉中切换到仍可执行的模型。
+                        {hailuoFrameExecutionNotice && !isOfflineReadonlyVideoNode && (
+                            <div className={`px-2.5 py-1.5 rounded-lg text-[11px] border ${isDark ? 'bg-sky-500/10 border-sky-500/30 text-sky-200' : 'bg-sky-50 border-sky-200 text-sky-700'}`}>
+                                {hailuoFrameExecutionNotice}
+                            </div>
+                        )}
+                        {hailuoStandardReferenceNotice && !isOfflineReadonlyVideoNode && (
+                            <div className={`px-2.5 py-1.5 rounded-lg text-[11px] border ${isDark ? 'bg-sky-500/10 border-sky-500/30 text-sky-200' : 'bg-sky-50 border-sky-200 text-sky-700'}`}>
+                                {hailuoStandardReferenceNotice}
                             </div>
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        {/* Unified Size/Ratio Dropdown (hidden for video nodes in motion-control mode) */}
-                        {(isVideoNode || isImageNode || isLocalVideoNode) && !(isVideoNode && videoGenerationMode === 'motion-control') && (
-                            <div className="relative" ref={dropdownRef}>
-                                <button
-                                    onClick={() => setShowSizeDropdown(!showSizeDropdown)}
-                                    className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border ${selectBtn}`}
-                                >
-                                    {isVideoNode && <Monitor size={12} className="text-green-400" />}
-                                    {!isVideoNode && <Crop size={12} className="text-blue-400" />}
-                                    {isVideoNode && currentSizeLabel === 'Auto' ? 'Auto' : currentSizeLabel}
-                                </button>
-
-                                {/* Dropdown Menu */}
-                                {showSizeDropdown && (
-                                    <div
-                                        className={`absolute bottom-full mb-2 right-0 w-32 rounded-lg shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-60 overflow-y-auto border ${dropdownPanel}`}
-                                        onWheel={(e) => e.stopPropagation()}
+                    {!isOfflineReadonlyVideoNode && !isLiblibImagePanel && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {/* Unified Size/Ratio Dropdown (hidden for video nodes in motion-control mode) */}
+                            {(isVideoNode || isImageNode || isLocalVideoNode) && !(isVideoNode && videoGenerationMode === 'motion-control') && (!isVideoNode || canEditVideoParameters) && (
+                                <div className="relative" ref={dropdownRef}>
+                                    <button
+                                        onClick={() => !shouldLockVideoParameterControls && setShowSizeDropdown(!showSizeDropdown)}
+                                        disabled={shouldLockVideoParameterControls}
+                                        className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border ${selectBtn} ${shouldLockVideoParameterControls ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
-                                        <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${isDark ? 'bg-[#1f1f1f] text-neutral-500' : 'bg-neutral-50 text-neutral-500'}`}>
-                                            {isVideoNode ? 'Resolution' : 'Aspect Ratio'}
+                                        {isVideoNode && <Monitor size={12} className="text-green-400" />}
+                                        {!isVideoNode && <Crop size={12} className="text-blue-400" />}
+                                        {isVideoNode && currentSizeLabel === 'Auto' ? 'Auto' : currentSizeLabel}
+                                    </button>
+
+                                    {/* Dropdown Menu */}
+                                    {showSizeDropdown && (
+                                        <div
+                                            className={`absolute bottom-full mb-2 right-0 w-32 rounded-lg shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100 flex flex-col max-h-60 overflow-y-auto border ${dropdownPanel}`}
+                                            onWheel={(e) => e.stopPropagation()}
+                                        >
+                                            <div className={`px-3 py-2 text-[10px] font-bold uppercase tracking-wider ${isDark ? 'bg-[#1f1f1f] text-neutral-500' : 'bg-neutral-50 text-neutral-500'}`}>
+                                                {isVideoNode ? 'Resolution' : 'Aspect Ratio'}
+                                            </div>
+                                            {sizeOptions.map(option => (
+                                                <button
+                                                    key={option}
+                                                    onClick={() => handleSizeSelect(option)}
+                                                    className={`flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentSizeLabel === option ? 'text-blue-400' : 'text-neutral-300'
+                                                        }`}
+                                                >
+                                                    <span>{option}</span>
+                                                    {currentSizeLabel === option && <Check size={12} />}
+                                                </button>
+                                            ))}
                                         </div>
-                                        {sizeOptions.map(option => (
-                                            <button
-                                                key={option}
-                                                onClick={() => handleSizeSelect(option)}
-                                                className={`flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${currentSizeLabel === option ? 'text-blue-400' : 'text-neutral-300'
-                                                    }`}
-                                            >
-                                                <span>{option}</span>
-                                                {currentSizeLabel === option && <Check size={12} />}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                                    )}
+                                </div>
+                            )}
 
                         {/* Image Resolution Dropdown - Only for Image nodes */}
-                        {!isVideoNode && currentImageModel?.resolutions?.length && (
+                        {!isVideoNode && currentImageModel?.resolutions?.length && !isLiblibImagePanel && (
                             <div className="relative" ref={resolutionDropdownRef}>
                                 <button
                                     onClick={() => !shouldLockVideoParameterControls && setShowResolutionDropdown(!showResolutionDropdown)}
@@ -1299,7 +2050,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         )}
 
                         {/* Video Aspect Ratio Dropdown - Only for video nodes (hidden in motion-control mode) */}
-                        {isVideoNode && videoGenerationMode !== 'motion-control' && availableVideoAspectRatios.length > 0 && (
+                        {isVideoNode && canEditVideoParameters && videoGenerationMode !== 'motion-control' && availableVideoAspectRatios.length > 0 && (
                             <div className="relative" ref={aspectRatioDropdownRef}>
                                 <button
                                     onClick={() => !shouldLockVideoParameterControls && setShowAspectRatioDropdown(!showAspectRatioDropdown)}
@@ -1332,7 +2083,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         )}
 
                         {/* Duration Dropdown - Only for video nodes (hidden in motion-control mode) */}
-                        {isVideoNode && videoGenerationMode !== 'motion-control' && availableDurations.length > 0 && (
+                        {isVideoNode && canEditVideoParameters && videoGenerationMode !== 'motion-control' && availableDurations.length > 0 && (
                             <div className="relative" ref={durationDropdownRef}>
                                 <button
                                     onClick={() => !shouldLockVideoParameterControls && setShowDurationDropdown(!showDurationDropdown)}
@@ -1371,18 +2122,25 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             const isInvalidFrameMode = isVideoNode && selectedVideoMode === 'frame-to-frame' && frameInputsWithUrls.length < 2;
                             const isInvalidMotionMode = isVideoNode && selectedVideoMode === 'motion-control' && !canUseMotionMode;
                             const isUnsupportedSelectedMode = isSelectedVideoModeUnsupported;
-                            const isUnsupportedMultiImageVideo = hasUnsupportedMultipleImageInputs || (isVideoNode && !supportsCurrentStandardInputMode);
+                            const isStandardVideoInputBlocked = selectedVideoMode === 'standard' && Boolean(standardVideoBlockedReason);
+                            const isHostedTokenMissing =
+                                (isVideoNode && currentVideoExecutionSupport?.mode === 'hosted-token' && !hasHostedToken) ||
+                                (isRegistryImageNode && currentImageExecutionSupport?.mode === 'hosted-token' && !hasHostedToken);
                             const isModelUnavailable =
                                 (isVideoNode && !hasAvailableVideoModels) ||
                                 (isRegistryImageNode && !hasAvailableImageModels) ||
                                 (isAudioNode && !hasAvailableVoiceModels);
-                            const isGenerateBlocked = isFaceModeBlocked || isLocalVideoBlocked || isInvalidFrameMode || isInvalidMotionMode || isUnsupportedSelectedMode || isUnsupportedMultiImageVideo || isModelUnavailable || shouldLockVideoParameterControls;
+                            const isGenerateBlocked = isFaceModeBlocked || isLocalVideoBlocked || isInvalidFrameMode || isInvalidMotionMode || isUnsupportedSelectedMode || isStandardVideoInputBlocked || isHostedTokenMissing || isModelUnavailable || shouldLockVideoParameterControls;
                             const generateTitle = isModelUnavailable
                                 ? isVideoNode
                                     ? '当前模式下没有可用的视频模型'
                                     : isAudioNode
                                         ? '当前没有可用的语音模型'
                                     : '当前输入条件下没有可用的图片模型'
+                                : isHostedTokenMissing
+                                ? isVideoNode
+                                    ? '当前视频模式需要先在设置里绑定 OpenAiTeach Token。'
+                                    : '当前图片模型需要先在设置里绑定 OpenAiTeach Token。'
                                 : shouldLockVideoParameterControls
                                 ? '当前视频模型已下线，请先切换到仍可执行的模型。'
                                 : isLocalVideoBlocked
@@ -1393,8 +2151,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     ? '请先连接两张图片后再使用首尾帧模式'
                                         : isInvalidMotionMode
                                             ? '请先连接视频参考和角色图片后再使用运动参考模式'
-                                        : isUnsupportedMultiImageVideo
-                                            ? '当前后端尚未接通标准模式的多图/全图参考，请先减少为单图，或改用已接通的专用模式。'
+                                        : isStandardVideoInputBlocked
+                                            ? (standardVideoBlockedReason ?? '当前视频模型尚未接通当前标准输入模式，请切换模型或调整输入后再试。')
                                             : t('nodeControls.generate');
 
                             return (
@@ -1426,6 +2184,16 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 </button>
                             );
                         })()}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {isVideoNode && shouldLockVideoParameterControls && (
+                <div className={`mt-2 pt-2 border-t ${isDark ? 'border-neutral-800' : 'border-neutral-200'}`}>
+                    <div className={`rounded-xl border px-3 py-3 text-xs leading-6 ${isDark ? 'border-amber-500/30 bg-amber-500/10 text-amber-200' : 'border-amber-200 bg-amber-50 text-amber-700'}`}>
+                        当前视频模型已下线，参数区和高级设置已切换为只读提示态。
+                        请先从模型下拉切换到仍可执行的视频模型，再继续调整秒数、比例、分辨率或高级模式。
                     </div>
                 </div>
             )}
@@ -1433,7 +2201,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
             {/* Advanced Settings Drawer - Only for Video nodes */}
             {
-                isVideoNode && (
+                isVideoNode && canEditVideoParameters && (
                     <div className="mt-2 pt-2 border-t border-neutral-800">
                         <button
                             onClick={() => setShowAdvanced(!showAdvanced)}
@@ -1452,49 +2220,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         {/* Advanced Settings Content - Only for Video nodes */}
                         {showAdvanced && isVideoNode && (
                             <div className="mt-3 space-y-3">
-                                {videoModeOptions.length > 1 && (
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] text-neutral-500 uppercase tracking-wider">
-                                            生成模式
-                                        </label>
-                                        <div className="flex flex-wrap gap-2">
-                                            {videoModeOptions.map((mode) => (
-                                                (() => {
-                                                    const isDisabled =
-                                                        shouldLockVideoParameterControls ||
-                                                        (mode.id === 'frame-to-frame' && !canUseFrameMode) ||
-                                                        (mode.id === 'motion-control' && !canUseMotionMode);
-                                                    const title =
-                                                        mode.id === 'frame-to-frame'
-                                                            ? '需要两张图片输入'
-                                                            : mode.id === 'motion-control'
-                                                                ? '需要一个视频参考和一张角色图片'
-                                                                : undefined;
-                                                    return (
-                                                <button
-                                                    key={mode.id}
-                                                    onClick={() => !isDisabled && handleVideoModeChange(mode.id as 'standard' | 'frame-to-frame' | 'motion-control')}
-                                                    disabled={isDisabled}
-                                                    title={title}
-                                                    className={`px-2.5 py-1.5 rounded-lg text-xs border transition-colors ${
-                                                        selectedVideoMode === mode.id
-                                                            ? 'bg-indigo-600 text-white border-indigo-500'
-                                                            : isDisabled
-                                                                ? 'bg-neutral-900/40 text-neutral-500 border-neutral-800 cursor-not-allowed opacity-60'
-                                                                : 'bg-neutral-800/60 text-neutral-300 border-neutral-700 hover:bg-neutral-700'
-                                                    }`}
-                                                >
-                                                    {mode.label}
-                                                </button>
-                                                    );
-                                                })()
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-
                                 {/* Audio Toggle - Capability driven */}
-                                {currentVideoModeCapability?.supportsAudio && (
+                                {!shouldLockVideoParameterControls && currentVideoModeCapability?.supportsAudio && (
                                     <div className="inline-flex items-center gap-2 px-2.5 py-1.5 bg-neutral-800/50 rounded-lg w-fit">
                                         <svg className="w-3.5 h-3.5 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                             <path strokeLinecap="round" strokeLinejoin="round" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
@@ -1512,7 +2239,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </div>
                                 )}
 
-                                {standardReferencePreviewItems.length > 0 && (
+                                {!shouldLockVideoParameterControls && standardReferencePreviewItems.length > 0 && (
                                     <div className="space-y-2">
                                         <label className="text-[10px] text-neutral-500 uppercase tracking-wider">
                                             {standardReferenceTitle}
@@ -1523,13 +2250,23 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                     key={input.nodeId}
                                                     className="flex flex-col gap-2 p-2 bg-neutral-800 rounded-lg border border-neutral-700/50"
                                                 >
-                                                    <div className="relative w-full aspect-video overflow-hidden rounded bg-black flex items-center justify-center">
-                                                        {input.url ? (
-                                                            <img
-                                                                src={input.url}
-                                                                alt={input.label}
-                                                                className="w-full h-full object-contain"
-                                                            />
+                                                        <div className="relative w-full aspect-video overflow-hidden rounded bg-black flex items-center justify-center">
+                                                            {input.url ? (
+                                                                input.type === NodeType.VIDEO ? (
+                                                                    <video
+                                                                        src={input.url}
+                                                                        className="w-full h-full object-cover"
+                                                                        muted
+                                                                        playsInline
+                                                                        preload="metadata"
+                                                                    />
+                                                                ) : (
+                                                                    <img
+                                                                        src={input.url}
+                                                                        alt={input.label}
+                                                                        className="w-full h-full object-contain"
+                                                                    />
+                                                                )
                                                         ) : (
                                                             <div className="text-[10px] text-neutral-600">{t('nodeControls.noPreview')}</div>
                                                         )}

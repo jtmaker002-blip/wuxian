@@ -9,8 +9,8 @@ import { NodeData, NodeType, NodeStatus } from '../types';
 import { generateAudio, generateImage, generateVideo } from '../services/generationService';
 import { generateLocalImage } from '../services/localModelService';
 import { extractVideoLastFrame } from '../utils/videoHelpers';
+import { useStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
 import {
-    DEFAULT_REGISTRY_VIDEO_ID,
     DEFAULT_REGISTRY_IMAGE_ID,
     canonicalizeImageModelId,
     canonicalizeVideoModelId,
@@ -18,7 +18,8 @@ import {
     mapRegistryVideoIdToServerVideoId,
 } from '../config/registryModelBridge';
 import { getAllVoiceCapabilities, getVideoCapability, getVoiceCapability } from '../config/modelCapabilities';
-import { resolveStandardVideoExecutionState, resolveStandardVideoInputState, sanitizeVideoNodeState } from '../utils/videoCapabilityState';
+import { getImageExecutionSupport, getVideoExecutionSupportForContext, getVoiceExecutionSupport } from '../config/modelExecutionSupport';
+import { resolveStandardVideoCapabilityState, sanitizeVideoNodeState } from '../utils/videoCapabilityState';
 import { getVideoModeAvailabilityState, resolveEffectiveVideoMode } from '../utils/videoModeResolution';
 
 interface UseGenerationProps {
@@ -27,6 +28,8 @@ interface UseGenerationProps {
 }
 
 export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
+    const providerConfig = useStoredOpenAiTeachProviderConfig();
+
     // ============================================================================
     // HELPERS
     // ============================================================================
@@ -96,6 +99,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
     const handleGenerate = async (id: string) => {
         const node = nodes.find(n => n.id === id);
         if (!node) return;
+        const hasHostedToken = Boolean(providerConfig.providerApiKey);
 
         // Get prompts from connected TEXT nodes (if any)
         const getTextNodePrompts = (): string[] => {
@@ -112,7 +116,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
 
         const canonicalVideoModel =
             node.type === NodeType.VIDEO
-                ? (node.videoModel ? canonicalizeVideoModelId(node.videoModel) : DEFAULT_REGISTRY_VIDEO_ID)
+                ? (node.videoModel ? canonicalizeVideoModelId(node.videoModel) : undefined)
                 : node.videoModel;
         const videoCapability = node.type === NodeType.VIDEO ? getVideoCapability(canonicalVideoModel) : undefined;
         const normalizedVideoNode =
@@ -158,6 +162,31 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                         Boolean(candidate.resultUrl)
                 )
                 : [];
+        const standardVideoSources =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? connectedParentNodes.flatMap((candidate) => {
+                    if (!candidate) return [];
+                    if (candidate.type === NodeType.IMAGE && candidate.resultUrl) {
+                        return [{
+                            nodeId: candidate.id,
+                            type: 'image' as const,
+                            url: candidate.resultUrl,
+                            previewUrl: candidate.resultUrl,
+                        }];
+                    }
+
+                    if (candidate.type === NodeType.VIDEO && candidate.lastFrame) {
+                        return [{
+                            nodeId: candidate.id,
+                            type: 'image' as const,
+                            url: candidate.lastFrame,
+                            previewUrl: candidate.lastFrame,
+                        }];
+                    }
+
+                    return [];
+                })
+                : [];
         const hasLegacyFrameFallback = connectedFrameSourceNodes.length >= 2;
         const resolvedExplicitFrameInputs =
             normalizedVideoNode.type === NodeType.VIDEO
@@ -198,6 +227,14 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
             return;
         }
 
+        if (node.type === NodeType.VIDEO && !node.videoModel) {
+            updateNode(id, {
+                status: NodeStatus.ERROR,
+                errorMessage: '请先为当前视频节点选择模型，再开始生成。',
+            });
+            return;
+        }
+
         if (node.type === NodeType.VIDEO && !videoCapability) {
             updateNode(id, {
                 status: NodeStatus.ERROR,
@@ -227,8 +264,17 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
         try {
             if (node.type === NodeType.IMAGE || node.type === NodeType.IMAGE_EDITOR) {
                 const canonicalImageModel = canonicalizeImageModelId(node.imageModel) ?? DEFAULT_REGISTRY_IMAGE_ID;
+                const imageExecutionSupport = getImageExecutionSupport(canonicalImageModel);
                 if (canonicalImageModel !== node.imageModel) {
                     updateNode(id, { imageModel: canonicalImageModel });
+                }
+
+                if (imageExecutionSupport?.mode === 'hosted-token' && !hasHostedToken) {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: '当前图片模型需要先在设置里绑定 OpenAiTeach Token 后才能生成。',
+                    });
+                    return;
                 }
 
                 // Collect ALL parent images for multi-input generation
@@ -376,17 +422,11 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 let imageBase64: string | undefined;
                 let lastFrameBase64: string | undefined;
 
-                // Get non-TEXT parent nodes
-                const nonTextParentIds = node.parentIds?.filter(pid => {
-                    const parent = nodes.find(n => n.id === pid);
-                    return parent?.type !== NodeType.TEXT;
-                }) || [];
                 const frameImageParentIds = connectedFrameSourceNodes.map((parent) => parent.id);
-                const standardVideoExecutionState =
+                const standardVideoCapabilityState =
                     activeVideoMode === 'standard'
-                        ? resolveStandardVideoExecutionState(videoCapability, {
-                            imageUrls: connectedFrameSourceNodes.map((parent) => parent.resultUrl),
-                            hasInputSource: nonTextParentIds.length > 0,
+                        ? resolveStandardVideoCapabilityState(videoCapability, {
+                            sources: standardVideoSources,
                         })
                         : undefined;
 
@@ -405,21 +445,27 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
 
                 // Only evaluate as frame-to-frame if NOT in motion control mode
                 const isFrameToFrame = !isMotionControl && activeVideoMode === 'frame-to-frame';
-                const hasUnsupportedMultiImageVideo = Boolean(standardVideoExecutionState?.hasUnsupportedMultipleImageInputs);
-                const referenceImagesBase64 = standardVideoExecutionState?.referenceImageUrls;
+                const referenceImagesBase64 = standardVideoCapabilityState?.referenceImageUrls;
+                const standardPrimaryInputBase64 = standardVideoCapabilityState?.primaryInputUrl;
 
-                if (hasUnsupportedMultiImageVideo) {
+                if (activeVideoMode === 'standard' && standardVideoCapabilityState?.isBlocked) {
                     updateNode(id, {
                         status: NodeStatus.ERROR,
-                        errorMessage: '当前后端尚未接通标准模式的多图/全图参考，请先减少为单图，或改用已接通的专用模式。',
+                        errorMessage: standardVideoCapabilityState.blockedReason,
                     });
                     return;
                 }
 
-                if (activeVideoMode === 'standard' && standardVideoExecutionState && !standardVideoExecutionState.supportsCurrentInputMode) {
+                const videoExecutionSupport = getVideoExecutionSupportForContext(normalizedVideoNode.videoModel, {
+                    videoMode: activeVideoMode,
+                    usesReferenceImages: Boolean(standardVideoCapabilityState?.usesReferenceImages),
+                    hasHostedToken,
+                });
+
+                if (videoExecutionSupport?.mode === 'hosted-token' && !hasHostedToken) {
                     updateNode(id, {
                         status: NodeStatus.ERROR,
-                        errorMessage: '当前视频模型尚未接通当前标准输入模式，请切换模型或调整输入后再试。',
+                        errorMessage: '当前视频模式需要先在设置里绑定 OpenAiTeach Token 后才能生成。',
                     });
                     return;
                 }
@@ -438,32 +484,24 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                         if (parent1?.resultUrl) imageBase64 = parent1.resultUrl;
                         if (parent2?.resultUrl) lastFrameBase64 = parent2.resultUrl;
                     }
-                } else if (nonTextParentIds.length > 0) {
-                    // Standard mode or Motion Control: get character reference or first parent image
-                    if (isMotionControl) {
-                        // For Motion Control, look specifically for an IMAGE parent as character reference
-                        const characterParent = connectedFrameSourceNodes[0];
+                } else if (isMotionControl) {
+                    // For Motion Control, look specifically for an IMAGE parent as character reference
+                    const characterParent = connectedFrameSourceNodes[0];
 
-                        if (characterParent?.resultUrl) {
-                            imageBase64 = characterParent.resultUrl;
-                        }
-                    } else if (!referenceImagesBase64) {
-                        // Standard mode: get first parent image or video last frame
-                        const parent = nodes.find(n => n.id === nonTextParentIds[0]);
-
-                        if (parent?.type === NodeType.VIDEO && parent.lastFrame) {
-                            // Use last frame from parent video
-                            imageBase64 = parent.lastFrame;
-                        } else if (parent?.resultUrl) {
-                            // Use parent image directly
-                            imageBase64 = parent.resultUrl;
-                        }
+                    if (characterParent?.resultUrl) {
+                        imageBase64 = characterParent.resultUrl;
                     }
+                } else if (!referenceImagesBase64) {
+                    imageBase64 = standardPrimaryInputBase64;
                 }
 
                 // Generate video
                 const mappedVideoModel = mapRegistryVideoIdToServerVideoId(normalizedVideoNode.videoModel);
-                if (!mappedVideoModel) {
+                const requestVideoModel =
+                    videoExecutionSupport?.mode === 'hosted-token'
+                        ? normalizedVideoNode.videoModel
+                        : mappedVideoModel;
+                if (!requestVideoModel) {
                     updateNode(id, {
                         status: NodeStatus.ERROR,
                         errorMessage: '当前视频模型在后端尚未接通真实执行链，请切换到已接通的可执行视频模型。',
@@ -471,7 +509,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     return;
                 }
 
-                const rawResultUrl = await generateVideo({
+                const videoGenerationResult = await generateVideo({
                     prompt: combinedPrompt,
                     imageBase64,
                     referenceImagesBase64,
@@ -479,11 +517,12 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     aspectRatio: normalizedVideoNode.aspectRatio,
                     resolution: normalizedVideoNode.resolution,
                     duration: normalizedVideoNode.videoDuration,
-                    videoModel: mappedVideoModel,
+                    videoModel: requestVideoModel,
                     motionReferenceUrl,
                     generateAudio: normalizedVideoNode.generateAudio === true,
                     nodeId: id
                 });
+                const rawResultUrl = videoGenerationResult.resultUrl;
 
                 // Add cache-busting parameter to force browser to fetch new video
                 // (Backend uses nodeId as filename, so URL is the same for regenerated videos)
@@ -516,19 +555,38 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     resultAspectRatio,
                     aspectRatio,
                     lastFrame,
+                    requestedVideoModel: videoGenerationResult.requestedModel,
+                    executedVideoModel: videoGenerationResult.executedModel,
+                    executedVideoMode: videoGenerationResult.executedMode,
+                    executionProvider: videoGenerationResult.executionProvider,
                     errorMessage: undefined // Clear any previous error
                 });
 
             } else if (node.type === NodeType.AUDIO) {
                 const availableVoiceCapabilities = getAllVoiceCapabilities();
-                const fallbackAudioModel = Object.keys(availableVoiceCapabilities)[0];
-                const selectedAudioModel = node.audioModel || node.model || fallbackAudioModel;
+                const selectedAudioModel = node.audioModel || node.model;
+                if (!selectedAudioModel) {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: '请先为当前语音节点选择模型，再开始生成。',
+                    });
+                    return;
+                }
                 const voiceCapability = getVoiceCapability(selectedAudioModel);
+                const voiceExecutionSupport = getVoiceExecutionSupport(selectedAudioModel);
 
                 if (!voiceCapability) {
                     updateNode(id, {
                         status: NodeStatus.ERROR,
                         errorMessage: '当前语音模型在前端能力表中不存在，请先切换到可用语音模型。',
+                    });
+                    return;
+                }
+
+                if (voiceExecutionSupport?.mode === 'unimplemented') {
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: voiceExecutionSupport.note,
                     });
                     return;
                 }

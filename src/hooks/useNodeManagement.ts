@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import { NodeData, NodeType, NodeStatus, Viewport } from '../types';
-import { isSwitchableNodeType, type SwitchableNodeType } from '../config/nodeTypeRegistry';
+import { getDefaultModelForNodeType, isSwitchableNodeType, type SwitchableNodeType } from '../config/nodeTypeRegistry';
 import { switchNodeTypeData } from '../utils/nodeTypeSwitch';
 
 export const useNodeManagement = () => {
@@ -47,8 +47,16 @@ export const useNodeManagement = () => {
             y: parentId ? canvasY : canvasY - 100,
             prompt: '',
             status: NodeStatus.IDLE,
-            model: 'Banana Pro',
-            aspectRatio: 'Auto',
+            model:
+                type === NodeType.IMAGE
+                    ? getDefaultModelForNodeType(NodeType.IMAGE)
+                    : type === NodeType.VIDEO
+                        ? getDefaultModelForNodeType(NodeType.VIDEO)
+                        : 'Banana Pro',
+            imageModel: type === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
+            videoModel: type === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
+            videoMode: type === NodeType.VIDEO ? 'standard' : undefined,
+            aspectRatio: type === NodeType.VIDEO ? '16:9' : 'Auto',
             resolution: 'Auto',
             parentIds: parentId ? [parentId] : []
         };
@@ -127,40 +135,189 @@ export const useNodeManagement = () => {
             const sourceNode = nodes.find(n => n.id === contextMenu.sourceNodeId);
             if (sourceNode) {
                 const direction = contextMenu.connectorSide || 'right';
+                const canCreatePrependConnection = (sourceType: NodeType, nextType: NodeType) => {
+                    if (direction !== 'left') return true;
+                    if (sourceType === NodeType.IMAGE || sourceType === NodeType.IMAGE_EDITOR) {
+                        return nextType === NodeType.TEXT || nextType === NodeType.IMAGE || nextType === NodeType.IMAGE_EDITOR;
+                    }
+                    if (sourceType === NodeType.VIDEO || sourceType === NodeType.VIDEO_EDITOR) {
+                        return nextType === NodeType.TEXT || nextType === NodeType.VIDEO || nextType === NodeType.VIDEO_EDITOR;
+                    }
+                    if (sourceType === NodeType.TEXT) {
+                        return false;
+                    }
+                    return true;
+                };
+                if (!canCreatePrependConnection(sourceNode.type, type)) {
+                    onCloseMenu();
+                    return;
+                }
                 const newNodeId = crypto.randomUUID();
                 const GAP = 100;
                 const NODE_WIDTH = 340;
+                const dropCanvasPosition = contextMenu.dropCanvasPosition;
+                const defaultNodeWidth =
+                    type === NodeType.VIDEO || type === NodeType.LOCAL_VIDEO_MODEL
+                        ? 385
+                        : 365;
+                const defaultNodeHeight =
+                    type === NodeType.VIDEO || type === NodeType.LOCAL_VIDEO_MODEL
+                        ? 385 / (16 / 9)
+                        : type === NodeType.AUDIO
+                            ? 365 / (16 / 7)
+                            : 365 / (4 / 3);
+                const fallbackX = direction === 'right'
+                    ? sourceNode.x + NODE_WIDTH + GAP
+                    : sourceNode.x - NODE_WIDTH - GAP;
+                const fallbackY = sourceNode.y;
+                const spawnX = dropCanvasPosition
+                    ? dropCanvasPosition.x + (direction === 'right' ? 24 : -defaultNodeWidth - 24)
+                    : fallbackX;
+                const spawnY = dropCanvasPosition
+                    ? dropCanvasPosition.y - defaultNodeHeight / 2
+                    : fallbackY;
+                const sourceFeedsImageFlow =
+                    sourceNode.type === NodeType.IMAGE || sourceNode.type === NodeType.IMAGE_EDITOR;
 
                 let newNode: NodeData;
 
                 if (direction === 'right') {
                     // Append: Source -> New
-                    newNode = {
-                        id: newNodeId,
-                        type,
-                        x: sourceNode.x + NODE_WIDTH + GAP,
-                        y: sourceNode.y,
-                        prompt: '',
-                        status: NodeStatus.IDLE,
-                        model: 'Banana Pro',
-                        aspectRatio: 'Auto',
-                        resolution: 'Auto',
-                        parentIds: contextMenu.sourceNodeId ? [contextMenu.sourceNodeId] : []
-                    };
+                    if (sourceFeedsImageFlow && type === NodeType.VIDEO) {
+                        newNode = {
+                            id: newNodeId,
+                            type,
+                            x: spawnX,
+                            y: spawnY,
+                            prompt: sourceNode.prompt?.trim() || '基于已接入的图片素材生成视频',
+                            status: NodeStatus.IDLE,
+                            model: getDefaultModelForNodeType(NodeType.VIDEO),
+                            videoModel: getDefaultModelForNodeType(NodeType.VIDEO),
+                            videoMode: 'standard',
+                            aspectRatio: sourceNode.aspectRatio && sourceNode.aspectRatio !== 'Auto' ? sourceNode.aspectRatio : '16:9',
+                            resolution: 'Auto',
+                            inputUrl: sourceNode.resultUrl,
+                            parentIds: [contextMenu.sourceNodeId],
+                            isPromptExpanded: true,
+                        };
+                    } else if (sourceFeedsImageFlow && type === NodeType.IMAGE) {
+                        newNode = {
+                            id: newNodeId,
+                            type,
+                            x: spawnX,
+                            y: spawnY,
+                            prompt: sourceNode.prompt || '',
+                            status: NodeStatus.IDLE,
+                            model: getDefaultModelForNodeType(NodeType.IMAGE),
+                            imageModel: getDefaultModelForNodeType(NodeType.IMAGE),
+                            aspectRatio: 'Auto',
+                            resolution: 'Auto',
+                            parentIds: [contextMenu.sourceNodeId],
+                            isPromptExpanded: true,
+                        };
+                    } else if (sourceFeedsImageFlow && type === NodeType.TEXT) {
+                        newNode = {
+                            id: newNodeId,
+                            type,
+                            x: spawnX,
+                            y: spawnY,
+                            prompt: sourceNode.prompt || '基于这张图片补充文本描述',
+                            status: NodeStatus.IDLE,
+                            model: 'Banana Pro',
+                            aspectRatio: 'Auto',
+                            resolution: 'Auto',
+                            inputUrl: sourceNode.resultUrl,
+                            parentIds: [contextMenu.sourceNodeId],
+                            textMode: 'editing',
+                            isPromptExpanded: true,
+                            title: '文本节点',
+                        };
+                    } else if (sourceFeedsImageFlow && type === NodeType.AUDIO) {
+                        const audioModel = getDefaultModelForNodeType(NodeType.AUDIO);
+                        newNode = {
+                            id: newNodeId,
+                            type,
+                            x: spawnX,
+                            y: spawnY,
+                            prompt: sourceNode.prompt || '',
+                            status: NodeStatus.IDLE,
+                            model: audioModel,
+                            audioModel,
+                            aspectRatio: 'Auto',
+                            resolution: 'Auto',
+                            parentIds: [contextMenu.sourceNodeId],
+                            isPromptExpanded: true,
+                        };
+                    } else {
+                        newNode = {
+                            id: newNodeId,
+                            type,
+                            x: spawnX,
+                            y: spawnY,
+                            prompt: '',
+                            status: NodeStatus.IDLE,
+                            model:
+                                type === NodeType.IMAGE
+                                    ? getDefaultModelForNodeType(NodeType.IMAGE)
+                                    : type === NodeType.VIDEO
+                                        ? getDefaultModelForNodeType(NodeType.VIDEO)
+                                        : type === NodeType.AUDIO
+                                            ? getDefaultModelForNodeType(NodeType.AUDIO)
+                                            : 'Banana Pro',
+                            imageModel: type === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
+                            videoModel: type === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
+                            videoMode: type === NodeType.VIDEO ? 'standard' : undefined,
+                            audioModel: type === NodeType.AUDIO ? getDefaultModelForNodeType(NodeType.AUDIO) : undefined,
+                            aspectRatio: type === NodeType.VIDEO ? '16:9' : 'Auto',
+                            resolution: 'Auto',
+                            parentIds: contextMenu.sourceNodeId ? [contextMenu.sourceNodeId] : [],
+                            textMode: type === NodeType.TEXT ? 'editing' : undefined,
+                        };
+                    }
                 } else {
                     // Prepend: New -> Source
-                    newNode = {
-                        id: newNodeId,
-                        type,
-                        x: sourceNode.x - NODE_WIDTH - GAP,
-                        y: sourceNode.y,
-                        prompt: '',
-                        status: NodeStatus.IDLE,
-                        model: 'Banana Pro',
-                        aspectRatio: 'Auto',
-                        resolution: 'Auto',
-                        parentIds: []
-                    };
+                    if (sourceFeedsImageFlow && type === NodeType.TEXT) {
+                        newNode = {
+                            id: newNodeId,
+                            type,
+                            x: spawnX,
+                            y: spawnY,
+                            prompt: sourceNode.prompt || '基于这张图片补充文本描述',
+                            status: NodeStatus.IDLE,
+                            model: 'Banana Pro',
+                            aspectRatio: 'Auto',
+                            resolution: 'Auto',
+                            parentIds: [],
+                            textMode: 'editing',
+                            isPromptExpanded: true,
+                            title: '文本节点',
+                        };
+                    } else {
+                        newNode = {
+                            id: newNodeId,
+                            type,
+                            x: spawnX,
+                            y: spawnY,
+                            prompt: '',
+                            status: NodeStatus.IDLE,
+                            model:
+                                type === NodeType.IMAGE
+                                    ? getDefaultModelForNodeType(NodeType.IMAGE)
+                                    : type === NodeType.VIDEO
+                                        ? getDefaultModelForNodeType(NodeType.VIDEO)
+                                        : type === NodeType.AUDIO
+                                            ? getDefaultModelForNodeType(NodeType.AUDIO)
+                                        : 'Banana Pro',
+                            imageModel: type === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
+                            videoModel: type === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
+                            videoMode: type === NodeType.VIDEO ? 'standard' : undefined,
+                            audioModel: type === NodeType.AUDIO ? getDefaultModelForNodeType(NodeType.AUDIO) : undefined,
+                            aspectRatio: type === NodeType.VIDEO ? '16:9' : 'Auto',
+                            resolution: 'Auto',
+                            parentIds: [],
+                            textMode: type === NodeType.TEXT ? 'editing' : undefined
+                        };
+                    }
                     // Update source to add new node as parent
                     const existingParentIds = sourceNode.parentIds || [];
                     updateNode(contextMenu.sourceNodeId, { parentIds: [...existingParentIds, newNodeId] });

@@ -8,6 +8,7 @@
 import React from 'react';
 import { NodeData, NodeType, NodeStatus } from '../types';
 import { generateCameraAngle } from '../services/cameraAngleService';
+import { getDefaultModelForNodeType } from '../config/nodeTypeRegistry';
 
 // ============================================================================
 // TYPES
@@ -48,12 +49,14 @@ export const useImageNodeHandlers = ({
             type: NodeType.IMAGE,
             x: imageNode.x + NODE_WIDTH + GAP,
             y: imageNode.y,
-            prompt: '',
+            prompt: imageNode.prompt || '',
             status: NodeStatus.IDLE,
-            model: 'Banana Pro',
+            model: getDefaultModelForNodeType(NodeType.IMAGE),
+            imageModel: getDefaultModelForNodeType(NodeType.IMAGE),
             aspectRatio: 'Auto',
             resolution: 'Auto',
-            parentIds: [nodeId] // Connect to the source image node
+            parentIds: [nodeId], // Connect to the source image node
+            isPromptExpanded: true,
         };
 
         // Add new image node
@@ -79,12 +82,16 @@ export const useImageNodeHandlers = ({
             type: NodeType.VIDEO,
             x: imageNode.x + NODE_WIDTH + GAP,
             y: imageNode.y,
-            prompt: '',
+            prompt: imageNode.prompt || '基于已接入的图片素材生成视频',
             status: NodeStatus.IDLE,
-            model: 'Banana Pro',
-            aspectRatio: 'Auto',
+            model: getDefaultModelForNodeType(NodeType.VIDEO),
+            videoModel: getDefaultModelForNodeType(NodeType.VIDEO),
+            videoMode: 'standard',
+            aspectRatio: imageNode.aspectRatio && imageNode.aspectRatio !== 'Auto' ? imageNode.aspectRatio : '16:9',
             resolution: 'Auto',
-            parentIds: [nodeId] // Connect to the source image node
+            inputUrl: imageNode.resultUrl,
+            parentIds: [nodeId], // Connect to the source image node
+            isPromptExpanded: true,
         };
 
         // Add new video node

@@ -15,6 +15,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createChatGraph, generateTopicTitle } from "./graph/chatGraph.js";
 import { HumanMessage, AIMessage } from "@langchain/core/messages";
+import { generateOpenAIText } from '../services/openai.js';
+import { CHAT_AGENT_SYSTEM_PROMPT, TOPIC_GENERATION_PROMPT } from './prompts/system.js';
 
 // ============================================================================
 // FILE PATHS
@@ -295,9 +297,9 @@ export function getSessionData(sessionId) {
  * @param {string} apiKey - Google AI API key
  * @returns {Promise<object>} { response: string, topic?: string }
  */
-export async function sendMessage(sessionId, content, media, apiKey) {
+export async function sendMessage(sessionId, content, media, apiKey, providerBaseUrl) {
     const session = getSession(sessionId);
-    const graph = createChatGraph();
+    const graph = providerBaseUrl ? null : createChatGraph();
 
     // Debug: Log session state
     console.log(`[Chat] Session ${sessionId} has ${session.messages.length} existing messages`);
@@ -359,13 +361,30 @@ export async function sendMessage(sessionId, content, media, apiKey) {
     console.log(`[Chat] Sending ${session.messages.length} messages to LLM`);
 
     // Invoke the graph
-    const result = await graph.invoke(
-        { messages: session.messages },
-        { configurable: { apiKey } }
-    );
-
-    // Extract AI response from result
-    const aiResponse = result.messages[result.messages.length - 1];
+    let aiResponse;
+    if (providerBaseUrl) {
+        const textResponse = await generateOpenAIText({
+            model: 'gpt-4o-mini',
+            apiKey,
+            baseUrl: providerBaseUrl,
+            temperature: 0.7,
+            maxTokens: 2048,
+            messages: [
+                { role: 'system', content: CHAT_AGENT_SYSTEM_PROMPT },
+                ...session.messages.map((msg) => ({
+                    role: msg._getType?.() === 'human' ? 'user' : 'assistant',
+                    content: msg.content,
+                })),
+            ],
+        });
+        aiResponse = new AIMessage(textResponse);
+    } else {
+        const result = await graph.invoke(
+            { messages: session.messages },
+            { configurable: { apiKey } }
+        );
+        aiResponse = result.messages[result.messages.length - 1];
+    }
     session.messages.push(aiResponse);
 
     // Convert the multimodal user message to text for future context
@@ -389,7 +408,25 @@ export async function sendMessage(sessionId, content, media, apiKey) {
     let topic = session.topic;
     if (session.messages.length === 2 && !session.topic) {
         try {
-            topic = await generateTopicTitle(session.messages, apiKey);
+            topic = providerBaseUrl
+                ? await generateOpenAIText({
+                    model: 'gpt-4o-mini',
+                    apiKey,
+                    baseUrl: providerBaseUrl,
+                    temperature: 0.2,
+                    maxTokens: 24,
+                    messages: [
+                        { role: 'system', content: TOPIC_GENERATION_PROMPT },
+                        {
+                            role: 'user',
+                            content: session.messages
+                                .slice(0, 6)
+                                .map((m) => `${m._getType?.() === 'human' ? 'User' : 'Assistant'}: ${m.content}`)
+                                .join('\n'),
+                        },
+                    ],
+                })
+                : await generateTopicTitle(session.messages, apiKey);
             session.topic = topic;
         } catch (err) {
             console.error("Failed to generate topic:", err);

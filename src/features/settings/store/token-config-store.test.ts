@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveTokenSelection } from './token-config-store';
+import { resolveTokenSelection, useTokenConfigStore } from './token-config-store';
 import type { ApiTokenRecord } from '../../../shared/types/token';
 
 const TOKENS: ApiTokenRecord[] = [
@@ -13,6 +13,7 @@ describe('resolveTokenSelection', () => {
       selectedTokenId: 'token-2',
       selectedTokenValue: '',
       draftTokenValue: '',
+      tokenValuesById: {},
     });
 
     expect(next.selectedTokenId).toBe('token-2');
@@ -25,6 +26,7 @@ describe('resolveTokenSelection', () => {
       selectedTokenId: '',
       selectedTokenValue: 'sk-default-1',
       draftTokenValue: '',
+      tokenValuesById: {},
     });
 
     expect(next.selectedTokenId).toBe('token-1');
@@ -37,6 +39,7 @@ describe('resolveTokenSelection', () => {
       selectedTokenId: '',
       selectedTokenValue: 'sk-manual-custom',
       draftTokenValue: 'sk-manual-custom',
+      tokenValuesById: {},
     });
 
     expect(next.selectedTokenId).toBe('');
@@ -49,6 +52,7 @@ describe('resolveTokenSelection', () => {
       selectedTokenId: '',
       selectedTokenValue: '',
       draftTokenValue: '',
+      tokenValuesById: {},
     });
 
     expect(next.selectedTokenId).toBe('token-1');
@@ -63,6 +67,7 @@ describe('resolveTokenSelection', () => {
         selectedTokenId: '',
         selectedTokenValue: '',
         draftTokenValue: '',
+        tokenValuesById: {},
       }
     );
 
@@ -78,11 +83,46 @@ describe('resolveTokenSelection', () => {
         selectedTokenId: 'masked-1',
         selectedTokenValue: '',
         draftTokenValue: '',
+        tokenValuesById: {},
       }
     );
 
     expect(next.selectedTokenId).toBe('masked-1');
     expect(next.selectedTokenValue).toBe('');
     expect(next.draftTokenValue).toBe('');
+  });
+
+  it('reuses a manually remembered token value for a masked account token after selecting it again', () => {
+    const next = resolveTokenSelection(
+      [{ id: 'masked-1', name: '1', value: '', isUsable: false }],
+      {
+        selectedTokenId: 'masked-1',
+        selectedTokenValue: '',
+        draftTokenValue: '',
+        tokenValuesById: { 'masked-1': 'sk-manual-bound-token' },
+      }
+    );
+
+    expect(next.selectedTokenId).toBe('masked-1');
+    expect(next.selectedTokenValue).toBe('sk-manual-bound-token');
+    expect(next.draftTokenValue).toBe('sk-manual-bound-token');
+  });
+});
+
+describe('useTokenConfigStore', () => {
+  it('switches the effective selected token when choosing a remembered masked token entry', () => {
+    useTokenConfigStore.setState({
+      availableTokens: [{ id: 'masked-1', name: '1', value: '', isUsable: false }],
+      selectedTokenId: '',
+      selectedTokenValue: '',
+      draftTokenValue: '',
+      tokenValuesById: { 'masked-1': 'sk-manual-bound-token' },
+    });
+
+    useTokenConfigStore.getState().setSelectedTokenId('masked-1');
+
+    expect(useTokenConfigStore.getState().selectedTokenId).toBe('masked-1');
+    expect(useTokenConfigStore.getState().selectedTokenValue).toBe('sk-manual-bound-token');
+    expect(useTokenConfigStore.getState().draftTokenValue).toBe('sk-manual-bound-token');
   });
 });

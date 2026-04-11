@@ -11,19 +11,34 @@ describe('registry canvas models', () => {
     resetRuntimeVideoCapabilities();
   });
 
-  it('only exposes executable image providers in the image registry list', () => {
+  it('exposes all registry image providers in the image registry list', () => {
     const providerIds = new Set(REGISTRY_IMAGE_MODELS.map((model) => model.provider));
     expect(providerIds.has('openai') || providerIds.has('google')).toBe(true);
     expect(providerIds.has('kling')).toBe(false);
+    expect(providerIds.has('hosted')).toBe(true);
   });
 
-  it('only exposes executable image model ids from the registry', () => {
-    expect(REGISTRY_IMAGE_MODELS.map((model) => model.id)).toEqual([
+  it('keeps executable image models first and also exposes hosted-only image models from the registry', () => {
+    expect(REGISTRY_IMAGE_MODELS.map((model) => model.id).slice(0, 4)).toEqual([
       'gemini-2.5-flash-image-preview',
       'gemini-3.1-flash-image-preview',
       'gemini-3-pro-image-preview',
       'gpt-image-1.5-all',
     ]);
+    expect(REGISTRY_IMAGE_MODELS.map((model) => model.id)).toContain('midjourney-v6');
+    expect(REGISTRY_IMAGE_MODELS.map((model) => model.id)).toContain('midjourney-v6-raw');
+    expect(REGISTRY_IMAGE_MODELS.map((model) => model.id)).toContain('midjourney-niji-v6');
+    expect(REGISTRY_IMAGE_MODELS.map((model) => model.id)).toContain('grok-4.2-image');
+  });
+
+  it('groups hosted-only image models under the hosted provider instead of generic other', () => {
+    const midjourney = REGISTRY_IMAGE_MODELS.find((model) => model.id === 'midjourney-v6');
+    const grokImage = REGISTRY_IMAGE_MODELS.find((model) => model.id === 'grok-4.2-image');
+    const qwenImage = REGISTRY_IMAGE_MODELS.find((model) => model.id === 'qwen-image-edit-2509');
+
+    expect(midjourney?.provider).toBe('hosted');
+    expect(grokImage?.provider).toBe('hosted');
+    expect(qwenImage?.provider).toBe('hosted');
   });
 
   it('reflects runtime video capability overrides in the generated video registry list', () => {
@@ -50,11 +65,15 @@ describe('registry canvas models', () => {
     const kling = getRegistryVideoModels().find((model) => model.id === 'kling-v3');
     const veo = getRegistryVideoModels().find((model) => model.id === 'veo3.1');
     const grok = getRegistryVideoModels().find((model) => model.id === 'grok-video-3');
+    const wan = getRegistryVideoModels().find((model) => model.id === 'wan2.6-i2v');
+    const seedance = getRegistryVideoModels().find((model) => model.id === 'jimeng-seedance-2');
 
     expect(kling?.supportsMultiImage).toBe(false);
     expect(veo?.supportsMultiImage).toBe(false);
     expect(grok?.provider).toBe('xai');
     expect(grok?.supportsMultiImage).toBe(false);
+    expect(wan?.provider).toBe('wan');
+    expect(seedance?.provider).toBe('seedance');
   });
 
   it('only exposes currently executable video model ids', () => {
@@ -68,7 +87,6 @@ describe('registry canvas models', () => {
       'minimax-hailuo',
       'wan2.6-i2v',
       'wan2.6-i2v-flash',
-      'wan2.5-i2v-preview',
       'jimeng-seedance-2',
       'jimeng-4.5',
       'jimeng-4.1',

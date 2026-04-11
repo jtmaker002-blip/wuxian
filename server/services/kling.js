@@ -13,6 +13,12 @@ import crypto from 'crypto';
 
 const KLING_BASE_URL = 'https://api-singapore.klingai.com';
 
+export const KLING_FAL_MODEL_PATHS = Object.freeze({
+    motionControl: 'fal-ai/kling-video/v2.6/pro/motion-control',
+    imageToVideo: 'fal-ai/kling-video/v2.6/pro/image-to-video',
+    textToVideo: 'fal-ai/kling-video/v2.6/pro/text-to-video'
+});
+
 // ============================================================================
 // JWT AUTHENTICATION
 // ============================================================================
@@ -83,11 +89,9 @@ export const SUPPORTED_KLING_VIDEO_MODELS = Object.freeze([
     'kling-v3'
 ]);
 
-export const DEFAULT_KLING_VIDEO_MODEL = 'kling-v3';
-
 export function resolveKlingVideoModel(modelId) {
     if (!modelId) {
-        return DEFAULT_KLING_VIDEO_MODEL;
+        throw new Error('Missing Kling video model');
     }
 
     if (SUPPORTED_KLING_VIDEO_MODELS.includes(modelId)) {
@@ -121,6 +125,38 @@ export function resolveKlingImageModel(modelId) {
  */
 function mapKlingVideoModelName(modelId) {
     return resolveKlingVideoModel(modelId);
+}
+
+export function resolveKlingVideoExecutionDetails({
+    modelId,
+    executionProvider = 'kling',
+    executionMode,
+    lastFrameBase64,
+    motionReferenceUrl
+}) {
+    const modelName = mapKlingVideoModelName(modelId);
+
+    if (executionProvider === 'fal') {
+        if (executionMode === 'motion-control') {
+            return { executedModel: KLING_FAL_MODEL_PATHS.motionControl, executedMode: 'pro' };
+        }
+        if (executionMode === 'standard-image-to-video') {
+            return { executedModel: KLING_FAL_MODEL_PATHS.imageToVideo, executedMode: 'pro' };
+        }
+        if (executionMode === 'standard-text-to-video') {
+            return { executedModel: KLING_FAL_MODEL_PATHS.textToVideo, executedMode: 'pro' };
+        }
+    }
+
+    const executedMode =
+        Boolean(lastFrameBase64) || Boolean(motionReferenceUrl) || modelName === 'kling-v2-6'
+            ? 'pro'
+            : 'std';
+
+    return {
+        executedModel: modelName,
+        executedMode
+    };
 }
 
 /**
@@ -181,11 +217,14 @@ async function pollKlingVideoTask(taskId, endpoint, token, maxWaitMs = 300000) {
  */
 export async function generateKlingTextToVideo({ prompt, modelId, aspectRatio, duration, accessKey, secretKey }) {
     const token = generateKlingJWT(accessKey, secretKey);
-    const modelName = mapKlingVideoModelName(modelId);
+    const { executedModel: modelName, executedMode } = resolveKlingVideoExecutionDetails({
+        modelId,
+        executionMode: 'standard-text-to-video'
+    });
 
     const body = {
         model_name: modelName,
-        mode: 'std',
+        mode: executedMode,
         duration: String(duration || 5),
         aspect_ratio: aspectRatio === '9:16' ? '9:16' : '16:9',
         prompt: prompt || ''
@@ -223,13 +262,12 @@ export async function generateKlingTextToVideo({ prompt, modelId, aspectRatio, d
  */
 export async function generateKlingVideo({ prompt, imageBase64, lastFrameBase64, motionReferenceUrl, modelId, aspectRatio, duration, accessKey, secretKey }) {
     const token = generateKlingJWT(accessKey, secretKey);
-    const modelName = mapKlingVideoModelName(modelId);
-
-    // Use 'pro' mode when:
-    // 1. Doing frame-to-frame (with end frame) or motion control
-    // 2. Using kling-v2-6 or kling-v2-master models (they only support 'pro' mode)
-    const proOnlyModels = ['kling-v2-6'];
-    const useProMode = !!lastFrameBase64 || !!motionReferenceUrl || proOnlyModels.includes(modelName);
+    const { executedModel: modelName, executedMode } = resolveKlingVideoExecutionDetails({
+        modelId,
+        executionMode: lastFrameBase64 ? 'frame-to-frame' : motionReferenceUrl ? 'motion-control' : 'standard-image-to-video',
+        lastFrameBase64,
+        motionReferenceUrl
+    });
 
     // Map aspect ratio - default to 16:9
     const mappedAspectRatio = aspectRatio === '9:16' ? '9:16' : '16:9';
@@ -237,7 +275,7 @@ export async function generateKlingVideo({ prompt, imageBase64, lastFrameBase64,
     // Prepare request body - duration can be 5 or 10 seconds
     const body = {
         model_name: modelName,
-        mode: useProMode ? 'pro' : 'std',
+        mode: executedMode,
         duration: String(duration || 5),
         aspect_ratio: mappedAspectRatio,
         prompt: prompt || ''

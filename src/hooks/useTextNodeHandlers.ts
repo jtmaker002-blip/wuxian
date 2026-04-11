@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { NodeData, NodeType, NodeStatus } from '../types';
+import { getDefaultModelForNodeType } from '../config/nodeTypeRegistry';
 
 interface UseTextNodeHandlersOptions {
     nodes: NodeData[];
@@ -46,8 +47,10 @@ export const useTextNodeHandlers = ({
             y: textNode.y,
             prompt: textNode.prompt || '',
             status: NodeStatus.IDLE,
-            model: 'Banana Pro',
-            aspectRatio: 'Auto',
+            model: getDefaultModelForNodeType(NodeType.VIDEO),
+            videoModel: getDefaultModelForNodeType(NodeType.VIDEO),
+            videoMode: 'standard',
+            aspectRatio: '16:9',
             resolution: 'Auto',
             parentIds: [nodeId]
         };
@@ -60,7 +63,7 @@ export const useTextNodeHandlers = ({
 
         // Add video node
         setNodes(prev => [...prev, videoNode]);
-        setSelectedNodeIds([nodeId]);
+        setSelectedNodeIds([videoNodeId]);
     };
 
     /**
@@ -82,7 +85,8 @@ export const useTextNodeHandlers = ({
             y: textNode.y,
             prompt: textNode.prompt || '',
             status: NodeStatus.IDLE,
-            model: 'Banana Pro',
+            model: getDefaultModelForNodeType(NodeType.IMAGE),
+            imageModel: getDefaultModelForNodeType(NodeType.IMAGE),
             aspectRatio: 'Auto',
             resolution: 'Auto',
             parentIds: [nodeId]

@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import {
+  LOCAL_VIDEO_CAPABILITIES,
+  resetRuntimeVideoCapabilities,
+  setRuntimeVideoCapabilities,
+} from './modelCapabilities';
 import {
   DEFAULT_REGISTRY_IMAGE_ID,
   canonicalizeVideoModelId,
@@ -8,6 +13,10 @@ import {
 } from './registryModelBridge';
 
 describe('registry model bridge', () => {
+  afterEach(() => {
+    resetRuntimeVideoCapabilities();
+  });
+
   it('keeps executable image registry ids stable when canonicalizing', () => {
     expect(canonicalizeImageModelId('gemini-2.5-flash-image-preview')).toBe(
       'gemini-2.5-flash-image-preview'
@@ -25,10 +34,11 @@ describe('registry model bridge', () => {
     expect(canonicalizeImageModelId('gpt-image-1.5')).toBe('gpt-image-1.5-all');
     expect(canonicalizeImageModelId('gemini-pro')).toBe('gemini-3-pro-image-preview');
     expect(canonicalizeImageModelId('kling-v1-5')).toBe(DEFAULT_REGISTRY_IMAGE_ID);
-    expect(canonicalizeImageModelId('grok-4.2-image')).toBe(DEFAULT_REGISTRY_IMAGE_ID);
+    expect(canonicalizeImageModelId('grok-4.2-image')).toBe('grok-4.2-image');
+    expect(canonicalizeImageModelId('midjourney-v6')).toBe('midjourney-v6');
   });
 
-  it('maps executable registry image ids to the backend model ids they actually execute', () => {
+  it('maps registry image ids to the backend model ids they actually execute', () => {
     expect(mapRegistryImageIdToServerImageId('gpt-image-1.5-all')).toBe('gpt-image-1.5');
     expect(mapRegistryImageIdToServerImageId('gemini-2.5-flash-image-preview')).toBe(
       'gemini-2.5-flash-image-preview'
@@ -39,7 +49,8 @@ describe('registry model bridge', () => {
     expect(mapRegistryImageIdToServerImageId('gemini-3-pro-image-preview')).toBe(
       'gemini-3-pro-image-preview'
     );
-    expect(mapRegistryImageIdToServerImageId('grok-4.2-image')).toBeUndefined();
+    expect(mapRegistryImageIdToServerImageId('grok-4.2-image')).toBe('grok-4.2-image');
+    expect(mapRegistryImageIdToServerImageId('midjourney-v6')).toBe('midjourney-v6');
   });
 
   it('canonicalizes legacy video aliases to visible executable registry ids', () => {
@@ -52,6 +63,24 @@ describe('registry model bridge', () => {
     expect(mapRegistryVideoIdToServerVideoId('veo3.1-pro')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('veo3.1-fast-components')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('wan2.6-i2v')).toBe('wan2.6-i2v');
-    expect(mapRegistryVideoIdToServerVideoId('wan2.5-i2v-preview')).toBe('wan2.5-i2v-preview');
+    expect(mapRegistryVideoIdToServerVideoId('wan2.5-i2v-preview')).toBeUndefined();
+  });
+
+  it('keeps sunset video models on the node for readonly display, but stops mapping them to executable server ids', () => {
+    setRuntimeVideoCapabilities({
+      ...LOCAL_VIDEO_CAPABILITIES,
+      'veo3.1': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
+        modes: {
+          standard: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard, enabled: false },
+          frameToFrame: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.frameToFrame, enabled: false },
+          motionControl: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.motionControl, enabled: false },
+        },
+      },
+    });
+
+    expect(canonicalizeVideoModelId('veo3.1')).toBe('veo3.1');
+    expect(canonicalizeVideoModelId('veo-3.1-fast-generate-preview')).toBe('veo3.1');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1')).toBeUndefined();
   });
 });

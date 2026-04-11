@@ -116,7 +116,7 @@ describe('mergeVideoCapabilities', () => {
     );
   });
 
-  it('ignores remote full-reference flags for models whose backend still lacks true reference-image execution', () => {
+  it('allows remote capability payloads to enable additional supported flags for known models', () => {
     const merged = mergeVideoCapabilities(LOCAL_VIDEO_CAPABILITIES, {
       'veo3.1': {
         modes: {
@@ -128,8 +128,8 @@ describe('mergeVideoCapabilities', () => {
       },
     });
 
-    expect(merged['veo3.1'].modes.standard.supportsMultiImage).toBe(false);
-    expect(merged['veo3.1'].modes.standard.supportsFullReference).toBe(false);
+    expect(merged['veo3.1'].modes.standard.supportsMultiImage).toBe(true);
+    expect(merged['veo3.1'].modes.standard.supportsFullReference).toBe(true);
   });
 
   it('retains remote full-reference flags for models whose backend truly supports reference-image execution', () => {

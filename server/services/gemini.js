@@ -56,15 +56,15 @@ export const SUPPORTED_VEO_VIDEO_MODELS = Object.freeze([
 export const DEFAULT_VEO_VIDEO_MODEL = 'veo-3.1-fast-generate-preview';
 
 const VEO_VIDEO_MODEL_ALIASES = Object.freeze({
-    'veo-3.1': DEFAULT_VEO_VIDEO_MODEL,
-    'veo3.1': DEFAULT_VEO_VIDEO_MODEL,
-    'veo3.1-pro': DEFAULT_VEO_VIDEO_MODEL,
-    'veo3.1-fast-components': DEFAULT_VEO_VIDEO_MODEL
+    'veo-3.1': 'veo-3.1-fast-generate-preview',
+    'veo3.1': 'veo-3.1-fast-generate-preview',
+    'veo3.1-pro': 'veo-3.1-fast-generate-preview',
+    'veo3.1-fast-components': 'veo-3.1-fast-generate-preview'
 });
 
 export function resolveVeoVideoModel(videoModel) {
     if (!videoModel) {
-        return DEFAULT_VEO_VIDEO_MODEL;
+        throw new Error('Missing Veo video model');
     }
 
     const normalizedModel = VEO_VIDEO_MODEL_ALIASES[videoModel] || videoModel;

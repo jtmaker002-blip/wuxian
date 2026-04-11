@@ -42,6 +42,10 @@ export interface NodeData {
   videoMode?: 'standard' | 'frame-to-frame' | 'motion-control'; // Video generation mode
   frameInputs?: { nodeId: string; order: 'start' | 'end' }[]; // For frame-to-frame: connected image nodes
   videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1')
+  requestedVideoModel?: string; // The model the user selected before backend routing
+  executedVideoModel?: string; // The model the backend actually executed
+  executedVideoMode?: string; // The effective execution mode/tier the backend used
+  executionProvider?: string; // The runtime provider actually used by the backend
   videoDuration?: number; // Video duration in seconds (e.g., 5, 6, 8, 10)
   generateAudio?: boolean; // Whether to generate native audio (Kling 2.6, Veo 3.1)
   inputUrl?: string; // Input URL for video generation (image-to-video)
@@ -56,6 +60,7 @@ export interface NodeData {
   // Settings
   model: string;
   imageModel?: string; // Image model version (e.g., 'gemini-pro', 'kling-v2')
+  imageCount?: number; // Image generation count
   aspectRatio: string;
   resolution: string;
   isPromptExpanded?: boolean; // Whether the prompt editing area is expanded
@@ -99,6 +104,21 @@ export interface NodeData {
     scale: number;     // Scale factor (0 to 100)
     wideAngle: boolean; // Whether to use wide-angle lens perspective
   };
+  imageToolMode?: 'style' | 'mark' | 'focus' | 'multi-angle' | 'lighting' | 'grid' | 'enhance' | 'split' | null;
+  imageLightingSettings?: {
+    mode: 'global' | 'local';
+    smartMode: boolean;
+    brightness: number;
+    color: string;
+    keyLight: 'left' | 'top' | 'right' | 'front' | 'bottom' | 'back';
+    rimLight: boolean;
+  };
+  focusSelection?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 
   // Local Model node specific
   localModelId?: string;        // ID of the selected local model
@@ -117,6 +137,11 @@ export interface ContextMenuState {
   type: 'global' | 'node-connector' | 'node-options' | 'add-nodes'; // 'global' = right click on canvas, 'add-nodes' = double click
   sourceNodeId?: string; // If 'node-connector' or 'node-options', which node originated the click
   connectorSide?: 'left' | 'right';
+  sourceNodeType?: NodeType;
+  dropCanvasPosition?: {
+    x: number;
+    y: number;
+  };
 }
 
 export interface Viewport {

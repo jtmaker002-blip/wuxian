@@ -93,9 +93,7 @@ export const MODEL_REGISTRY: ModelEntry[] = [
   { id: 'qwen-image-edit-2509',               name: 'Qwen Image Edit',               category: 'image', region: 'china',  providerId: 'openaiteach' },
   // ── Video ───────────────────────────────────────────────────────────────
   { id: 'sora-2',                             name: 'Sora 2',                        category: 'video', region: 'global', providerId: 'openaiteach', tags: ['HOT'] },
-  { id: 'veo3.1-pro',                         name: 'Veo 3.1 Pro',                   category: 'video', region: 'global', providerId: 'openaiteach', tags: ['HOT'] },
   { id: 'veo3.1',                             name: 'Veo 3.1',                       category: 'video', region: 'global', providerId: 'openaiteach' },
-  { id: 'veo3.1-fast-components',             name: 'Veo 3.1 Fast',                  category: 'video', region: 'global', providerId: 'openaiteach' },
   { id: 'grok-video-3',                       name: 'Grok Video 3',                  category: 'video', region: 'global', providerId: 'openaiteach' },
   { id: 'kling-v3',                           name: 'Kling V3',                      category: 'video', region: 'china',  providerId: 'openaiteach', tags: ['HOT'] },
   { id: 'kling-v2-6',                         name: 'Kling V2.6',                    category: 'video', region: 'china',  providerId: 'openaiteach' },
@@ -103,7 +101,6 @@ export const MODEL_REGISTRY: ModelEntry[] = [
   { id: 'minimax-hailuo',                     name: 'MiniMax Hailuo',                category: 'video', region: 'china',  providerId: 'openaiteach' },
   { id: 'wan2.6-i2v',                         name: 'Wan 2.6 I2V',                   category: 'video', region: 'china',  providerId: 'openaiteach' },
   { id: 'wan2.6-i2v-flash',                   name: 'Wan 2.6 I2V Flash',             category: 'video', region: 'china',  providerId: 'openaiteach' },
-  { id: 'wan2.5-i2v-preview',                 name: 'Wan 2.5 I2V Preview',           category: 'video', region: 'china',  providerId: 'openaiteach' },
   { id: 'jimeng-seedance-2',                  name: 'Seedance 2.0',                  category: 'video', region: 'china',  providerId: 'openaiteach', tags: ['HOT'] },
   { id: 'jimeng-4.5',                         name: '即梦 4.5',                      category: 'video', region: 'china',  providerId: 'openaiteach' },
   { id: 'jimeng-4.1',                         name: '即梦 4.1',                      category: 'video', region: 'china',  providerId: 'openaiteach' },

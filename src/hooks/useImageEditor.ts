@@ -5,7 +5,7 @@
  */
 
 import { useState, useCallback } from 'react';
-import { NodeData, NodeStatus } from '../types';
+import { NodeData, NodeStatus, NodeType } from '../types';
 
 interface EditorModalState {
     isOpen: boolean;
@@ -95,11 +95,45 @@ export const useImageEditor = ({ nodes, updateNode }: UseImageEditorOptions) => 
         return closest.label;
     };
 
+    const getClosestVideoAspectRatio = (width: number, height: number): string => {
+        const ratio = width / height;
+        return ratio >= 1 ? '16:9' : '9:16';
+    };
+
     /**
      * Handler for image upload in Image nodes
      * Detects the actual aspect ratio of the uploaded image
      */
     const handleUpload = useCallback((nodeId: string, imageDataUrl: string) => {
+        const node = nodes.find((candidate) => candidate.id === nodeId);
+        const isVideoUpload =
+            imageDataUrl.startsWith('data:video/') ||
+            node?.type === NodeType.VIDEO ||
+            node?.type === NodeType.LOCAL_VIDEO_MODEL ||
+            node?.type === NodeType.VIDEO_EDITOR;
+
+        if (isVideoUpload) {
+            const video = document.createElement('video');
+            video.onloadedmetadata = () => {
+                const resultAspectRatio = `${video.videoWidth}/${video.videoHeight}`;
+                const aspectRatio = getClosestVideoAspectRatio(video.videoWidth, video.videoHeight);
+                updateNode(nodeId, {
+                    resultUrl: imageDataUrl,
+                    resultAspectRatio,
+                    aspectRatio,
+                    status: NodeStatus.SUCCESS
+                });
+            };
+            video.onerror = () => {
+                updateNode(nodeId, {
+                    resultUrl: imageDataUrl,
+                    status: NodeStatus.SUCCESS
+                });
+            };
+            video.src = imageDataUrl;
+            return;
+        }
+
         // Detect image dimensions and calculate aspect ratio
         const img = new Image();
         img.onload = () => {
@@ -120,7 +154,7 @@ export const useImageEditor = ({ nodes, updateNode }: UseImageEditorOptions) => 
             });
         };
         img.src = imageDataUrl;
-    }, [updateNode]);
+    }, [nodes, updateNode]);
 
     return {
         editorModal,

@@ -52,6 +52,7 @@ import { useTikTokImport } from './hooks/useTikTokImport';
 import { useStoryboardGenerator } from './hooks/useStoryboardGenerator';
 import { StoryboardGeneratorModal } from './components/modals/StoryboardGeneratorModal';
 import { StoryboardVideoModal } from './components/modals/StoryboardVideoModal';
+import { FocusSelectionOverlay } from './components/canvas/image-node/FocusSelectionOverlay';
 import { LoginPage } from './features/auth/pages/LoginPage';
 import { SettingsModal } from './features/settings/pages/SettingsModal';
 import { useSessionStore } from './features/auth/store/session-store';
@@ -67,6 +68,7 @@ import {
   setRuntimeVideoCapabilities,
   setRuntimeVoiceCapabilities,
 } from './config/modelCapabilities';
+import { getDefaultModelForNodeType } from './config/nodeTypeRegistry';
 import {
   fetchRemoteVideoCapabilities,
   fetchRemoteVoiceCapabilities,
@@ -75,6 +77,8 @@ import {
 } from './services/remoteCapabilitiesService';
 import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
 import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
+
+const CANVAS_DRAFT_STORAGE_KEY = 'twitcanva-current-canvas-draft';
 
 // ============================================================================
 // MAIN COMPONENT
@@ -115,6 +119,7 @@ export default function App() {
   });
 
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('light');
+  const hasRestoredDraftRef = React.useRef(false);
 
   // ── OpenAiTeach session ──────────────────────────────────────────────────
   const session = useSessionStore((s) => s.session);
@@ -240,8 +245,8 @@ export default function App() {
   useEffect(() => {
     setNodes(prev =>
       prev.map(node => {
-        if (node.type !== NodeType.VIDEO || !node.videoModel) return node;
-        const canonicalVideoModel = canonicalizeVideoModelId(node.videoModel) ?? node.videoModel;
+        if (node.type !== NodeType.VIDEO) return node;
+        const canonicalVideoModel = canonicalizeVideoModelId(node.videoModel) ?? DEFAULT_REGISTRY_VIDEO_ID;
         const capability = getVideoCapability(canonicalVideoModel);
         if (!capability) return node;
         return {
@@ -255,6 +260,43 @@ export default function App() {
       })
     );
   }, [setNodes, session?.oatProxySid, capabilityRefreshTick]);
+
+  const handleQuickAddInputNode = useCallback((targetNodeId: string, inputType: 'image' | 'video') => {
+    const targetNode = nodes.find((node) => node.id === targetNodeId);
+    if (!targetNode) return;
+
+    const newNodeId = crypto.randomUUID();
+    const GAP = 100;
+    const NODE_WIDTH = 340;
+    const nextType = inputType === 'video' ? NodeType.VIDEO : NodeType.IMAGE;
+
+    const newNode: NodeData = {
+      id: newNodeId,
+      type: nextType,
+      x: targetNode.x - NODE_WIDTH - GAP,
+      y: targetNode.y,
+      prompt: '',
+      status: NodeStatus.IDLE,
+      model: getDefaultModelForNodeType(nextType),
+      imageModel: nextType === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
+      videoModel: nextType === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
+      videoMode: nextType === NodeType.VIDEO ? 'standard' : undefined,
+      aspectRatio: nextType === NodeType.VIDEO ? '16:9' : 'Auto',
+      resolution: 'Auto',
+      parentIds: [],
+    };
+
+    setNodes((prev) =>
+      prev
+        .map((node) =>
+          node.id === targetNodeId
+            ? { ...node, parentIds: [...(node.parentIds || []), newNodeId] }
+            : node
+        )
+        .concat(newNode)
+    );
+    setSelectedNodeIds([newNodeId]);
+  }, [nodes, setNodes, setSelectedNodeIds]);
 
   const {
     isDraggingConnection,
@@ -402,7 +444,78 @@ export default function App() {
     setEditingTitleValue('Untitled Canvas');
     resetWorkflowId(); // Important: ensures new workflow gets a new ID
     setIsDirty(false);
+    try {
+      localStorage.removeItem(CANVAS_DRAFT_STORAGE_KEY);
+    } catch {
+      // noop
+    }
   };
+
+  React.useEffect(() => {
+    if (hasRestoredDraftRef.current) return;
+    hasRestoredDraftRef.current = true;
+
+    try {
+      const raw = localStorage.getItem(CANVAS_DRAFT_STORAGE_KEY);
+      if (!raw) return;
+
+      const draft = JSON.parse(raw) as {
+        nodes?: NodeData[];
+        groups?: typeof groups;
+        viewport?: typeof viewport;
+        canvasTitle?: string;
+      };
+
+      const draftNodes = Array.isArray(draft?.nodes) ? draft.nodes : [];
+      const draftGroups = Array.isArray(draft?.groups) ? draft.groups : [];
+      const draftTitle =
+        typeof draft?.canvasTitle === 'string' && draft.canvasTitle.trim()
+          ? draft.canvasTitle
+          : 'Untitled Canvas';
+
+      if (draftNodes.length === 0 && draftGroups.length === 0) {
+        return;
+      }
+
+      ignoreNextChange.current = true;
+      setNodes(draftNodes);
+      setGroups(draftGroups);
+      setSelectedNodeIds([]);
+      setCanvasTitle(draftTitle);
+      setEditingTitleValue(draftTitle);
+
+      if (
+        draft?.viewport &&
+        typeof draft.viewport.x === 'number' &&
+        typeof draft.viewport.y === 'number' &&
+        typeof draft.viewport.zoom === 'number'
+      ) {
+        setViewport(draft.viewport);
+      }
+
+      setIsDirty(false);
+    } catch (error) {
+      console.error('[Draft Restore] Failed to restore canvas draft:', error);
+    }
+  }, [setNodes, setGroups, setSelectedNodeIds, setCanvasTitle, setEditingTitleValue, setViewport]);
+
+  React.useEffect(() => {
+    if (!hasRestoredDraftRef.current) return;
+
+    try {
+      localStorage.setItem(
+        CANVAS_DRAFT_STORAGE_KEY,
+        JSON.stringify({
+          nodes,
+          groups,
+          viewport,
+          canvasTitle,
+        })
+      );
+    } catch (error) {
+      console.error('[Draft Save] Failed to persist canvas draft:', error);
+    }
+  }, [nodes, groups, viewport, canvasTitle]);
 
   // Image editor modal
   const {
@@ -456,7 +569,7 @@ export default function App() {
     handleOpenCreateAsset,
     handleSaveAssetToLibrary,
     handleContextUpload
-  } = useAssetHandlers({ nodes, viewport, contextMenu, setNodes });
+  } = useAssetHandlers({ nodes, viewport, contextMenu, setNodes, setSelectedNodeIds });
 
   // Keyboard shortcuts (copy/paste/delete/undo/redo)
   const {
@@ -876,6 +989,17 @@ export default function App() {
     closeAssetLibrary();
   };
 
+  const activeFocusNode =
+    selectedNodeIds.length === 1
+      ? nodes.find(
+        (node) =>
+          node.id === selectedNodeIds[0] &&
+          node.type === NodeType.IMAGE &&
+          node.imageToolMode === 'focus' &&
+          Boolean(node.resultUrl)
+      )
+      : undefined;
+
   // Create asset modal (isCreateAssetModalOpen, handleOpenCreateAsset, handleSaveAssetToLibrary) provided by useAssetHandlers hook
 
   // ============================================================================
@@ -989,15 +1113,40 @@ export default function App() {
    * Syncs prompt if parent is a Text node
    */
   const handleConnectionMade = React.useCallback((parentId: string, childId: string) => {
-    // Find the parent node
     const parentNode = nodes.find(n => n.id === parentId);
+    const childNode = nodes.find(n => n.id === childId);
     if (!parentNode) return;
 
-    // If parent is a Text node, sync its prompt to the child
     if (parentNode.type === NodeType.TEXT && parentNode.prompt) {
       updateNode(childId, { prompt: parentNode.prompt });
     }
-  }, [nodes, updateNode]);
+
+    if (
+      (parentNode.type === NodeType.IMAGE || parentNode.type === NodeType.IMAGE_EDITOR) &&
+      childNode?.type === NodeType.VIDEO
+    ) {
+      const inheritedAspectRatio =
+        parentNode.aspectRatio && parentNode.aspectRatio !== 'Auto'
+          ? parentNode.aspectRatio
+          : childNode.aspectRatio;
+      const nextPrompt =
+        childNode.prompt?.trim()
+          ? childNode.prompt
+          : parentNode.prompt?.trim()
+            ? parentNode.prompt
+            : '基于已接入的图片素材生成视频';
+
+      updateNode(childId, {
+        prompt: nextPrompt,
+        videoMode: 'standard',
+        aspectRatio: inheritedAspectRatio,
+        inputUrl: parentNode.resultUrl,
+        isPromptExpanded: true,
+        errorMessage: undefined,
+      });
+      setSelectedNodeIds([childId]);
+    }
+  }, [nodes, setSelectedNodeIds, updateNode]);
 
   const handleGlobalPointerUp = (e: React.PointerEvent) => {
     // 1. Handle Selection Box End
@@ -1213,42 +1362,50 @@ export default function App() {
 
           {/* Nodes Layer */}
           <div className="pointer-events-auto">
-            {nodes.map(node => (
+            {nodes.map(node => {
+              const primaryParentPreview = (() => {
+                if (!node.parentIds || node.parentIds.length === 0) return undefined;
+                const parent = nodes.find(n => n.id === node.parentIds![0]);
+                if (!parent?.resultUrl) return undefined;
+
+                if (node.type === NodeType.VIDEO_EDITOR && parent.type === NodeType.VIDEO) {
+                  return { url: parent.resultUrl, type: NodeType.VIDEO };
+                }
+
+                if (parent.type === NodeType.VIDEO) {
+                  return {
+                    url: parent.lastFrame || parent.resultUrl,
+                    type: parent.lastFrame ? NodeType.IMAGE : NodeType.VIDEO,
+                  };
+                }
+
+                return { url: parent.resultUrl, type: parent.type };
+              })();
+
+              const connectedPreviewNodes = (() => {
+                if (!node.parentIds || node.parentIds.length === 0) return [];
+                return node.parentIds
+                  .map(parentId => nodes.find(n => n.id === parentId))
+                  .filter(parent => parent && (parent.type === NodeType.IMAGE || parent.type === NodeType.VIDEO) && parent.resultUrl)
+                  .map(parent => ({
+                    id: parent!.id,
+                    url: (parent!.type === NodeType.VIDEO ? parent!.lastFrame : parent!.resultUrl) || parent!.resultUrl!,
+                    type: parent!.lastFrame ? NodeType.IMAGE : parent!.type
+                  }));
+              })();
+
+              return (
               <CanvasNode
                 key={node.id}
                 data={node}
-                inputUrl={(() => {
-                  // Get first parent's result for display (multiple inputs handled in generation)
-                  if (!node.parentIds || node.parentIds.length === 0) return undefined;
-                  const parent = nodes.find(n => n.id === node.parentIds![0]);
-
-                  // VIDEO_EDITOR nodes need the actual video URL from parent Video node
-                  if (node.type === NodeType.VIDEO_EDITOR && parent?.type === NodeType.VIDEO) {
-                    return parent.resultUrl;
-                  }
-
-                  // For other nodes, if parent is video, use lastFrame for image preview
-                  if (parent?.type === NodeType.VIDEO && parent.lastFrame) {
-                    return parent.lastFrame;
-                  }
-                  return parent?.resultUrl;
-                })()}
-                connectedImageNodes={(() => {
-                  // Gather all connected parent nodes (image or video) with their URLs
-                  if (!node.parentIds || node.parentIds.length === 0) return [];
-                  return node.parentIds
-                    .map(parentId => nodes.find(n => n.id === parentId))
-                    .filter(parent => parent && (parent.type === NodeType.IMAGE || parent.type === NodeType.VIDEO) && parent.resultUrl)
-                    .map(parent => ({
-                      id: parent!.id,
-                      url: (parent!.type === NodeType.VIDEO ? parent!.lastFrame : parent!.resultUrl) || parent!.resultUrl!,
-                      type: parent!.type
-                    }));
-                })()}
+                inputUrl={primaryParentPreview?.url}
+                inputMediaType={primaryParentPreview?.type}
+                connectedImageNodes={connectedPreviewNodes}
                 onUpdate={updateNodeWithSync}
                 onSwitchType={switchNodeType}
                 onGenerate={handleGenerate}
                 onAddNext={handleAddNext}
+                onQuickAddInputNode={handleQuickAddInputNode}
                 selected={selectedNodeIds.includes(node.id)}
                 showControls={selectedNodeIds.length === 1 && selectedNodeIds.includes(node.id)}
                 onNodePointerDown={(e) => {
@@ -1289,7 +1446,8 @@ export default function App() {
                 onPostToX={handlePostToX}
                 onPostToTikTok={handlePostToTikTok}
               />
-            ))}
+              );
+            })}
           </div>
 
 
@@ -1383,6 +1541,7 @@ export default function App() {
       {/* Context Menu */}
       <ContextMenu
         state={contextMenu}
+        sourceNodeType={contextMenu.sourceNodeId ? nodes.find((node) => node.id === contextMenu.sourceNodeId)?.type : undefined}
         onClose={() => setContextMenu(prev => ({ ...prev, isOpen: false }))}
         onSelectType={handleContextMenuSelect}
         onUpload={handleContextUpload}
@@ -1530,6 +1689,15 @@ export default function App() {
         mediaUrl={expandedImageUrl}
         onClose={handleCloseExpand}
       />
+
+      {activeFocusNode?.resultUrl && (
+        <FocusSelectionOverlay
+          imageUrl={activeFocusNode.resultUrl}
+          initialSelection={activeFocusNode.focusSelection}
+          onChange={(selection) => updateNode(activeFocusNode.id, { focusSelection: selection })}
+          onClose={() => updateNode(activeFocusNode.id, { imageToolMode: null })}
+        />
+      )}
     </div >
   );
 }

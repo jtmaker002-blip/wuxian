@@ -7,6 +7,8 @@
  * - Video: Veo 3.1, Kling AI
  */
 
+import { readStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
+
 export interface GenerateImageParams {
   prompt: string;
   aspectRatio?: string;
@@ -14,6 +16,8 @@ export interface GenerateImageParams {
   imageBase64?: string | string[]; // Supports single image or array of images
   imageModel?: string; // Image model version (e.g., 'gemini-pro', 'kling-v2')
   nodeId?: string; // ID of the node initiating generation
+  providerApiKey?: string;
+  providerBaseUrl?: string;
   // Kling V1.5 reference settings
   klingReferenceMode?: 'subject' | 'face';
   klingFaceIntensity?: number; // 0-100
@@ -32,12 +36,24 @@ export interface GenerateVideoParams {
   motionReferenceUrl?: string; // For Kling 2.6 motion control
   generateAudio?: boolean; // For Kling 2.6 and Veo 3.1 native audio (default: true)
   nodeId?: string; // ID of the node initiating generation
+  providerApiKey?: string;
+  providerBaseUrl?: string;
+}
+
+export interface GenerateVideoResult {
+  resultUrl: string;
+  requestedModel?: string;
+  executedModel?: string;
+  executedMode?: string;
+  executionProvider?: string;
 }
 
 export interface GenerateAudioParams {
   prompt: string;
   audioModel?: string;
   nodeId?: string;
+  providerApiKey?: string;
+  providerBaseUrl?: string;
 }
 
 /**
@@ -45,10 +61,18 @@ export interface GenerateAudioParams {
  */
 export const generateImage = async (params: GenerateImageParams): Promise<string> => {
   try {
+    const providerConfig =
+      params.providerApiKey || params.providerBaseUrl
+        ? {}
+        : readStoredOpenAiTeachProviderConfig();
+
     const response = await fetch('/api/generate-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify({
+        ...providerConfig,
+        ...params,
+      })
     });
 
     if (!response.ok) {
@@ -71,12 +95,20 @@ export const generateImage = async (params: GenerateImageParams): Promise<string
 /**
  * Generates a video by calling the backend API
  */
-export const generateVideo = async (params: GenerateVideoParams): Promise<string> => {
+export const generateVideo = async (params: GenerateVideoParams): Promise<GenerateVideoResult> => {
   try {
+    const providerConfig =
+      params.providerApiKey || params.providerBaseUrl
+        ? {}
+        : readStoredOpenAiTeachProviderConfig();
+
     const response = await fetch('/api/generate-video', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify({
+        ...providerConfig,
+        ...params,
+      })
     });
 
     if (!response.ok) {
@@ -88,7 +120,13 @@ export const generateVideo = async (params: GenerateVideoParams): Promise<string
     if (!data.resultUrl) {
       throw new Error("No video data returned from server");
     }
-    return data.resultUrl;
+    return {
+      resultUrl: data.resultUrl,
+      requestedModel: data.requestedModel,
+      executedModel: data.executedModel,
+      executedMode: data.executedMode,
+      executionProvider: data.executionProvider,
+    };
 
   } catch (error) {
     console.error("Video Generation Error:", error);
@@ -98,10 +136,18 @@ export const generateVideo = async (params: GenerateVideoParams): Promise<string
 
 export const generateAudio = async (params: GenerateAudioParams): Promise<string> => {
   try {
+    const providerConfig =
+      params.providerApiKey || params.providerBaseUrl
+        ? {}
+        : readStoredOpenAiTeachProviderConfig();
+
     const response = await fetch('/api/generate-audio', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+      body: JSON.stringify({
+        ...providerConfig,
+        ...params,
+      })
     });
 
     if (!response.ok) {

@@ -61,19 +61,29 @@ export const useContextMenuHandlers = ({
     // NODE OPERATIONS
     // ============================================================================
 
-    const handleAddNext = useCallback((nodeId: string, _direction: 'left' | 'right') => {
+    const handleAddNext = useCallback((nodeId: string, _direction: 'left' | 'right', screenPosition?: { x: number; y: number }) => {
         const sourceNode = nodes.find(n => n.id === nodeId);
         if (!sourceNode) return;
 
-        setContextMenu({
-            isOpen: true,
+        const resolvedScreenPosition = screenPosition ?? {
             x: window.innerWidth / 2,
             y: window.innerHeight / 2,
+        };
+
+        setContextMenu({
+            isOpen: true,
+            x: resolvedScreenPosition.x,
+            y: resolvedScreenPosition.y,
             type: 'node-connector',
             sourceNodeId: nodeId,
-            connectorSide: _direction
+            connectorSide: _direction,
+            sourceNodeType: sourceNode.type,
+            dropCanvasPosition: {
+                x: (resolvedScreenPosition.x - viewport.x) / viewport.zoom,
+                y: (resolvedScreenPosition.y - viewport.y) / viewport.zoom,
+            },
         });
-    }, [nodes, setContextMenu]);
+    }, [nodes, setContextMenu, viewport.x, viewport.y, viewport.zoom]);
 
     const handleNodeContextMenu = useCallback((e: React.MouseEvent, id: string) => {
         e.preventDefault();

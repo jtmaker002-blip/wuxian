@@ -1,4 +1,4 @@
-import { resolveVeoVideoModel } from '../services/gemini.js';
+import { DEFAULT_VEO_VIDEO_MODEL, resolveVeoVideoModel } from '../services/gemini.js';
 import { resolveKlingVideoModel } from '../services/kling.js';
 
 const SUPPORTED_HAILUO_VIDEO_MODELS = new Set([
@@ -20,6 +20,11 @@ const UNSUPPORTED_REMOTE_PROVIDER_MODELS = Object.freeze({
   'jimeng-video-3-fast': 'seedance',
 });
 
+const SUPPORTED_SEEDANCE_FRAME_EXECUTION_MODELS = new Set([
+  'jimeng-seedance-2',
+  'jimeng-4.5',
+]);
+
 const REMOTE_PROVIDER_LABELS = Object.freeze({
   'openai-video': 'Sora 2',
   'xai-video': 'Grok Video 3',
@@ -32,12 +37,16 @@ const XAI_SUPPORTED_EXECUTION_MODES = new Set([
   'standard-image-to-video',
 ]);
 
+const OPENAI_SUPPORTED_EXECUTION_MODES = new Set([
+  'standard-text-to-video',
+  'standard-image-to-video',
+]);
+
 const FAL_BACKED_KLING_MODELS = new Set([
   'kling-v2-6',
 ]);
 
 const FAL_BACKED_WAN_MODELS = new Set([
-  'wan2.5-i2v-preview',
   'wan2.6-i2v',
   'wan2.6-i2v-flash',
 ]);
@@ -52,7 +61,7 @@ export function resolveVideoProvider(modelId) {
   if (!model) {
     return {
       provider: 'veo',
-      normalizedModel: resolveVeoVideoModel(undefined),
+      normalizedModel: DEFAULT_VEO_VIDEO_MODEL,
     };
   }
 
@@ -116,6 +125,10 @@ export function assertVideoExecutionSupported({ provider, normalizedModel, execu
     return;
   }
 
+  if (provider === 'openai-video' && !OPENAI_SUPPORTED_EXECUTION_MODES.has(executionMode)) {
+    throw new Error(`Sora 2 当前后端尚未接通模式：${executionMode}`);
+  }
+
   if (provider === 'xai-video' && !XAI_SUPPORTED_EXECUTION_MODES.has(executionMode)) {
     throw new Error(`Grok Video 3 当前后端尚未接通模式：${executionMode}`);
   }
@@ -123,6 +136,9 @@ export function assertVideoExecutionSupported({ provider, normalizedModel, execu
   if (provider === 'seedance') {
     if (!['standard-text-to-video', 'standard-image-to-video', 'frame-to-frame'].includes(executionMode)) {
       throw new Error(`即梦视频模型当前后端尚未接通模式：${executionMode}`);
+    }
+    if (executionMode === 'frame-to-frame' && !SUPPORTED_SEEDANCE_FRAME_EXECUTION_MODELS.has(normalizedModel)) {
+      throw new Error(`${normalizedModel} 当前后端尚未接通首尾帧模式`);
     }
     return;
   }

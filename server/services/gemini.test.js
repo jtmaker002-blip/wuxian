@@ -84,6 +84,12 @@ describe('resolveVeoVideoModel', () => {
     );
   });
 
+  it('rejects missing Veo video model ids instead of silently defaulting', async () => {
+    const { resolveVeoVideoModel } = await import('./gemini.js');
+
+    expect(() => resolveVeoVideoModel()).toThrow(/missing veo video model/i);
+  });
+
   it('rejects unknown Veo ids instead of silently executing the default model', async () => {
     const { resolveVeoVideoModel } = await import('./gemini.js');
 

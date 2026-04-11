@@ -55,7 +55,7 @@ interface UsePointerHandlersOptions {
 
     // Other
     releasePointerCapture: (e: React.PointerEvent) => void;
-    handleAddNext: (nodeId: string, direction: 'left' | 'right') => void;
+    handleAddNext: (nodeId: string, direction: 'left' | 'right', screenPosition?: { x: number; y: number }) => void;
     updateNode: (id: string, updates: Partial<NodeData>) => void;
 }
 
@@ -94,13 +94,42 @@ export const usePointerHandlers = ({
 
     const handleConnectionMade = useCallback((parentId: string, childId: string) => {
         const parentNode = nodes.find(n => n.id === parentId);
+        const childNode = nodes.find(n => n.id === childId);
         if (!parentNode) return;
 
         // If parent is a Text node, sync its prompt to the child
         if (parentNode.type === NodeType.TEXT && parentNode.prompt) {
             updateNode(childId, { prompt: parentNode.prompt });
         }
-    }, [nodes, updateNode]);
+
+        // If an image is connected into a video node, shift focus to the video node
+        // so the user can continue the main "图生视频" path immediately.
+        if (
+            (parentNode.type === NodeType.IMAGE || parentNode.type === NodeType.IMAGE_EDITOR) &&
+            childNode?.type === NodeType.VIDEO
+        ) {
+            const inheritedAspectRatio =
+                parentNode.aspectRatio && parentNode.aspectRatio !== 'Auto'
+                    ? parentNode.aspectRatio
+                    : childNode.aspectRatio;
+            const nextPrompt =
+                childNode.prompt?.trim()
+                    ? childNode.prompt
+                    : parentNode.prompt?.trim()
+                        ? parentNode.prompt
+                        : '基于已接入的图片素材生成视频';
+
+            updateNode(childId, {
+                prompt: nextPrompt,
+                videoMode: 'standard',
+                aspectRatio: inheritedAspectRatio,
+                inputUrl: parentNode.resultUrl,
+                isPromptExpanded: true,
+                errorMessage: undefined,
+            });
+            setSelectedNodeIds([childId]);
+        }
+    }, [nodes, setSelectedNodeIds, updateNode]);
 
     // ============================================================================
     // POINTER HANDLERS

@@ -40,10 +40,24 @@ export type VoiceModelCapability = {
 
 export type VideoCapabilitiesMap = Record<string, VideoModelCapability>;
 export type VoiceCapabilitiesMap = Record<string, VoiceModelCapability>;
+export type NativeVideoFeatureKey =
+  | 'textToVideo'
+  | 'imageToVideo'
+  | 'multiImage'
+  | 'fullReference'
+  | 'startEndFrame'
+  | 'motionReference'
+  | 'audio'
+  | 'subjectReference'
+  | 'referenceVideo'
+  | 'characterConsistency';
+export type NativeVideoModelNotes = Partial<Record<string, string[]>>;
+export type NativeVideoModelSources = Partial<Record<string, string[]>>;
 
 const VIDEO_ASPECT_RATIOS = ['16:9', '9:16'] as const;
 const IMAGE_VIDEO_ASPECT_RATIOS = ['16:9', '9:16'] as const;
-const SEEDANCE_VIDEO_ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9'] as const;
+const SEEDANCE_VIDEO_ASPECT_RATIOS = ['16:9', '9:16'] as const;
+const SEEDANCE_VIDEO_DURATIONS = [5, 10] as const;
 const STANDARD_RESOLUTIONS = ['Auto', '720p', '1080p'] as const;
 
 function createDisabledMode(): VideoModeCapability {
@@ -290,25 +304,12 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
       defaultResolution: '1080p',
     },
   }),
-  'wan2.5-i2v-preview': createCapability('wan2.5-i2v-preview', 'wan2.5-i2v-preview', {
-    standard: {
-      supportsTextToVideo: false,
-      supportsImageToVideo: true,
-      supportsAudio: false,
-      durations: [5, 10],
-      aspectRatios: ['Auto'],
-      resolutions: ['480p', '720p', '1080p'],
-      defaultDuration: 5,
-      defaultAspectRatio: 'Auto',
-      defaultResolution: '720p',
-    },
-  }),
   'jimeng-seedance-2': createCapability('jimeng-seedance-2', 'jimeng-seedance-2', {
     standard: {
       supportsTextToVideo: true,
       supportsImageToVideo: true,
       supportsAudio: true,
-      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durations: [...SEEDANCE_VIDEO_DURATIONS],
       aspectRatios: [...SEEDANCE_VIDEO_ASPECT_RATIOS],
       resolutions: ['720p', '1080p'],
       defaultDuration: 5,
@@ -324,7 +325,7 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
       supportsFullReference: false,
       supportsMotionReference: false,
       supportsAudio: true,
-      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durations: [...SEEDANCE_VIDEO_DURATIONS],
       aspectRatios: [...SEEDANCE_VIDEO_ASPECT_RATIOS],
       resolutions: ['720p', '1080p'],
       defaultDuration: 5,
@@ -337,7 +338,7 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
       supportsTextToVideo: true,
       supportsImageToVideo: true,
       supportsAudio: true,
-      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durations: [...SEEDANCE_VIDEO_DURATIONS],
       aspectRatios: [...SEEDANCE_VIDEO_ASPECT_RATIOS],
       resolutions: ['720p', '1080p'],
       defaultDuration: 5,
@@ -353,7 +354,7 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
       supportsFullReference: false,
       supportsMotionReference: false,
       supportsAudio: true,
-      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durations: [...SEEDANCE_VIDEO_DURATIONS],
       aspectRatios: [...SEEDANCE_VIDEO_ASPECT_RATIOS],
       resolutions: ['720p', '1080p'],
       defaultDuration: 5,
@@ -366,7 +367,7 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
       supportsTextToVideo: true,
       supportsImageToVideo: true,
       supportsAudio: true,
-      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durations: [...SEEDANCE_VIDEO_DURATIONS],
       aspectRatios: [...SEEDANCE_VIDEO_ASPECT_RATIOS],
       resolutions: ['720p', '1080p'],
       defaultDuration: 5,
@@ -379,7 +380,7 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
       supportsTextToVideo: true,
       supportsImageToVideo: true,
       supportsAudio: true,
-      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durations: [...SEEDANCE_VIDEO_DURATIONS],
       aspectRatios: [...SEEDANCE_VIDEO_ASPECT_RATIOS],
       resolutions: ['720p', '1080p'],
       defaultDuration: 5,
@@ -392,7 +393,7 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
       supportsTextToVideo: true,
       supportsImageToVideo: true,
       supportsAudio: true,
-      durations: [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      durations: [...SEEDANCE_VIDEO_DURATIONS],
       aspectRatios: [...SEEDANCE_VIDEO_ASPECT_RATIOS],
       resolutions: ['720p', '1080p'],
       defaultDuration: 5,
@@ -422,6 +423,332 @@ export const LOCAL_VOICE_CAPABILITIES: VoiceCapabilitiesMap = Object.fromEntries
 let runtimeVideoCapabilities: VideoCapabilitiesMap = { ...LOCAL_VIDEO_CAPABILITIES };
 let runtimeVoiceCapabilities: VoiceCapabilitiesMap = { ...LOCAL_VOICE_CAPABILITIES };
 
+export const NATIVE_VIDEO_CAPABILITY_OVERRIDES: Partial<VideoCapabilitiesMap> = {
+  'grok-video-3': createCapability('grok-video-3', 'grok-video-3', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsAudio: false,
+      durations: [1, 4, 8, 10, 12, 15],
+      aspectRatios: ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'],
+      resolutions: ['480p', '720p'],
+      defaultDuration: 8,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'sora-2': createCapability('sora-2', 'sora-2', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsFullReference: true,
+      supportsAudio: true,
+      durations: [10, 16, 20],
+      aspectRatios: ['16:9', '9:16'],
+      resolutions: ['720p', '1080p'],
+      defaultDuration: 10,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'veo3.1': createCapability('veo3.1', 'veo-3.1-fast-generate-preview', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsMultiImage: true,
+      supportsFullReference: true,
+      supportsAudio: false,
+      durations: [4, 6, 8],
+      aspectRatios: ['16:9', '9:16'],
+      resolutions: ['512p', '720p', '1080p'],
+      defaultDuration: 4,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+    frameToFrame: {
+      enabled: true,
+      supportsTextToVideo: false,
+      supportsImageToVideo: true,
+      supportsStartEndFrames: true,
+      durations: [4, 6, 8],
+      aspectRatios: ['16:9', '9:16'],
+      resolutions: ['512p', '720p', '1080p'],
+      defaultDuration: 4,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'kling-v2-6': createCapability('kling-v2-6', 'kling-v2-6', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsAudio: true,
+      durations: [5, 10],
+      aspectRatios: ['1:1', '16:9', '9:16'],
+      resolutions: ['Auto'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: 'Auto',
+    },
+  }),
+  'kling-v2-5-turbo': createCapability('kling-v2-5-turbo', 'kling-v2-5-turbo', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsFullReference: true,
+      supportsAudio: false,
+      durations: [5],
+      aspectRatios: ['16:9', '9:16'],
+      resolutions: ['1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '1080p',
+    },
+  }),
+  'kling-v3': createCapability('kling-v3', 'kling-v3', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsMultiImage: true,
+      supportsFullReference: true,
+      supportsAudio: true,
+      durations: [5, 10, 15],
+      aspectRatios: ['16:9', '9:16'],
+      resolutions: ['720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'minimax-hailuo': createCapability('minimax-hailuo', 'hailuo-2.3', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsAudio: false,
+      durations: [6, 10],
+      aspectRatios: ['16:9', '9:16'],
+      resolutions: ['768p', '1080p'],
+      defaultDuration: 6,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '768p',
+    },
+  }),
+  'jimeng-seedance-2': createCapability('jimeng-seedance-2', 'jimeng-seedance-2', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsAudio: true,
+      durations: [2, 5, 10, 12, 15],
+      aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'Auto'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+    frameToFrame: {
+      enabled: true,
+      supportsTextToVideo: false,
+      supportsImageToVideo: true,
+      supportsStartEndFrames: true,
+      supportsAudio: true,
+      durations: [2, 5, 10, 12, 15],
+      aspectRatios: ['16:9', '4:3', '1:1', '3:4', '9:16', '21:9', 'Auto'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'jimeng-4.5': createCapability('jimeng-4.5', 'jimeng-4.5', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsAudio: false,
+      durations: [2, 5, 10, 12],
+      aspectRatios: ['16:9', '4:3', '1:1', '21:9'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+    frameToFrame: {
+      enabled: true,
+      supportsTextToVideo: false,
+      supportsImageToVideo: true,
+      supportsStartEndFrames: true,
+      supportsAudio: false,
+      durations: [2, 5, 10, 12],
+      aspectRatios: ['16:9', '4:3', '1:1', '21:9'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'jimeng-4.1': createCapability('jimeng-4.1', 'jimeng-4.1', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsAudio: false,
+      durations: [5, 10],
+      aspectRatios: ['16:9', '4:3', '1:1', '21:9'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'jimeng-4.0': createCapability('jimeng-4.0', 'jimeng-4.0', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsMultiImage: true,
+      supportsFullReference: true,
+      supportsAudio: false,
+      durations: [2, 12],
+      aspectRatios: ['16:9', '4:3', '1:1', '21:9'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+    frameToFrame: {
+      enabled: true,
+      supportsTextToVideo: false,
+      supportsImageToVideo: true,
+      supportsStartEndFrames: true,
+      supportsAudio: false,
+      durations: [2, 12],
+      aspectRatios: ['16:9', '4:3', '1:1', '21:9'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'jimeng-video-3-fast': createCapability('jimeng-video-3-fast', 'jimeng-video-3-fast', {
+    standard: {
+      supportsTextToVideo: true,
+      supportsImageToVideo: true,
+      supportsAudio: false,
+      durations: [5, 10],
+      aspectRatios: ['16:9', '4:3', '1:1', '21:9'],
+      resolutions: ['480p', '720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: '16:9',
+      defaultResolution: '720p',
+    },
+  }),
+  'wan2.6-i2v': createCapability('wan2.6-i2v', 'wan2.6-i2v', {
+    standard: {
+      supportsTextToVideo: false,
+      supportsImageToVideo: true,
+      supportsAudio: true,
+      durations: [5, 10, 15],
+      aspectRatios: ['Auto'],
+      resolutions: ['720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: 'Auto',
+      defaultResolution: '1080p',
+    },
+  }),
+  'wan2.6-i2v-flash': createCapability('wan2.6-i2v-flash', 'wan2.6-i2v-flash', {
+    standard: {
+      supportsTextToVideo: false,
+      supportsImageToVideo: true,
+      supportsAudio: true,
+      durations: [2, 5, 10, 15],
+      aspectRatios: ['Auto'],
+      resolutions: ['720p', '1080p'],
+      defaultDuration: 5,
+      defaultAspectRatio: 'Auto',
+      defaultResolution: '1080p',
+    },
+  }),
+};
+
+export const NATIVE_VIDEO_FEATURE_KEYS: Partial<Record<string, NativeVideoFeatureKey[]>> = {
+  'grok-video-3': ['textToVideo', 'imageToVideo'],
+  'sora-2': ['textToVideo', 'imageToVideo', 'fullReference', 'characterConsistency', 'audio'],
+  'veo3.1': ['textToVideo', 'imageToVideo', 'fullReference', 'startEndFrame'],
+  'kling-v2-6': ['textToVideo', 'imageToVideo', 'subjectReference', 'motionReference', 'audio'],
+  'kling-v2-5-turbo': ['textToVideo', 'imageToVideo', 'fullReference'],
+  'kling-v3': ['textToVideo', 'imageToVideo', 'multiImage', 'referenceVideo', 'audio'],
+  'minimax-hailuo': ['textToVideo', 'imageToVideo', 'subjectReference'],
+  'jimeng-seedance-2': ['textToVideo', 'imageToVideo', 'multiImage', 'fullReference', 'startEndFrame'],
+  'jimeng-4.5': ['textToVideo', 'imageToVideo', 'startEndFrame'],
+  'jimeng-4.1': ['textToVideo', 'imageToVideo'],
+  'jimeng-4.0': ['textToVideo', 'imageToVideo', 'multiImage', 'fullReference', 'startEndFrame'],
+  'jimeng-video-3-fast': ['textToVideo', 'imageToVideo'],
+  'wan2.6-i2v': ['imageToVideo', 'audio'],
+  'wan2.6-i2v-flash': ['imageToVideo', 'audio'],
+};
+
+export const NATIVE_VIDEO_MODEL_NOTES: NativeVideoModelNotes = {
+  'sora-2': ['官方 API 文档支持音频与参考图；当前后端只接了标准文生/图生，且时长仍按 4/8/12 秒执行。'],
+  'veo3.1': ['官方文档支持参考图与首尾帧；当前后端首尾帧已接通，标准参考图仍待接入。'],
+  'kling-v2-6': ['官方资料明确支持主体参考、运动参考与原生音频。'],
+  'kling-v2-5-turbo': ['官方公开资料确认 5 秒 1080p，并提到参考图风格一致性。'],
+  'kling-v3': ['官方资料确认多图参考、参考视频和原生音频。'],
+  'minimax-hailuo': ['官方公开资料明确有主体参考；首尾帧只在 Hailuo 02 文档中直接确认，因此此 SKU 不默认标首尾帧。'],
+  'jimeng-seedance-2': ['官方文档确认首尾帧；多图/全图参考来自官方 Seedance 2.0/1.0 Lite I2V 能力线索，但你当前后端只接了标准模式和首尾帧。'],
+  'jimeng-4.5': ['官方公开页确认文生、图生、首尾帧；更细能力参数仍需按 SKU 文档继续核。'],
+  'jimeng-4.1': ['官方公开页确认文生与图生；音频未在公开资料中直接确认。'],
+  'jimeng-4.0': ['官方文档可确认多图/全图参考与首尾帧。'],
+  'jimeng-video-3-fast': ['官方公开页确认文生与图生；更多能力未在公开资料中直接确认。'],
+  'wan2.6-i2v': ['官方明确为图生视频，输出比例跟随首帧；支持音频。'],
+  'wan2.6-i2v-flash': ['官方明确为图生视频，输出比例跟随首帧；支持音频。'],
+};
+
+export const NATIVE_VIDEO_MODEL_SOURCES: NativeVideoModelSources = {
+  'grok-video-3': [
+    'https://x.ai/news/grok-video',
+  ],
+  'sora-2': [
+    'https://developers.openai.com/api/docs/models/sora-2',
+    'https://developers.openai.com/api/docs/guides/video-generation',
+  ],
+  'veo3.1': [
+    'https://docs.cloud.google.com/vertex-ai/generative-ai/docs/models/veo/3-1-generate',
+  ],
+  'kling-v2-6': [
+    'https://ir.kuaishou.com/zh-hans/news-releases/news-release-details/keling26moxingtuichuyinhuatongchunengli',
+  ],
+  'kling-v2-5-turbo': [
+    'https://ir.kuaishou.com/news-releases/news-release-details/kling-ai-launches-25-turbo-video-model-industry-leading/',
+  ],
+  'kling-v3': [
+    'https://ir.kuaishou.com/news-releases/news-release-details/kling-ai-launches-30-model-ushering-era-where-everyone-can-be/',
+  ],
+  'minimax-hailuo': [
+    'https://platform.minimax.io/docs/guides/video-generation',
+    'https://platform.minimax.io/docs/api-reference/video-generation-i2v',
+    'https://platform.minimax.io/docs/api-reference/video-generation-fl2v',
+  ],
+  'jimeng-seedance-2': [
+    'https://docs.byteplus.com/en/docs/ModelArk/1330310',
+    'https://docs.byteplus.com/en/docs/modelark/1587798',
+  ],
+  'jimeng-4.5': [
+    'https://jimeng.com/',
+  ],
+  'jimeng-4.1': [
+    'https://jimeng.com/',
+  ],
+  'jimeng-4.0': [
+    'https://docs.byteplus.com/en/docs/ModelArk/1553576',
+  ],
+  'jimeng-video-3-fast': [
+    'https://jimeng.com/',
+  ],
+  'wan2.6-i2v': [
+    'https://help.aliyun.com/zh/model-studio/image-to-video-api-reference',
+  ],
+  'wan2.6-i2v-flash': [
+    'https://help.aliyun.com/zh/model-studio/image-to-video-api-reference',
+  ],
+};
+
 export function getAllVideoCapabilities(): VideoCapabilitiesMap {
   return runtimeVideoCapabilities;
 }
@@ -449,6 +776,26 @@ export function resetRuntimeVoiceCapabilities() {
 export function getVideoCapability(id: string | undefined): VideoModelCapability | undefined {
   if (!id) return undefined;
   return runtimeVideoCapabilities[id];
+}
+
+export function getNativeVideoCapability(id: string | undefined): VideoModelCapability | undefined {
+  if (!id) return undefined;
+  return NATIVE_VIDEO_CAPABILITY_OVERRIDES[id] ?? LOCAL_VIDEO_CAPABILITIES[id];
+}
+
+export function getNativeVideoFeatureKeys(id: string | undefined): NativeVideoFeatureKey[] {
+  if (!id) return [];
+  return NATIVE_VIDEO_FEATURE_KEYS[id] ?? [];
+}
+
+export function getNativeVideoModelNotes(id: string | undefined): string[] {
+  if (!id) return [];
+  return NATIVE_VIDEO_MODEL_NOTES[id] ?? [];
+}
+
+export function getNativeVideoModelSources(id: string | undefined): string[] {
+  if (!id) return [];
+  return NATIVE_VIDEO_MODEL_SOURCES[id] ?? [];
 }
 
 export function getVoiceCapability(id: string | undefined): VoiceModelCapability | undefined {

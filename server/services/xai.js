@@ -8,11 +8,9 @@ export const SUPPORTED_XAI_VIDEO_MODELS = Object.freeze([
     'grok-video-3',
 ]);
 
-export const DEFAULT_XAI_VIDEO_MODEL = 'grok-video-3';
-
 export function resolveXAIVideoModel(videoModel) {
     if (!videoModel) {
-        return DEFAULT_XAI_VIDEO_MODEL;
+        throw new Error('Missing xAI video model');
     }
 
     if (SUPPORTED_XAI_VIDEO_MODELS.includes(videoModel)) {

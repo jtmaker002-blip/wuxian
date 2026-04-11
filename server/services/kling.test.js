@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+describe('resolveKlingVideoModel', () => {
+  it('rejects missing Kling video model ids instead of silently defaulting', async () => {
+    const { resolveKlingVideoModel } = await import('./kling.js');
+
+    expect(() => resolveKlingVideoModel()).toThrow(/missing kling video model/i);
+  });
+});
+
 describe('generateKlingTextToVideo', () => {
   beforeEach(() => {
     vi.restoreAllMocks();

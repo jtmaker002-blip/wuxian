@@ -1,6 +1,6 @@
 import { assertVideoExecutionSupported, resolveVideoExecutionPlan } from './videoProviderRouting.js';
 
-const SUPPORTED_WAN_FAL_MODELS = new Set(['wan2.5-i2v-preview', 'wan2.6-i2v', 'wan2.6-i2v-flash']);
+const SUPPORTED_WAN_FAL_MODELS = new Set(['wan2.6-i2v', 'wan2.6-i2v-flash']);
 const SUPPORTED_SEEDANCE_FRAME_MODELS = new Set(['jimeng-seedance-2', 'jimeng-4.5']);
 const SUPPORTED_SEEDANCE_AUDIO_MODELS = new Set([
   'jimeng-seedance-2',
@@ -9,7 +9,8 @@ const SUPPORTED_SEEDANCE_AUDIO_MODELS = new Set([
   'jimeng-4.0',
   'jimeng-video-3-fast',
 ]);
-const SUPPORTED_SEEDANCE_ASPECT_RATIOS = new Set(['16:9', '9:16', '1:1', '4:3', '3:4', '21:9']);
+const SUPPORTED_SEEDANCE_ASPECT_RATIOS = new Set(['16:9', '9:16']);
+const SUPPORTED_SEEDANCE_DURATIONS = new Set([5, 10]);
 
 export function validateVideoRequest({
   videoModel,
@@ -42,7 +43,6 @@ export function validateVideoRequest({
   const isSoraModel = provider === 'openai-video';
   const isGrokModel = provider === 'xai-video';
   const isWanModel = provider === 'wan' && SUPPORTED_WAN_FAL_MODELS.has(normalizedModel);
-  const isWan25Preview = normalizedModel === 'wan2.5-i2v-preview';
   const isSeedanceModel = provider === 'seedance';
 
   if (hasEndFrame && !hasStartFrame) {
@@ -93,6 +93,10 @@ export function validateVideoRequest({
     throw new Error('Grok Video 3 当前不支持多图/全图参考，请仅使用单图 image 输入');
   }
 
+  if (isSoraModel && hasEndFrame) {
+    throw new Error('Sora 2 当前不支持首尾帧模式');
+  }
+
   if (hasReferenceImages && !isGrokModel && !isHailuoModel) {
     throw new Error('当前后端尚未接通标准模式的多图/全图参考，请先减少为单图，或改用已接通的专用模式。');
   }
@@ -109,8 +113,8 @@ export function validateVideoRequest({
     throw new Error(`${normalizedModel} 当前后端尚未接通首尾帧模式`);
   }
 
-  if (isSeedanceModel && seconds && (seconds < 2 || seconds > 12)) {
-    throw new Error('即梦视频模型当前仅支持 2 到 12 秒');
+  if (isSeedanceModel && seconds && !SUPPORTED_SEEDANCE_DURATIONS.has(seconds)) {
+    throw new Error('即梦视频模型当前仅支持 5 或 10 秒');
   }
 
   if (isSeedanceModel && resolution && !['720p', '1080p'].includes(resolution)) {
@@ -118,7 +122,7 @@ export function validateVideoRequest({
   }
 
   if (isSeedanceModel && aspectRatio && !SUPPORTED_SEEDANCE_ASPECT_RATIOS.has(aspectRatio)) {
-    throw new Error('即梦视频模型当前仅支持 16:9、9:16、1:1、4:3、3:4 或 21:9');
+    throw new Error('即梦视频模型当前仅支持 16:9 或 9:16');
   }
 
   if (isKlingModel && seconds && ![5, 10].includes(seconds)) {
@@ -137,11 +141,7 @@ export function validateVideoRequest({
     throw new Error('Sora 2 当前仅支持 4、8 或 12 秒');
   }
 
-  if (isWan25Preview && seconds && ![5, 10].includes(seconds)) {
-    throw new Error('Wan 2.5 I2V Preview 当前仅支持 5 或 10 秒');
-  }
-
-  if (isWanModel && !isWan25Preview && seconds && ![5, 10, 15].includes(seconds)) {
+  if (isWanModel && seconds && ![5, 10, 15].includes(seconds)) {
     throw new Error('Wan 图生视频当前仅支持 5、10 或 15 秒');
   }
 
@@ -193,11 +193,7 @@ export function validateVideoRequest({
     throw new Error('Sora 2 当前仅支持 720p 或 1080p');
   }
 
-  if (isWan25Preview && resolution && !['480p', '720p', '1080p'].includes(resolution)) {
-    throw new Error('Wan 2.5 I2V Preview 当前仅支持 480p、720p 或 1080p');
-  }
-
-  if (isWanModel && !isWan25Preview && resolution && !['720p', '1080p'].includes(resolution)) {
+  if (isWanModel && resolution && !['720p', '1080p'].includes(resolution)) {
     throw new Error('Wan 图生视频当前仅支持 720p 或 1080p');
   }
 

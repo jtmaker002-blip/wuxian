@@ -7,7 +7,7 @@
   "type": "module",
   "main": "electron/main.cjs",
   "scripts": {
-    "dev": "concurrently \"node server/index.js\" \"vite\"",
+    "dev": "node scripts/dev-runner.cjs",
     "server": "node server/index.js",
     "test": "vitest run",
     "build": "vite build",
