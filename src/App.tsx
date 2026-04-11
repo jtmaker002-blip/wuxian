@@ -77,6 +77,7 @@ import {
 } from './services/remoteCapabilitiesService';
 import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
 import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
+import { splitImageIntoGrid } from './utils/imageNodeActions';
 
 const CANVAS_DRAFT_STORAGE_KEY = 'twitcanva-current-canvas-draft';
 
@@ -695,6 +696,50 @@ export default function App() {
     }
   }, [groups, storyboardGenerator]);
 
+  const handleSplitImageGrid = React.useCallback(async (nodeId: string, rows: number, cols: number) => {
+    const sourceNode = nodes.find((node) => node.id === nodeId);
+    if (!sourceNode?.resultUrl) return;
+
+    try {
+      const tiles = await splitImageIntoGrid(sourceNode.resultUrl, rows, cols);
+      const tileWidth = 150;
+      const tileGap = 20;
+      const startX = sourceNode.x + 420;
+      const startY = sourceNode.y;
+      const splitNodes: NodeData[] = tiles.map((tile, index) => ({
+        id: crypto.randomUUID(),
+        type: NodeType.IMAGE,
+        x: startX + tile.col * (tileWidth + tileGap),
+        y: startY + tile.row * (tileWidth + tileGap),
+        prompt: `宫格切分 ${rows}x${cols} · 第 ${index + 1} 块`,
+        status: NodeStatus.SUCCESS,
+        model: sourceNode.model,
+        imageModel: sourceNode.imageModel,
+        aspectRatio: 'Auto',
+        resolution: sourceNode.resolution || 'Auto',
+        resultUrl: tile.dataUrl,
+        resultAspectRatio: tile.resultAspectRatio,
+        title: `切分 ${tile.row + 1}-${tile.col + 1}`,
+        parentIds: [sourceNode.id],
+      }));
+
+      setNodes((prev) => [
+        ...prev.map((node) =>
+          node.id === sourceNode.id
+            ? { ...node, imageToolMode: null, imageToolAction: `${cols}x${rows} 切分` }
+            : node
+        ),
+        ...splitNodes,
+      ]);
+      setSelectedNodeIds(splitNodes.map((node) => node.id));
+    } catch (error) {
+      updateNode(sourceNode.id, {
+        status: NodeStatus.ERROR,
+        errorMessage: error instanceof Error ? error.message : '宫格切分失败',
+      });
+    }
+  }, [nodes, setNodes, setSelectedNodeIds, updateNode]);
+
   // Storyboard Video Modal State
   const [storyboardVideoModal, setStoryboardVideoModal] = useState<{
     isOpen: boolean;
@@ -999,6 +1044,24 @@ export default function App() {
           Boolean(node.resultUrl)
       )
       : undefined;
+  const activeMarkNode =
+    selectedNodeIds.length === 1
+      ? nodes.find(
+        (node) =>
+          node.id === selectedNodeIds[0] &&
+          node.type === NodeType.IMAGE &&
+          node.imageToolMode === 'mark' &&
+          Boolean(node.activeImageAnnotationType) &&
+          Boolean(node.resultUrl)
+      )
+      : undefined;
+
+  const getAnnotationLabel = (type: NonNullable<NodeData['activeImageAnnotationType']>) => {
+    if (type === 'preserve') return '保留区域';
+    if (type === 'ignore') return '忽略区域';
+    if (type === 'reference') return '引用点';
+    return '局部说明';
+  };
 
   // Create asset modal (isCreateAssetModalOpen, handleOpenCreateAsset, handleSaveAssetToLibrary) provided by useAssetHandlers hook
 
@@ -1406,6 +1469,7 @@ export default function App() {
                 onGenerate={handleGenerate}
                 onAddNext={handleAddNext}
                 onQuickAddInputNode={handleQuickAddInputNode}
+                onSplitImageGrid={handleSplitImageGrid}
                 selected={selectedNodeIds.includes(node.id)}
                 showControls={selectedNodeIds.length === 1 && selectedNodeIds.includes(node.id)}
                 onNodePointerDown={(e) => {
@@ -1696,6 +1760,31 @@ export default function App() {
           initialSelection={activeFocusNode.focusSelection}
           onChange={(selection) => updateNode(activeFocusNode.id, { focusSelection: selection })}
           onClose={() => updateNode(activeFocusNode.id, { imageToolMode: null })}
+        />
+      )}
+      {activeMarkNode?.resultUrl && activeMarkNode.activeImageAnnotationType && (
+        <FocusSelectionOverlay
+          imageUrl={activeMarkNode.resultUrl}
+          title={getAnnotationLabel(activeMarkNode.activeImageAnnotationType)}
+          subtitle="请在图片上框选需要标记的局部区域"
+          instruction={`请框选${getAnnotationLabel(activeMarkNode.activeImageAnnotationType)}`}
+          onChange={(selection) => {
+            const type = activeMarkNode.activeImageAnnotationType!;
+            updateNode(activeMarkNode.id, {
+              imageAnnotations: [
+                ...(activeMarkNode.imageAnnotations || []),
+                {
+                  id: crypto.randomUUID(),
+                  type,
+                  label: getAnnotationLabel(type),
+                  selection,
+                },
+              ],
+              activeImageAnnotationType: undefined,
+              imageToolMode: null,
+            });
+          }}
+          onClose={() => updateNode(activeMarkNode.id, { activeImageAnnotationType: undefined, imageToolMode: null })}
         />
       )}
     </div >

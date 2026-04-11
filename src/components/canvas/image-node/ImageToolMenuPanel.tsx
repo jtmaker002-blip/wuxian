@@ -38,7 +38,7 @@ export function ImageToolMenuPanel({
       className={[
         widthClassName || (isDropdown ? 'w-[260px]' : 'w-[420px]'),
         isDropdown
-          ? 'rounded-[24px] border border-white/10 bg-[#262626]/95 p-2 text-white shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl'
+          ? 'rounded-[22px] border border-white/12 bg-[#242424]/96 p-2 text-white shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl'
           : 'rounded-[28px] border border-neutral-700 bg-[#1f1f1f] p-5 text-white shadow-2xl',
       ].join(' ')}
       onPointerDown={(event) => event.stopPropagation()}
@@ -74,7 +74,7 @@ export function ImageToolMenuPanel({
             onClick={() => onSelect?.(normalized.label)}
             className={
               isDropdown
-                ? 'flex items-center justify-between gap-3 rounded-[18px] px-4 py-3 text-left text-[15px] font-medium text-neutral-100 hover:bg-white/8'
+                ? 'flex items-center justify-between gap-3 rounded-2xl px-3.5 py-3 text-left text-[14px] font-medium text-neutral-100 transition-colors hover:bg-white/8'
                 : 'flex items-center justify-between gap-3 rounded-2xl border border-neutral-700 bg-[#2a2a2a] px-4 py-3 text-left text-lg text-neutral-100 hover:bg-[#333]'
             }
           >

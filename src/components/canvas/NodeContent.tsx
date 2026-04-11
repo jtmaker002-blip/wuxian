@@ -231,6 +231,39 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     ) : (
                         <>
                             <img src={data.resultUrl} alt="Generated" className="w-full h-full object-cover pointer-events-none" />
+                            {data.imageAnnotations?.map((annotation) => {
+                                const colorClass =
+                                    annotation.type === 'preserve'
+                                        ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100'
+                                        : annotation.type === 'ignore'
+                                            ? 'border-rose-300 bg-rose-400/15 text-rose-100'
+                                            : annotation.type === 'reference'
+                                                ? 'border-sky-300 bg-sky-400/15 text-sky-100'
+                                                : 'border-amber-300 bg-amber-400/15 text-amber-100';
+
+                                return (
+                                    <div
+                                        key={annotation.id}
+                                        className={`absolute z-20 rounded-[10px] border-2 ${colorClass} shadow-[0_0_18px_rgba(255,255,255,0.28),0_10px_28px_rgba(0,0,0,0.35)] ring-1 ring-black/35`}
+                                        style={{
+                                            left: `${annotation.selection.x * 100}%`,
+                                            top: `${annotation.selection.y * 100}%`,
+                                            width: `${annotation.selection.width * 100}%`,
+                                            height: `${annotation.selection.height * 100}%`,
+                                        }}
+                                    >
+                                        <span className={`absolute -top-8 left-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.35)] backdrop-blur-md ${colorClass}`}>
+                                            {annotation.label}
+                                        </span>
+                                    </div>
+                                );
+                            })}
+                            {selected && isImageType && !isLocalModel && (
+                                <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full border border-white/12 bg-black/48 px-3 py-1.5 text-[11px] font-medium text-white/90 shadow-[0_12px_28px_rgba(0,0,0,0.3)] backdrop-blur-md">
+                                    <span className="h-2 w-2 rounded-full bg-white/70" />
+                                    当前素材
+                                </div>
+                            )}
                             {selected && onUpload && (
                                 <button
                                     type="button"
@@ -331,10 +364,13 @@ export const NodeContent: React.FC<NodeContentProps> = ({
             ${!selected
                 ? 'rounded-[28px]'
                 : isImageType && !isLocalModel
-                    ? (isDark ? 'rounded-[28px] border border-white/35' : 'rounded-[28px] border border-neutral-300')
+                    ? (isDark ? 'rounded-[28px] border border-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'rounded-[28px] border border-neutral-300')
                     : `rounded-xl border border-dashed ${isDark ? 'border-white/10' : 'border-neutral-300'}`}
             ${isDark ? (isImageType && !isLocalModel && selected ? 'bg-[#1b1b1b]' : 'bg-[#141414]') : 'bg-neutral-50'}`
                 }>
+                    {selected && isImageType && !isLocalModel && (
+                        <div className="pointer-events-none absolute inset-4 rounded-[22px] border border-dashed border-white/12 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.045),transparent_58%)]" />
+                    )}
                     {renderVideoModelBadges()}
 
                     {/* Input Image Preview for Video Nodes */}
@@ -424,6 +460,17 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                     isLocalModel ? <><ImageIcon size={selected ? 48 : 40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <ImageIcon size={selected ? 48 : 40} />
                                 )}
                             </div>
+                            {selected && isImageType && !isLocalModel && onUpload && (
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    className="flex items-center gap-2 rounded-full border border-white/10 bg-[#252525]/90 px-3.5 py-2 text-xs font-medium text-neutral-200 shadow-[0_14px_34px_rgba(0,0,0,0.32)] transition-colors hover:border-white/16 hover:bg-[#303030] hover:text-white"
+                                >
+                                    <Upload size={14} />
+                                    上传或拖入素材
+                                </button>
+                            )}
                             {selected && (
                                 <>
                                     {(() => {

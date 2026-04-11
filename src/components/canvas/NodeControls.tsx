@@ -918,7 +918,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                     imageUrl={data.resultUrl}
                     settings={data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false }}
                     onSettingsChange={(settings) => onUpdate(data.id, { angleSettings: settings })}
-                    onClose={() => onUpdate(data.id, { angleMode: false, imageToolMode: null })}
+                    onClose={() => onUpdate(data.id, { angleMode: false, imageToolMode: null, imageToolAction: undefined })}
                     onGenerate={handleAngleGenerate}
                     isLoading={isLoading}
                     canvasTheme={canvasTheme}
@@ -949,7 +949,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         rimLight: false,
                     }}
                     onChange={(settings) => onUpdate(data.id, { imageLightingSettings: settings })}
-                    onClose={() => onUpdate(data.id, { imageToolMode: null })}
+                    onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
                     onGenerate={() => onGenerate(data.id)}
                 />
             </div>
@@ -958,7 +958,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
     return (
         <div
-            className={`${isLiblibImagePanel ? 'relative p-5 rounded-[28px]' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
+            className={`${isLiblibImagePanel ? 'relative rounded-[28px] p-4' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
             style={{
                 transform: `scale(${localScale})`,
                 transformOrigin: 'top center',
@@ -971,7 +971,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             {!isOfflineReadonlyVideoNode && !isStoryboardGeneratedScene && (
                 <div className="mb-3">
                     {isLiblibImagePanel && (
-                        <div className="mb-4 space-y-4">
+                        <div className="mb-0 space-y-3">
                             <button
                                 type="button"
                                 onClick={() => onUpdate(data.id, { isPromptExpanded: !data.isPromptExpanded })}
@@ -985,8 +985,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     <line x1="3" y1="21" x2="10" y2="14" />
                                 </svg>
                             </button>
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="flex items-center gap-3">
+                            <div className="flex items-start justify-between gap-3">
+                                <div className="flex items-center gap-2.5">
                                     {[
                                         { key: 'style' as const, label: '风格', icon: <Sparkles size={16} /> },
                                         { key: 'mark' as const, label: '标记', icon: <Settings2 size={16} /> },
@@ -997,11 +997,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             <button
                                                 key={tool.key}
                                                 type="button"
-                                                onClick={() => onUpdate(data.id, { imageToolMode: active ? null : tool.key })}
-                                                className={`flex h-[74px] w-[74px] shrink-0 flex-col items-center justify-center gap-2 rounded-[18px] border text-xs font-medium transition-all ${
+                                                onClick={() => onUpdate(data.id, { imageToolMode: active ? null : tool.key, imageToolAction: undefined })}
+                                                className={`flex h-[68px] w-[72px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border text-xs font-medium transition-all ${
                                                     active
                                                         ? 'border-white/70 bg-white text-black shadow-[0_12px_28px_rgba(255,255,255,0.12)]'
-                                                        : 'border-white/10 bg-[#2b2b2b] text-neutral-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)] hover:bg-[#343434] hover:border-white/14'
+                                                        : 'border-white/10 bg-[#2a2a2a] text-neutral-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)] hover:bg-[#343434] hover:border-white/14'
                                                 }`}
                                             >
                                                 <span className={active ? 'text-black' : 'text-neutral-300'}>{tool.icon}</span>
@@ -1010,28 +1010,31 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         );
                                     })}
                                     {(inputUrl || data.resultUrl) ? (
-                                        <div className="relative flex h-[74px] w-[74px] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-[#2b2b2b] p-1.5 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
+                                        <div className="relative flex h-[68px] w-[72px] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-[#2a2a2a] p-1.5 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
                                             <img
                                                 src={inputUrl || data.resultUrl}
                                                 alt="素材缩略图"
                                                 className="h-full w-full rounded-[12px] object-cover"
                                             />
-                                            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-[#3a3a3a] px-1 text-[10px] font-medium text-white">
+                                            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-black/68 px-1 text-[10px] font-medium text-white shadow">
                                                 {imageReferenceCount}
+                                            </span>
+                                            <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white/90">
+                                                素材
                                             </span>
                                         </div>
                                     ) : onUploadAsset ? (
                                         <button
                                             type="button"
                                             onClick={onUploadAsset}
-                                            className="flex h-[74px] w-[74px] shrink-0 flex-col items-center justify-center gap-1 rounded-[18px] border border-dashed border-white/14 bg-[#2b2b2b] text-[11px] font-medium text-neutral-300 transition-colors hover:bg-[#343434] hover:border-white/20 hover:text-white"
+                                            className="flex h-[68px] w-[72px] shrink-0 flex-col items-center justify-center gap-1 rounded-[18px] border border-dashed border-white/14 bg-[#2a2a2a] text-[11px] font-medium text-neutral-300 transition-colors hover:bg-[#343434] hover:border-white/20 hover:text-white"
                                         >
                                             <ImageIcon size={18} />
                                             <span>上传素材</span>
                                         </button>
                                     ) : null}
                                 </div>
-                                <div className="flex min-h-[74px] items-center gap-2 pr-12">
+                                <div className="flex min-h-[68px] items-center gap-2 pr-12">
                                     <div className="flex flex-col items-end gap-2">
                                         {imageReferenceCount > 0 && (
                                             <div className="rounded-full border border-white/8 bg-[#2b2b2b] px-3 py-1 text-[11px] font-medium text-neutral-300 shadow-[0_10px_18px_rgba(0,0,0,0.18)]">
@@ -1041,6 +1044,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         {data.focusSelection && imageToolMode !== 'focus' && (
                                             <div className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-[11px] font-medium text-sky-200 shadow-[0_10px_18px_rgba(12,74,110,0.18)]">
                                                 已聚焦局部
+                                            </div>
+                                        )}
+                                        {data.imageToolAction && (
+                                            <div className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 text-[11px] font-medium text-amber-100 shadow-[0_10px_18px_rgba(120,53,15,0.18)]">
+                                                当前动作 · {data.imageToolAction}
                                             </div>
                                         )}
                                     </div>
@@ -1062,6 +1070,25 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     已记录聚焦区域。继续在下方描述你希望局部变化的内容后再生成。
                                 </div>
                             )}
+                            <div className="rounded-[22px] border border-white/8 bg-[#1f1f1f] px-4 py-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                                <textarea
+                                    className="min-h-[132px] w-full resize-none bg-transparent text-[16px] font-light leading-8 text-neutral-100 outline-none placeholder:text-neutral-500"
+                                    placeholder="描述你想要生成的画面内容，按/呼出指令，@引用素材"
+                                    rows={data.isPromptExpanded ? 12 : 4}
+                                    style={{ minHeight: data.isPromptExpanded ? 220 : 132 }}
+                                    value={localPrompt}
+                                    onChange={(e) => handlePromptChange(e.target.value)}
+                                    onWheel={(e) => e.stopPropagation()}
+                                    onBlur={() => {
+                                        if (updateTimeoutRef.current) {
+                                            clearTimeout(updateTimeoutRef.current);
+                                        }
+                                        if (localPrompt !== data.prompt) {
+                                            onUpdate(data.id, { prompt: localPrompt });
+                                        }
+                                    }}
+                                />
+                            </div>
                             <div className="flex flex-wrap items-center justify-between gap-3 rounded-[22px] border border-white/10 bg-[#262626] px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.22)]">
                                 <div className="flex flex-wrap items-center gap-3 text-sm text-neutral-100">
                                     <div className="relative" ref={modelDropdownRef}>
@@ -1206,6 +1233,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         onClick={() => onUpdate(data.id, {
                                             angleMode: true,
                                             imageToolMode: 'multi-angle',
+                                            imageToolAction: undefined,
                                             angleSettings: data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false },
                                         })}
                                         className="flex items-center gap-2 rounded-full border border-white/8 bg-white/5 px-3 py-1.5 text-sm text-neutral-100 transition-colors hover:bg-white/10"
@@ -1399,32 +1427,31 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             执行说明：{currentVoiceExecutionSupport.note}
                         </div>
                     )}
-                    <textarea
-                        className={`w-full text-sm outline-none resize-none font-light ${isLiblibImagePanel ? 'min-h-[148px] bg-transparent text-[16px] leading-8 text-neutral-100 placeholder:text-neutral-500' : `bg-transparent ${promptText}`}`}
-                        placeholder={
-                            isLiblibImagePanel
-                                ? '描述你想要生成的画面内容，按/呼出指令，@引用素材'
-                                : data.type === NodeType.VIDEO && selectedVideoMode === 'frame-to-frame'
-                                ? t('nodeControls.promptOptionalKling')
-                                : data.type === NodeType.VIDEO && inputUrl
-                                    ? t('nodeControls.describeAnimation')
-                                    : t('nodeControls.describeGeneration')
-                        }
-                        rows={data.isPromptExpanded ? 12 : 4}
-                        style={isLiblibImagePanel ? { minHeight: data.isPromptExpanded ? 220 : 148 } : undefined}
-                        value={localPrompt}
-                        onChange={(e) => handlePromptChange(e.target.value)}
-                        onWheel={(e) => e.stopPropagation()}
-                        onBlur={() => {
-                            // Ensure final value is saved on blur
-                            if (updateTimeoutRef.current) {
-                                clearTimeout(updateTimeoutRef.current);
+                    {!isLiblibImagePanel && (
+                        <textarea
+                            className={`w-full text-sm outline-none resize-none font-light bg-transparent ${promptText}`}
+                            placeholder={
+                                data.type === NodeType.VIDEO && selectedVideoMode === 'frame-to-frame'
+                                    ? t('nodeControls.promptOptionalKling')
+                                    : data.type === NodeType.VIDEO && inputUrl
+                                        ? t('nodeControls.describeAnimation')
+                                        : t('nodeControls.describeGeneration')
                             }
-                            if (localPrompt !== data.prompt) {
-                                onUpdate(data.id, { prompt: localPrompt });
-                            }
-                        }}
-                    />
+                            rows={data.isPromptExpanded ? 12 : 4}
+                            value={localPrompt}
+                            onChange={(e) => handlePromptChange(e.target.value)}
+                            onWheel={(e) => e.stopPropagation()}
+                            onBlur={() => {
+                                // Ensure final value is saved on blur
+                                if (updateTimeoutRef.current) {
+                                    clearTimeout(updateTimeoutRef.current);
+                                }
+                                if (localPrompt !== data.prompt) {
+                                    onUpdate(data.id, { prompt: localPrompt });
+                                }
+                            }}
+                        />
+                    )}
                     {/* Expand/Shrink Button - Below textarea */}
                     {!isLiblibImagePanel && (
                         <div className="flex justify-end mt-1">

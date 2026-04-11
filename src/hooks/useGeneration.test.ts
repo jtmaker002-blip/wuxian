@@ -85,6 +85,29 @@ function createImageNode(id: string, resultUrl = 'data:image/png;base64,abc'): N
   };
 }
 
+function installImageStub(width = 1280, height = 720) {
+  class MockImage {
+    naturalWidth = width;
+    naturalHeight = height;
+    onload: null | (() => void) = null;
+    onerror: null | (() => void) = null;
+
+    set src(_value: string) {
+      queueMicrotask(() => {
+        if (typeof this.onload === 'function') {
+          this.onload();
+        }
+      });
+    }
+  }
+
+  Object.defineProperty(globalThis, 'Image', {
+    value: MockImage,
+    configurable: true,
+    writable: true,
+  });
+}
+
 function createParentVideoNode(id: string, resultUrl = 'https://example.com/ref.mp4'): NodeData {
   return {
     id,
@@ -140,7 +163,201 @@ describe('useGeneration 视频链路保护', () => {
       providerBaseUrl: 'https://openaiteach.com/v1',
     });
     installVideoMetadataStub();
+    installImageStub();
     resetRuntimeVideoCapabilities();
+  });
+
+  it('图片生成会携带已记录的聚焦框，即使当前已退出 focus 叠层', async () => {
+    const updateNode = vi.fn();
+    generateImageMock.mockResolvedValue('https://example.com/result.png');
+
+    const nodes = [
+      createImageNode('source-image', 'data:image/png;base64,source'),
+      {
+        ...createImageNode('image-node'),
+        id: 'image-node',
+        status: NodeStatus.IDLE,
+        prompt: '只修改人物面部区域',
+        resultUrl: undefined,
+        parentIds: ['source-image'],
+        imageToolMode: null,
+        focusSelection: { x: 10, y: 20, width: 30, height: 40 },
+      },
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('image-node');
+
+    expect(generateImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageBase64: ['data:image/png;base64,source'],
+        focusSelection: { x: 10, y: 20, width: 30, height: 40 },
+      })
+    );
+  });
+
+  it.each(['mark', 'enhance', 'grid', 'split'] as const)(
+    '图片生成会把 %s 工具意图附带到请求里',
+    async (imageToolMode) => {
+      const updateNode = vi.fn();
+      generateImageMock.mockResolvedValue('https://example.com/result.png');
+
+      const nodes = [
+        createImageNode('source-image', 'data:image/png;base64,source'),
+        {
+          ...createImageNode('image-node'),
+          id: 'image-node',
+          status: NodeStatus.IDLE,
+          prompt: '按当前工具执行',
+          resultUrl: undefined,
+          parentIds: ['source-image'],
+          imageToolMode,
+        },
+      ];
+
+      const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+      await handleGenerate('image-node');
+
+      expect(generateImageMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageToolMode,
+        })
+      );
+    }
+  );
+
+  it('图片生成会把具体工具动作附带到请求里', async () => {
+    const updateNode = vi.fn();
+    generateImageMock.mockResolvedValue('https://example.com/result.png');
+
+    const nodes = [
+      createImageNode('source-image', 'data:image/png;base64,source'),
+      {
+        ...createImageNode('image-node'),
+        id: 'image-node',
+        status: NodeStatus.IDLE,
+        prompt: '执行高清动作',
+        resultUrl: undefined,
+        parentIds: ['source-image'],
+        imageToolMode: 'enhance' as const,
+        imageToolAction: '扩图',
+      },
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('image-node');
+
+    expect(generateImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageToolMode: 'enhance',
+        imageToolAction: '扩图',
+      })
+    );
+  });
+
+  it('切到不支持具体动作的图片工具时不会发送旧动作', async () => {
+    const updateNode = vi.fn();
+    generateImageMock.mockResolvedValue('https://example.com/result.png');
+
+    const nodes = [
+      createImageNode('source-image', 'data:image/png;base64,source'),
+      {
+        ...createImageNode('image-node'),
+        id: 'image-node',
+        status: NodeStatus.IDLE,
+        prompt: '',
+        resultUrl: undefined,
+        parentIds: ['source-image'],
+        imageToolMode: 'focus' as const,
+        imageToolAction: '扩图',
+        focusSelection: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      },
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('image-node');
+
+    expect(generateImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageToolMode: 'focus',
+        imageToolAction: undefined,
+      })
+    );
+  });
+
+  it('图片工具流即使没有提示词也会继续执行生成', async () => {
+    const updateNode = vi.fn();
+    generateImageMock.mockResolvedValue('https://example.com/result.png');
+
+    const nodes = [
+      createImageNode('source-image', 'data:image/png;base64,source'),
+      {
+        ...createImageNode('image-node'),
+        id: 'image-node',
+        status: NodeStatus.IDLE,
+        prompt: '',
+        resultUrl: undefined,
+        parentIds: ['source-image'],
+        imageToolMode: 'enhance' as const,
+      },
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('image-node');
+
+    expect(generateImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageBase64: ['data:image/png;base64,source'],
+        imageToolMode: 'enhance',
+      })
+    );
+  });
+
+  it('图片生成会把保留和忽略标记区域附带到请求里', async () => {
+    const updateNode = vi.fn();
+    generateImageMock.mockResolvedValue('https://example.com/result.png');
+    const annotations = [
+      {
+        id: 'keep-1',
+        type: 'preserve' as const,
+        label: '保留区域',
+        selection: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+      },
+      {
+        id: 'ignore-1',
+        type: 'ignore' as const,
+        label: '忽略区域',
+        selection: { x: 0.5, y: 0.6, width: 0.2, height: 0.1 },
+      },
+    ];
+
+    const nodes = [
+      createImageNode('source-image', 'data:image/png;base64,source'),
+      {
+        ...createImageNode('image-node'),
+        id: 'image-node',
+        status: NodeStatus.IDLE,
+        prompt: '根据标记微调',
+        resultUrl: undefined,
+        parentIds: ['source-image'],
+        imageAnnotations: annotations,
+      },
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('image-node');
+
+    expect(generateImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageAnnotations: annotations,
+      })
+    );
   });
 
   it('首尾帧模式缺少两张图片时会阻止生成，而不是静默按 standard 执行', async () => {

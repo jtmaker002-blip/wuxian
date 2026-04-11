@@ -20,6 +20,46 @@ export enum NodeStatus {
   ERROR = 'error'
 }
 
+export type ImageToolMode =
+  | 'style'
+  | 'mark'
+  | 'focus'
+  | 'multi-angle'
+  | 'lighting'
+  | 'grid'
+  | 'enhance'
+  | 'split'
+  | null;
+
+export interface ImageLightingSettings {
+  mode: 'global' | 'local';
+  smartMode: boolean;
+  brightness: number;
+  color: string;
+  keyLight: 'left' | 'top' | 'right' | 'front' | 'bottom' | 'back';
+  rimLight: boolean;
+}
+
+export interface FocusSelection {
+  /** Normalized left offset within the rendered/source image, from 0 to 1. */
+  x: number;
+  /** Normalized top offset within the rendered/source image, from 0 to 1. */
+  y: number;
+  /** Normalized selection width, from 0 to 1. */
+  width: number;
+  /** Normalized selection height, from 0 to 1. */
+  height: number;
+}
+
+export type ImageAnnotationType = 'reference' | 'note' | 'preserve' | 'ignore';
+
+export interface ImageAnnotation {
+  id: string;
+  type: ImageAnnotationType;
+  label: string;
+  selection: FocusSelection;
+}
+
 export interface NodeData {
   id: string;
   type: NodeType;
@@ -104,21 +144,12 @@ export interface NodeData {
     scale: number;     // Scale factor (0 to 100)
     wideAngle: boolean; // Whether to use wide-angle lens perspective
   };
-  imageToolMode?: 'style' | 'mark' | 'focus' | 'multi-angle' | 'lighting' | 'grid' | 'enhance' | 'split' | null;
-  imageLightingSettings?: {
-    mode: 'global' | 'local';
-    smartMode: boolean;
-    brightness: number;
-    color: string;
-    keyLight: 'left' | 'top' | 'right' | 'front' | 'bottom' | 'back';
-    rimLight: boolean;
-  };
-  focusSelection?: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  };
+  imageToolMode?: ImageToolMode;
+  imageToolAction?: string;
+  imageLightingSettings?: ImageLightingSettings;
+  focusSelection?: FocusSelection;
+  activeImageAnnotationType?: ImageAnnotationType;
+  imageAnnotations?: ImageAnnotation[];
 
   // Local Model node specific
   localModelId?: string;        // ID of the selected local model

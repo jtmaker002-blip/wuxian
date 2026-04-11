@@ -210,4 +210,179 @@ describe('generation /generate-image hosted token routing', () => {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }
   });
+
+  it('injects focus selection and tool context into the executed image prompt', async () => {
+    const router = await importFreshGenerationRouter();
+    const serverHandle = await createServer(router, {
+      IMAGES_DIR: imagesDir,
+    });
+
+    try {
+      const response = await fetch(`${serverHandle.baseUrl}/api/generate-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodeId: 'focus-image-node',
+          prompt: '只微调人物面部表情',
+          imageModel: 'gemini-3.1-flash-image-preview',
+          providerApiKey: 'sk-hosted-token',
+          providerBaseUrl: 'https://openaiteach.com/v1',
+          imageToolMode: 'enhance',
+          focusSelection: {
+            x: 10,
+            y: 20,
+            width: 30,
+            height: 40,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(mockGenerateOpenAiTeachGeminiImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('只微调人物面部表情'),
+        })
+      );
+      expect(mockGenerateOpenAiTeachGeminiImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('聚焦区域'),
+        })
+      );
+      expect(mockGenerateOpenAiTeachGeminiImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('x=10'),
+        })
+      );
+      expect(mockGenerateOpenAiTeachGeminiImage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: expect.stringContaining('图片工具：enhance'),
+        })
+      );
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
+  it.each([
+    ['enhance', undefined, ['图片工具：enhance', '高清增强']],
+    ['grid', undefined, ['图片工具：grid', '九宫格']],
+    ['split', undefined, ['图片工具：split', '分块']],
+    ['mark', undefined, ['图片工具：mark', '标记区域']],
+    ['focus', { x: 0.1, y: 0.2, width: 0.3, height: 0.4 }, ['图片工具：focus', '焦点编辑', 'x=0.1']],
+    [
+      'lighting',
+      undefined,
+      ['图片工具：lighting', '打光', 'brightness=12'],
+      {
+        mode: 'local',
+        smartMode: true,
+        brightness: 12,
+        color: '#ffeeaa',
+        keyLight: 'left',
+        rimLight: true,
+      },
+    ],
+  ])(
+    'persists backend prompt and metadata context for %s image tool',
+    async (imageToolMode, focusSelection, expectedPromptParts, imageLightingSettings) => {
+      const router = await importFreshGenerationRouter();
+      const serverHandle = await createServer(router, {
+        IMAGES_DIR: imagesDir,
+      });
+
+      try {
+        const nodeId = `${imageToolMode}-tool-node`;
+        const response = await fetch(`${serverHandle.baseUrl}/api/generate-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodeId,
+            prompt: '保持主体一致，只应用当前图片工具',
+            imageModel: 'gemini-3.1-flash-image-preview',
+            providerApiKey: 'sk-hosted-token',
+            providerBaseUrl: 'https://openaiteach.com/v1',
+            imageToolMode,
+            imageToolAction: '扩图',
+            focusSelection,
+            imageLightingSettings,
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        const executedPrompt = mockGenerateOpenAiTeachGeminiImage.mock.calls.at(-1)?.[0]?.prompt;
+        expect(executedPrompt).toContain('保持主体一致，只应用当前图片工具');
+        for (const expectedPart of expectedPromptParts) {
+          expect(executedPrompt).toContain(expectedPart);
+        }
+
+        const metadata = JSON.parse(
+          fs.readFileSync(path.join(imagesDir, `${nodeId}.json`), 'utf8')
+        );
+        expect(metadata.prompt).toBe(executedPrompt);
+        expect(metadata.imageToolMode).toBe(imageToolMode);
+        expect(metadata.imageToolAction).toBe('扩图');
+        expect(executedPrompt).toContain('具体工具动作：扩图');
+        expect(metadata.imageToolContext).toMatchObject({
+          mode: imageToolMode,
+          promptInstructions: expect.arrayContaining([
+            expect.stringContaining(`图片工具：${imageToolMode}`),
+          ]),
+        });
+        expect(metadata.imageToolContext.focusSelection).toEqual(focusSelection || null);
+        expect(metadata.imageToolContext.lightingSettings).toEqual(
+          imageLightingSettings || null
+        );
+      } finally {
+        await new Promise((resolve) => serverHandle.server.close(resolve));
+      }
+    }
+  );
+
+  it('injects preserve and ignore annotation context into the executed image prompt', async () => {
+    const router = await importFreshGenerationRouter();
+    const serverHandle = await createServer(router, {
+      IMAGES_DIR: imagesDir,
+    });
+
+    try {
+      const response = await fetch(`${serverHandle.baseUrl}/api/generate-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodeId: 'annotation-image-node',
+          prompt: '根据标记生成',
+          imageModel: 'gemini-3.1-flash-image-preview',
+          providerApiKey: 'sk-hosted-token',
+          providerBaseUrl: 'https://openaiteach.com/v1',
+          imageAnnotations: [
+            {
+              id: 'keep-1',
+              type: 'preserve',
+              label: '保留区域',
+              selection: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+            },
+            {
+              id: 'ignore-1',
+              type: 'ignore',
+              label: '忽略区域',
+              selection: { x: 0.5, y: 0.6, width: 0.2, height: 0.1 },
+            },
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const executedPrompt = mockGenerateOpenAiTeachGeminiImage.mock.calls.at(-1)?.[0]?.prompt;
+      expect(executedPrompt).toContain('保留区域必须尽量保持不变');
+      expect(executedPrompt).toContain('忽略区域不作为主体参考');
+
+      const metadata = JSON.parse(
+        fs.readFileSync(path.join(imagesDir, 'annotation-image-node.json'), 'utf8')
+      );
+      expect(metadata.imageAnnotations).toHaveLength(2);
+      expect(metadata.imageToolContext.annotations).toHaveLength(2);
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
 });

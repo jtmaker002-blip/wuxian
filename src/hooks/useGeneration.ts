@@ -216,8 +216,11 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 (normalizedVideoNode.frameInputs && normalizedVideoNode.frameInputs.length >= 2) ||
                 hasLegacyFrameFallback
             );
+        const isImageToolDriven =
+            (node.type === NodeType.IMAGE || node.type === NodeType.IMAGE_EDITOR) &&
+            Boolean(node.focusSelection || node.imageToolMode || node.imageLightingSettings);
 
-        if (!combinedPrompt && !isVideoFrameDriven) return;
+        if (!combinedPrompt && !isVideoFrameDriven && !isImageToolDriven) return;
 
         if (node.type === NodeType.LOCAL_VIDEO_MODEL) {
             updateNode(id, {
@@ -323,7 +326,21 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     // Kling V1.5 reference settings
                     klingReferenceMode: node.klingReferenceMode,
                     klingFaceIntensity: node.klingFaceIntensity,
-                    klingSubjectIntensity: node.klingSubjectIntensity
+                    klingSubjectIntensity: node.klingSubjectIntensity,
+                    focusSelection: node.focusSelection,
+                    imageAnnotations: node.imageAnnotations,
+                    imageToolMode: node.imageToolMode ?? undefined,
+                    imageToolAction:
+                        node.imageToolMode === 'enhance' ||
+                        node.imageToolMode === 'grid' ||
+                        node.imageToolMode === 'split' ||
+                        node.imageToolMode === 'style'
+                            ? node.imageToolAction
+                            : undefined,
+                    imageLightingSettings:
+                        node.imageToolMode === 'lighting'
+                            ? node.imageLightingSettings
+                            : undefined,
                 });
 
                 // Add cache-busting parameter to force browser to fetch new image

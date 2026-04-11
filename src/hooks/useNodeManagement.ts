@@ -10,6 +10,27 @@ import { NodeData, NodeType, NodeStatus, Viewport } from '../types';
 import { getDefaultModelForNodeType, isSwitchableNodeType, type SwitchableNodeType } from '../config/nodeTypeRegistry';
 import { switchNodeTypeData } from '../utils/nodeTypeSwitch';
 
+const DEFAULT_NODE_X_OFFSET = 170;
+const DEFAULT_NODE_Y_OFFSET = 100;
+const MIN_VISIBLE_NODE_X = 132;
+const MIN_VISIBLE_NODE_Y = 72;
+
+export function resolveStandaloneNodeCanvasPosition(
+    screenX: number,
+    screenY: number,
+    viewport: Viewport
+) {
+    const canvasX = (screenX - viewport.x) / viewport.zoom;
+    const canvasY = (screenY - viewport.y) / viewport.zoom;
+    const minCanvasX = (MIN_VISIBLE_NODE_X - viewport.x) / viewport.zoom;
+    const minCanvasY = (MIN_VISIBLE_NODE_Y - viewport.y) / viewport.zoom;
+
+    return {
+        canvasX: Math.max(canvasX - DEFAULT_NODE_X_OFFSET, minCanvasX),
+        canvasY: Math.max(canvasY - DEFAULT_NODE_Y_OFFSET, minCanvasY),
+    };
+}
+
 export const useNodeManagement = () => {
     // ============================================================================
     // STATE
@@ -37,14 +58,15 @@ export const useNodeManagement = () => {
         parentId: string | undefined,
         viewport: Viewport
     ) => {
-        const canvasX = (x - viewport.x) / viewport.zoom;
-        const canvasY = (y - viewport.y) / viewport.zoom;
+        const pointerCanvasX = (x - viewport.x) / viewport.zoom;
+        const pointerCanvasY = (y - viewport.y) / viewport.zoom;
+        const standalonePosition = resolveStandaloneNodeCanvasPosition(x, y, viewport);
 
         const newNode: NodeData = {
             id: crypto.randomUUID(),
             type,
-            x: parentId ? canvasX : canvasX - 170,
-            y: parentId ? canvasY : canvasY - 100,
+            x: parentId ? pointerCanvasX : standalonePosition.canvasX,
+            y: parentId ? pointerCanvasY : standalonePosition.canvasY,
             prompt: '',
             status: NodeStatus.IDLE,
             model:

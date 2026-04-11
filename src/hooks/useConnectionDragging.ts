@@ -48,6 +48,50 @@ export const useConnectionDragging = () => {
         return { width, height: width / (4 / 3) };
     };
 
+    const getConnectionChildUpdates = (
+        parentNode: NodeData,
+        childNode: NodeData,
+        nextParentIds: string[]
+    ): Partial<NodeData> => {
+        if (
+            (parentNode.type === NodeType.IMAGE || parentNode.type === NodeType.IMAGE_EDITOR) &&
+            childNode.type === NodeType.VIDEO
+        ) {
+            const inheritedAspectRatio =
+                parentNode.aspectRatio && parentNode.aspectRatio !== 'Auto'
+                    ? parentNode.aspectRatio
+                    : childNode.aspectRatio;
+            const nextPrompt =
+                childNode.prompt?.trim()
+                    ? childNode.prompt
+                    : parentNode.prompt?.trim()
+                        ? parentNode.prompt
+                        : '基于已接入的图片素材生成视频';
+
+            return {
+                parentIds: nextParentIds,
+                prompt: nextPrompt,
+                status: NodeStatus.IDLE,
+                videoMode: 'standard',
+                aspectRatio: inheritedAspectRatio,
+                inputUrl: parentNode.resultUrl,
+                resultUrl: undefined,
+                resultAspectRatio: undefined,
+                lastFrame: undefined,
+                frameInputs: undefined,
+                requestedVideoModel: undefined,
+                executedVideoModel: undefined,
+                executedVideoMode: undefined,
+                executionProvider: undefined,
+                generationStartTime: undefined,
+                isPromptExpanded: true,
+                errorMessage: undefined,
+            };
+        }
+
+        return { parentIds: nextParentIds };
+    };
+
     // ============================================================================
     // HELPERS
     // ============================================================================
@@ -292,18 +336,34 @@ export const useConnectionDragging = () => {
                 }
 
                 // Add source as a parent to target node
+                let didAddConnection = false;
                 onUpdateNodes(prev => prev.map(n => {
                     if (n.id === hoveredNodeId) {
                         const existingParents = n.parentIds || [];
                         // Prevent duplicate connections
-                        if (!existingParents.includes(connectionStart.nodeId)) {
-                            return { ...n, parentIds: [...existingParents, connectionStart.nodeId] };
+                        if (existingParents.includes(connectionStart.nodeId)) {
+                            return n;
                         }
+
+                        didAddConnection = true;
+                        const nextParentIds = [...existingParents, connectionStart.nodeId];
+                        const parentNode = nodes.find(node => node.id === connectionStart.nodeId);
+
+                        if (!parentNode) {
+                            return { ...n, parentIds: nextParentIds };
+                        }
+
+                        return {
+                            ...n,
+                            ...getConnectionChildUpdates(parentNode, n, nextParentIds),
+                        };
                     }
                     return n;
                 }));
                 // Notify about new connection: source is parent, hoveredNode is child
-                onConnectionMade?.(connectionStart.nodeId, hoveredNodeId);
+                if (didAddConnection) {
+                    onConnectionMade?.(connectionStart.nodeId, hoveredNodeId);
+                }
             } else {
                 // Connecting to RIGHT connector = target provides output (target is parent)
                 // hoveredNode is parent, source is child

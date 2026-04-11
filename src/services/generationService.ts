@@ -7,6 +7,7 @@
  * - Video: Veo 3.1, Kling AI
  */
 
+import type { FocusSelection, ImageAnnotation, ImageLightingSettings, ImageToolMode } from '../types';
 import { readStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
 
 export interface GenerateImageParams {
@@ -22,6 +23,11 @@ export interface GenerateImageParams {
   klingReferenceMode?: 'subject' | 'face';
   klingFaceIntensity?: number; // 0-100
   klingSubjectIntensity?: number; // 0-100
+  focusSelection?: FocusSelection;
+  imageAnnotations?: ImageAnnotation[];
+  imageToolMode?: Exclude<ImageToolMode, null>;
+  imageToolAction?: string;
+  imageLightingSettings?: ImageLightingSettings;
 }
 
 export interface GenerateVideoParams {

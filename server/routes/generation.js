@@ -101,6 +101,111 @@ function resolveHostedFallbackVideoInput({
     return imageBase64;
 }
 
+const IMAGE_TOOL_PROMPT_INSTRUCTIONS = {
+    enhance: [
+        '图片工具：enhance',
+        '高清增强：提升纹理细节、边缘清晰度、局部对比和整体画质；保持原主体、构图、姿态和风格不发生明显变化。',
+    ],
+    grid: [
+        '图片工具：grid',
+        '九宫格：生成规则网格构图或多宫格变体，保持主体连续性和统一风格，避免随机拼贴或无关画面。',
+    ],
+    split: [
+        '图片工具：split',
+        '分块：按清晰可分离的宫格/分镜块组织画面，保证每个分块边界明确、内容连续且便于后续拆分使用。',
+    ],
+    mark: [
+        '图片工具：mark',
+        '标记区域：优先遵循当前标记、箭头、文字或涂抹意图，对被强调区域做明显编辑响应，同时尽量保留未标记区域。',
+    ],
+    focus: [
+        '图片工具：focus',
+        '焦点编辑：只强化或修改选定焦点区域，保留区域外的主体身份、背景、构图、色彩和光影一致性。',
+    ],
+    lighting: [
+        '图片工具：lighting',
+        '打光：调整画面照明方向、强度、色温、明暗层次和轮廓光，让光源变化真实落在主体与环境上。',
+    ],
+};
+
+function getValidFocusSelection(focusSelection) {
+    if (
+        focusSelection &&
+        Number.isFinite(focusSelection.x) &&
+        Number.isFinite(focusSelection.y) &&
+        Number.isFinite(focusSelection.width) &&
+        Number.isFinite(focusSelection.height)
+    ) {
+        return focusSelection;
+    }
+
+    return null;
+}
+
+function buildImageToolContext({ focusSelection, imageToolMode, imageToolAction, imageLightingSettings, imageAnnotations }) {
+    const validFocusSelection = getValidFocusSelection(focusSelection);
+    const instructions = [];
+
+    if (validFocusSelection) {
+        instructions.push(
+            `聚焦区域（归一化坐标）：x=${validFocusSelection.x}, y=${validFocusSelection.y}, width=${validFocusSelection.width}, height=${validFocusSelection.height}。仅修改该区域，并尽量保持区域外内容、构图和主体一致。`
+        );
+    }
+
+    if (imageToolMode) {
+        instructions.push(...(IMAGE_TOOL_PROMPT_INSTRUCTIONS[imageToolMode] || [`图片工具：${imageToolMode}`]));
+
+        if (imageToolAction) {
+            instructions.push(`具体工具动作：${imageToolAction}`);
+        }
+
+        if (imageToolMode === 'lighting' && imageLightingSettings) {
+            instructions.push(
+                `打光设置：mode=${imageLightingSettings.mode}, smartMode=${imageLightingSettings.smartMode}, brightness=${imageLightingSettings.brightness}, color=${imageLightingSettings.color}, keyLight=${imageLightingSettings.keyLight}, rimLight=${imageLightingSettings.rimLight}。`
+            );
+        }
+    }
+
+    const validAnnotations = Array.isArray(imageAnnotations)
+        ? imageAnnotations.filter((annotation) => annotation && getValidFocusSelection(annotation.selection))
+        : [];
+
+    if (validAnnotations.length > 0) {
+        const annotationLines = validAnnotations.map((annotation, index) => {
+            const selection = annotation.selection;
+            return `${index + 1}. ${annotation.label || annotation.type}: x=${selection.x}, y=${selection.y}, width=${selection.width}, height=${selection.height}`;
+        });
+        instructions.push(`图片标记区域（归一化坐标）：\n${annotationLines.join('\n')}`);
+
+        if (validAnnotations.some((annotation) => annotation.type === 'preserve')) {
+            instructions.push('保留区域必须尽量保持不变。');
+        }
+        if (validAnnotations.some((annotation) => annotation.type === 'ignore')) {
+            instructions.push('忽略区域不作为主体参考，不要围绕它生成关键内容。');
+        }
+    }
+
+    return {
+        mode: imageToolMode || null,
+        focusSelection: validFocusSelection,
+        lightingSettings: imageLightingSettings || null,
+        annotations: validAnnotations,
+        promptInstructions: instructions,
+    };
+}
+
+function buildImagePromptWithToolContext({
+    prompt,
+    imageToolContext,
+}) {
+    const basePrompt = typeof prompt === 'string' ? prompt.trim() : '';
+    const instructions = imageToolContext.promptInstructions;
+
+    if (instructions.length === 0) return basePrompt;
+
+    return [basePrompt, ...instructions].filter(Boolean).join('\n\n');
+}
+
 // ============================================================================
 // IMAGE GENERATION
 // ============================================================================
@@ -117,6 +222,11 @@ router.post('/generate-image', async (req, res) => {
             klingReferenceMode,
             klingFaceIntensity,
             klingSubjectIntensity,
+            focusSelection,
+            imageAnnotations,
+            imageToolMode,
+            imageToolAction,
+            imageLightingSettings,
             providerApiKey,
             providerBaseUrl,
         } = req.body;
@@ -130,6 +240,17 @@ router.post('/generate-image', async (req, res) => {
         // Determine provider
         const isKlingModel = imageModel && imageModel.startsWith('kling-');
         const isOpenAIModel = imageModel && imageModel.startsWith('gpt-image-');
+        const imageToolContext = buildImageToolContext({
+            focusSelection,
+            imageAnnotations,
+            imageToolMode,
+            imageToolAction,
+            imageLightingSettings,
+        });
+        const executionPrompt = buildImagePromptWithToolContext({
+            prompt,
+            imageToolContext,
+        });
 
         let imageBuffer;
         let imageFormat = 'png';
@@ -173,7 +294,7 @@ router.post('/generate-image', async (req, res) => {
                 // V2 models: Use Multi-Image API for image-to-image
                 console.log(`Using Kling Multi-Image API for ${imageModel} with ${resolvedImages.length} subject image(s)`);
                 klingImageUrl = await generateKlingMultiImage({
-                    prompt,
+                    prompt: executionPrompt,
                     subjectImages: resolvedImages,
                     modelId: imageModel,
                     aspectRatio,
@@ -185,7 +306,7 @@ router.post('/generate-image', async (req, res) => {
                 // Multiple images with non-V2 model: Use Multi-Image API
                 console.log(`Using Kling Multi-Image API with ${resolvedImages.length} subject images`);
                 klingImageUrl = await generateKlingMultiImage({
-                    prompt,
+                    prompt: executionPrompt,
                     subjectImages: resolvedImages,
                     modelId: imageModel,
                     aspectRatio,
@@ -196,7 +317,7 @@ router.post('/generate-image', async (req, res) => {
             } else {
                 // V1.5 or text-to-image: Use standard API (V1.5 supports image_reference)
                 klingImageUrl = await generateKlingImage({
-                    prompt,
+                    prompt: executionPrompt,
                     imageBase64: resolvedImages,
                     modelId: imageModel,
                     aspectRatio,
@@ -234,7 +355,7 @@ router.post('/generate-image', async (req, res) => {
 
             if (executedImageModel.startsWith('gemini-')) {
                 imageBuffer = await generateOpenAiTeachGeminiImage({
-                    prompt,
+                    prompt: executionPrompt,
                     imageBase64Array,
                     imageModel: executedImageModel,
                     apiKey: hostedProviderApiKey,
@@ -242,7 +363,7 @@ router.post('/generate-image', async (req, res) => {
                 });
             } else {
                 imageBuffer = await generateOpenAIImage({
-                    prompt,
+                    prompt: executionPrompt,
                     imageBase64Array,
                     aspectRatio,
                     resolution,
@@ -278,7 +399,7 @@ router.post('/generate-image', async (req, res) => {
             }
 
             imageBuffer = await generateOpenAIImage({
-                prompt,
+                prompt: executionPrompt,
                 imageBase64Array,
                 aspectRatio,
                 resolution,
@@ -310,7 +431,7 @@ router.post('/generate-image', async (req, res) => {
             }
 
             imageBuffer = await generateGeminiImage({
-                prompt,
+                prompt: executionPrompt,
                 imageBase64Array,
                 aspectRatio,
                 resolution,
@@ -331,10 +452,16 @@ router.post('/generate-image', async (req, res) => {
         const metadata = {
             id: metadataId,  // Must match the filename for delete API to find it
             filename: saved.filename,
-            prompt: prompt,
+            prompt: executionPrompt,
             model: executedImageModel,
             requestedModel: imageModel || executedImageModel,
             executionProvider,
+            focusSelection: focusSelection || null,
+            imageAnnotations: imageToolContext.annotations,
+            imageToolMode: imageToolMode || null,
+            imageToolAction: imageToolAction || null,
+            imageLightingSettings: imageLightingSettings || null,
+            imageToolContext: imageToolContext.promptInstructions.length > 0 ? imageToolContext : null,
             createdAt: new Date().toISOString(),
             type: 'images'
         };

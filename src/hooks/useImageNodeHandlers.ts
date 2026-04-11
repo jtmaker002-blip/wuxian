@@ -9,6 +9,7 @@ import React from 'react';
 import { NodeData, NodeType, NodeStatus } from '../types';
 import { generateCameraAngle } from '../services/cameraAngleService';
 import { getDefaultModelForNodeType } from '../config/nodeTypeRegistry';
+import { applyCameraAngleFallback } from '../utils/imageNodeActions';
 
 // ============================================================================
 // TYPES
@@ -176,16 +177,30 @@ export const useImageNodeHandlers = ({
         } catch (error: any) {
             console.error('[ChangeAngle] API error:', error);
 
-            // Update node with error
-            setNodes(prev => prev.map(n =>
-                n.id === newNodeId
-                    ? {
-                        ...n,
-                        status: NodeStatus.ERROR,
-                        errorMessage: error.message || 'Camera angle generation failed'
-                    }
-                    : n
-            ));
+            try {
+                const fallback = await applyCameraAngleFallback(imageNode.resultUrl, imageNode.angleSettings);
+                setNodes(prev => prev.map(n =>
+                    n.id === newNodeId
+                        ? {
+                            ...n,
+                            status: NodeStatus.SUCCESS,
+                            resultUrl: fallback.dataUrl,
+                            resultAspectRatio: fallback.resultAspectRatio,
+                            errorMessage: undefined,
+                        }
+                        : n
+                ));
+            } catch (fallbackError: any) {
+                setNodes(prev => prev.map(n =>
+                    n.id === newNodeId
+                        ? {
+                            ...n,
+                            status: NodeStatus.ERROR,
+                            errorMessage: fallbackError.message || error.message || 'Camera angle generation failed'
+                        }
+                        : n
+                ));
+            }
         }
     }, [nodes, setNodes, setSelectedNodeIds]);
 

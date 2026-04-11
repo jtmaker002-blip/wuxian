@@ -14,6 +14,16 @@ import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
 import {
+  cropImageBySelection,
+  eraseImageSelection,
+  expandImageCanvas,
+  applyLightingEffect,
+  createNineGridVariant,
+  parseGridSize,
+  repaintImageSelection,
+  upscaleImage2x,
+} from '../../utils/imageNodeActions';
+import {
   type SwitchableNodeType,
 } from '../../config/nodeTypeRegistry';
 
@@ -71,6 +81,7 @@ interface CanvasNodeProps {
   onImageToVideo?: (nodeId: string) => void;
   onChangeAngleGenerate?: (nodeId: string) => void;
   onQuickAddInputNode?: (nodeId: string, inputType: 'image' | 'video') => void;
+  onSplitImageGrid?: (nodeId: string, rows: number, cols: number) => void;
   zoom: number;
   // Mouse event callbacks for chat panel drag functionality
   onMouseEnter?: () => void;
@@ -110,6 +121,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onImageToVideo,
   onChangeAngleGenerate,
   onQuickAddInputNode,
+  onSplitImageGrid,
   zoom,
   onMouseEnter,
   onMouseLeave,
@@ -160,8 +172,191 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     const nextPrompt = currentPrompt.includes(hint)
       ? currentPrompt
       : `${currentPrompt}${currentPrompt ? '\n\n' : ''}${hint}`;
-    onUpdate(data.id, { prompt: nextPrompt, imageToolMode: null });
+    onUpdate(data.id, { prompt: nextPrompt, imageToolMode: null, imageToolAction: undefined });
   }, [data.id, data.prompt, onUpdate]);
+
+  const applyImageToolAction = React.useCallback(async (mode: 'enhance' | 'grid' | 'split' | 'style', item: string, promptPrefix: string) => {
+    if (mode === 'enhance' && data.resultUrl && item === '高清') {
+      try {
+        const result = await upscaleImage2x(data.resultUrl);
+        onUpdate(data.id, {
+          resultUrl: result.dataUrl,
+          resultAspectRatio: result.resultAspectRatio,
+          imageToolMode: null,
+          imageToolAction: '高清',
+          title: `${data.title || 'image'}-hd`,
+        });
+        return;
+      } catch (error) {
+        console.error('[ImageNode] Failed to upscale image:', error);
+      }
+    }
+
+    if (mode === 'enhance' && data.resultUrl && item === '扩图') {
+      try {
+        const result = await expandImageCanvas(data.resultUrl);
+        onUpdate(data.id, {
+          resultUrl: result.dataUrl,
+          resultAspectRatio: result.resultAspectRatio,
+          imageToolMode: null,
+          imageToolAction: '扩图',
+          title: `${data.title || 'image'}-expand`,
+        });
+        return;
+      } catch (error) {
+        console.error('[ImageNode] Failed to expand image canvas:', error);
+      }
+    }
+
+    if (mode === 'enhance' && data.resultUrl && item === '擦除' && data.focusSelection) {
+      try {
+        const result = await eraseImageSelection(data.resultUrl, data.focusSelection);
+        onUpdate(data.id, {
+          resultUrl: result.dataUrl,
+          resultAspectRatio: result.resultAspectRatio,
+          imageToolMode: null,
+          imageToolAction: '擦除',
+          title: `${data.title || 'image'}-erase`,
+        });
+        return;
+      } catch (error) {
+        console.error('[ImageNode] Failed to erase image selection:', error);
+      }
+    }
+
+    if (mode === 'enhance' && data.resultUrl && item === '重绘' && data.focusSelection) {
+      try {
+        const result = await repaintImageSelection(data.resultUrl, data.focusSelection);
+        onUpdate(data.id, {
+          resultUrl: result.dataUrl,
+          resultAspectRatio: result.resultAspectRatio,
+          imageToolMode: null,
+          imageToolAction: '重绘',
+          title: `${data.title || 'image'}-repaint`,
+        });
+        return;
+      } catch (error) {
+        console.error('[ImageNode] Failed to repaint image selection:', error);
+      }
+    }
+
+    if (mode === 'grid' && data.resultUrl) {
+      try {
+        const result = await createNineGridVariant(data.resultUrl);
+        onUpdate(data.id, {
+          resultUrl: result.dataUrl,
+          resultAspectRatio: result.resultAspectRatio,
+          imageToolMode: null,
+          imageToolAction: item,
+          title: `${data.title || 'image'}-grid`,
+        });
+        return;
+      } catch (error) {
+        console.error('[ImageNode] Failed to create nine-grid variant:', error);
+      }
+    }
+
+    if (mode === 'split' && data.resultUrl && onSplitImageGrid) {
+      const gridSize = parseGridSize(item);
+      if (gridSize) {
+        onSplitImageGrid(data.id, gridSize.rows, gridSize.cols);
+        onUpdate(data.id, {
+          imageToolMode: null,
+          imageToolAction: item,
+        });
+        return;
+      }
+    }
+
+    if (mode === 'enhance' && item === '裁剪' && data.resultUrl && data.focusSelection) {
+      try {
+        const cropResult = await cropImageBySelection(data.resultUrl, data.focusSelection);
+        onUpdate(data.id, {
+          resultUrl: cropResult.dataUrl,
+          resultAspectRatio: cropResult.resultAspectRatio,
+          imageToolMode: null,
+          imageToolAction: '裁剪',
+          title: `${data.title || 'image'}-crop`,
+        });
+        return;
+      } catch (error) {
+        console.error('[ImageNode] Failed to crop image by focus selection:', error);
+      }
+    }
+
+    if (mode === 'enhance' && item === '抠图' && data.resultUrl && data.focusSelection) {
+      try {
+        const cropResult = await cropImageBySelection(data.resultUrl, data.focusSelection);
+        onUpdate(data.id, {
+          resultUrl: cropResult.dataUrl,
+          resultAspectRatio: cropResult.resultAspectRatio,
+          imageToolMode: null,
+          imageToolAction: '抠图',
+          title: `${data.title || 'image'}-cutout`,
+        });
+        return;
+      } catch (error) {
+        console.error('[ImageNode] Failed to cut out image by focus selection:', error);
+      }
+    }
+
+    const currentPrompt = data.prompt || '';
+    const hint = `${promptPrefix}：${item}`;
+    const nextPrompt = currentPrompt.includes(hint)
+      ? currentPrompt
+      : `${currentPrompt}${currentPrompt ? '\n\n' : ''}${hint}`;
+
+    onUpdate(data.id, {
+      prompt: nextPrompt,
+      imageToolMode: mode,
+      imageToolAction: item,
+    });
+  }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onSplitImageGrid, onUpdate]);
+
+  const startImageAnnotation = React.useCallback((label: string) => {
+    const typeByLabel: Record<string, 'reference' | 'note' | 'preserve' | 'ignore'> = {
+      添加引用点: 'reference',
+      添加局部说明: 'note',
+      保留区域: 'preserve',
+      忽略区域: 'ignore',
+    };
+    const annotationType = typeByLabel[label] || 'note';
+    const currentPrompt = data.prompt || '';
+    const hint = `标记操作：${label}`;
+    const nextPrompt = currentPrompt.includes(hint)
+      ? currentPrompt
+      : `${currentPrompt}${currentPrompt ? '\n\n' : ''}${hint}`;
+
+    onUpdate(data.id, {
+      prompt: nextPrompt,
+      imageToolMode: 'mark',
+      imageToolAction: undefined,
+      activeImageAnnotationType: annotationType,
+      angleMode: false,
+    });
+  }, [data.id, data.prompt, onUpdate]);
+
+  const applyLocalLighting = React.useCallback(async () => {
+    if (!data.resultUrl) {
+      onGenerate(data.id);
+      return;
+    }
+
+    try {
+      const result = await applyLightingEffect(data.resultUrl, lightingSettings);
+      onUpdate(data.id, {
+        resultUrl: result.dataUrl,
+        resultAspectRatio: result.resultAspectRatio,
+        imageLightingSettings: lightingSettings,
+        imageToolMode: null,
+        imageToolAction: '打光',
+        title: `${data.title || 'image'}-lighting`,
+      });
+    } catch (error) {
+      console.error('[ImageNode] Failed to apply local lighting:', error);
+      onGenerate(data.id);
+    }
+  }, [data.id, data.resultUrl, data.title, lightingSettings, onGenerate, onUpdate]);
 
   const setImageToolbarButtonRef = React.useCallback(
     (mode: 'style' | 'mark' | 'grid' | 'enhance' | 'split') => (element: HTMLButtonElement | null) => {
@@ -172,20 +367,20 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   const getImageToolbarButtonClass = React.useCallback(
     (active: boolean) =>
-      `flex items-center gap-1.5 rounded-[14px] px-3.5 py-2 text-[15px] font-medium transition-colors ${
+      `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-[14px] font-medium transition-colors ${
         active
-          ? 'bg-[#3a3a3a] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]'
-          : 'text-neutral-100 hover:bg-white/6'
+          ? 'bg-white text-black shadow-[0_10px_24px_rgba(255,255,255,0.12)]'
+          : 'text-neutral-100 hover:bg-white/8'
       }`,
     []
   );
 
   const getImageToolbarIconButtonClass = React.useCallback(
     (active: boolean) =>
-      `flex h-10 w-10 items-center justify-center rounded-[14px] transition-colors ${
+      `flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
         active
-          ? 'bg-[#3a3a3a] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]'
-          : 'text-neutral-200 hover:bg-white/6 hover:text-white'
+          ? 'bg-white text-black shadow-[0_10px_24px_rgba(255,255,255,0.12)]'
+          : 'text-neutral-200 hover:bg-white/8 hover:text-white'
       }`,
     []
   );
@@ -878,7 +1073,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
         {/* Unified Toolbar - 图片成功态仅在选中时显示，靠近 Liblib 的稳定工具条 */}
         {data.type === NodeType.IMAGE && isSuccess && data.resultUrl && (
           <div
-            className={`absolute -top-[58px] left-0 right-0 flex justify-center transition-opacity z-[120] ${
+            className={`absolute -top-[62px] left-0 right-0 flex justify-center transition-opacity z-[120] ${
               selected ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
             style={{
@@ -886,7 +1081,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               transformOrigin: 'bottom center'
             }}
           >
-            <div className="flex items-center gap-1 rounded-[22px] border border-white/10 bg-[#2b2b2b]/95 px-3 py-2 shadow-[0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+            <div className="flex max-w-[620px] items-center gap-1.5 rounded-[22px] border border-white/12 bg-[#252525]/96 px-2.5 py-2 shadow-[0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-xl">
               {/* Image tool buttons */}
               {!(data.prompt && data.prompt.startsWith('Extract panel #')) && (
                 <>
@@ -895,6 +1090,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                     onClick={() => onUpdate(data.id, {
                       angleMode: !data.angleMode,
                       imageToolMode: !data.angleMode ? 'multi-angle' : null,
+                      imageToolAction: undefined,
                       angleSettings: data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false }
                     })}
                     onPointerDown={(e) => e.stopPropagation()}
@@ -908,7 +1104,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                     多角度
                   </button>
                   <button
-                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'lighting' ? null : 'lighting', angleMode: false })}
+                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'lighting' ? null : 'lighting', imageToolAction: undefined, angleMode: false })}
                     onPointerDown={(e) => e.stopPropagation()}
                     className={getImageToolbarButtonClass(imageToolMode === 'lighting')}
                   >
@@ -926,7 +1122,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   </button>
                   <button
                     ref={setImageToolbarButtonRef('grid')}
-                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'grid' ? null : 'grid', angleMode: false })}
+                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'grid' ? null : 'grid', imageToolAction: undefined, angleMode: false })}
                     onPointerDown={(e) => e.stopPropagation()}
                     className={getImageToolbarButtonClass(imageToolMode === 'grid')}
                   >
@@ -943,7 +1139,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   </button>
                   <button
                     ref={setImageToolbarButtonRef('enhance')}
-                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'enhance' ? null : 'enhance', angleMode: false })}
+                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'enhance' ? null : 'enhance', imageToolAction: undefined, angleMode: false })}
                     onPointerDown={(e) => e.stopPropagation()}
                     className={getImageToolbarButtonClass(imageToolMode === 'enhance')}
                   >
@@ -958,7 +1154,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   </button>
                   <button
                     ref={setImageToolbarButtonRef('split')}
-                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'split' ? null : 'split', angleMode: false })}
+                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'split' ? null : 'split', imageToolAction: undefined, angleMode: false })}
                     onPointerDown={(e) => e.stopPropagation()}
                     className={getImageToolbarButtonClass(imageToolMode === 'split')}
                   >
@@ -972,10 +1168,10 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </button>
-                  <div className="mx-1 h-6 w-px bg-white/12" />
+                  <div className="mx-0.5 h-6 w-px bg-white/12" />
                   <button
                     ref={setImageToolbarButtonRef('style')}
-                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'style' ? null : 'style', angleMode: false })}
+                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'style' ? null : 'style', imageToolAction: undefined, angleMode: false })}
                     onPointerDown={(e) => e.stopPropagation()}
                     className={getImageToolbarIconButtonClass(imageToolMode === 'style')}
                     title="风格"
@@ -989,7 +1185,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   </button>
                   <button
                     ref={setImageToolbarButtonRef('mark')}
-                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'mark' ? null : 'mark', angleMode: false })}
+                    onClick={() => onUpdate(data.id, { imageToolMode: imageToolMode === 'mark' ? null : 'mark', imageToolAction: undefined, angleMode: false })}
                     onPointerDown={(e) => e.stopPropagation()}
                     className={getImageToolbarIconButtonClass(imageToolMode === 'mark')}
                     title="标记"
@@ -1305,8 +1501,12 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
         {/* Control Panel - Only show when single node is selected (not in group selection) */}
         {/* Hide controls for storyboard-generated scenes */}
-        {selected && showControls && data.type !== NodeType.TEXT && !(data.prompt && data.prompt.startsWith('Extract panel #')) && (
-          <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${isLiblibImageNode ? 'w-[560px]' : 'w-[600px]'} flex justify-center z-[100]`}>
+        {selected &&
+          showControls &&
+          data.type !== NodeType.TEXT &&
+          !(data.prompt && data.prompt.startsWith('Extract panel #')) &&
+          !(data.type === NodeType.IMAGE && data.resultUrl && (data.angleMode || imageToolMode === 'lighting')) && (
+          <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${isLiblibImageNode ? 'w-[588px]' : 'w-[600px]'} flex justify-center z-[100]`}>
             <NodeControls
               data={data}
               inputUrl={inputUrl}
@@ -1339,7 +1539,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                 imageUrl={data.resultUrl}
                 settings={data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false }}
                 onSettingsChange={(settings) => onUpdate(data.id, { angleSettings: settings })}
-                onClose={() => onUpdate(data.id, { angleMode: false, imageToolMode: null })}
+                onClose={() => onUpdate(data.id, { angleMode: false, imageToolMode: null, imageToolAction: undefined })}
                 onGenerate={onChangeAngleGenerate ? () => onChangeAngleGenerate(data.id) : () => { }}
                 isLoading={isLoading}
                 canvasTheme={canvasTheme}
@@ -1361,8 +1561,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               <LightingPanel
                 settings={lightingSettings}
                 onChange={(settings) => onUpdate(data.id, { imageLightingSettings: settings })}
-                onClose={() => onUpdate(data.id, { imageToolMode: null })}
-                onGenerate={() => onGenerate(data.id)}
+                onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
+                onGenerate={applyLocalLighting}
               />
             </div>
           </div>
@@ -1386,8 +1586,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               <ImageToolMenuPanel
                 title="高清"
                 items={enhanceMenuItems}
-                onClose={() => onUpdate(data.id, { imageToolMode: null })}
-                onSelect={(item) => appendPromptHint(`图片增强：${item}`)}
+                onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
+                onSelect={(item) => applyImageToolAction('enhance', item, '图片增强')}
                 variant="dropdown"
                 showCloseButton={false}
                 showTitle={false}
@@ -1415,8 +1615,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               <ImageToolMenuPanel
                 title="九宫格"
                 items={gridMenuItems}
-                onClose={() => onUpdate(data.id, { imageToolMode: null })}
-                onSelect={(item) => appendPromptHint(`九宫格预设：${item}`)}
+                onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
+                onSelect={(item) => applyImageToolAction('grid', item, '九宫格预设')}
                 variant="dropdown"
                 showCloseButton={false}
                 showTitle={false}
@@ -1444,8 +1644,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               <ImageToolMenuPanel
                 title="宫格切分"
                 items={splitMenuItems}
-                onClose={() => onUpdate(data.id, { imageToolMode: null })}
-                onSelect={(item) => appendPromptHint(`宫格切分：${item}`)}
+                onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
+                onSelect={(item) => applyImageToolAction('split', item, '宫格切分')}
                 variant="dropdown"
                 showCloseButton={false}
                 showTitle={false}
@@ -1473,8 +1673,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               <ImageToolMenuPanel
                 title="风格"
                 items={styleMenuItems}
-                onClose={() => onUpdate(data.id, { imageToolMode: null })}
-                onSelect={(item) => appendPromptHint(`风格预设：${item}`)}
+                onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
+                onSelect={(item) => applyImageToolAction('style', item, '风格预设')}
                 variant="dropdown"
                 showCloseButton={false}
                 showTitle={false}
@@ -1502,8 +1702,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               <ImageToolMenuPanel
                 title="标记"
                 items={markMenuItems}
-                onClose={() => onUpdate(data.id, { imageToolMode: null })}
-                onSelect={(item) => appendPromptHint(`标记操作：${item}`)}
+                onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
+                onSelect={startImageAnnotation}
                 variant="dropdown"
                 showCloseButton={false}
                 showTitle={false}
