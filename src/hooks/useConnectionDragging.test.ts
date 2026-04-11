@@ -184,6 +184,38 @@ describe('useConnectionDragging', () => {
     expect(onConnectionMade).toHaveBeenCalledWith(sourceNode.id, targetNode.id);
   });
 
+  it('magnetically prefers the video input when an image drag lands near the left connector', async () => {
+    const reactMock = createReactHookMock();
+    vi.doMock('react', () => reactMock.reactModule);
+
+    const { useConnectionDragging } = await import('./useConnectionDragging');
+    const sourceNode = createImageNode();
+    const targetNode = createVideoNode();
+    const nodes = [sourceNode, targetNode];
+    const viewport: Viewport = { x: 0, y: 0, zoom: 1 };
+    const leftConnectorCenterY = targetNode.y + 385 / (16 / 9) / 2;
+
+    let hook = reactMock.render(() => useConnectionDragging());
+    hook.handleConnectorPointerDown(
+      createPointerEvent({ clientX: sourceNode.x + 365, clientY: sourceNode.y + 120 }),
+      sourceNode.id,
+      'right'
+    );
+
+    hook = reactMock.render(() => useConnectionDragging());
+    hook.updateConnectionDrag(
+      createPointerEvent({ clientX: targetNode.x - 150, clientY: leftConnectorCenterY }),
+      nodes,
+      viewport
+    );
+
+    hook = reactMock.render(() => useConnectionDragging());
+    expect(hook.tempConnectionEnd).toEqual({
+      x: targetNode.x,
+      y: leftConnectorCenterY,
+    });
+  });
+
   it.each([NodeStatus.SUCCESS, NodeStatus.ERROR])(
     'clears stale %s video result and execution state when reusing it for image-to-video',
     async (staleStatus) => {

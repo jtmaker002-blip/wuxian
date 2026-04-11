@@ -9,6 +9,7 @@ import React, { useRef, useState, useEffect } from 'react';
 import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive, AudioLines } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { useTranslation } from 'react-i18next';
+import { getLiblibBlankImageNodeState } from './image-node/imageNodeUiState';
 
 function formatExecutionProviderLabel(provider?: string): string | undefined {
     if (!provider) return undefined;
@@ -98,6 +99,12 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const isAudioType = data.type === NodeType.AUDIO;
     // Helper: Check if node is local model
     const isLocalModel = data.type === NodeType.LOCAL_IMAGE_MODEL || data.type === NodeType.LOCAL_VIDEO_MODEL;
+    const blankImageUiState = getLiblibBlankImageNodeState({
+        selected,
+        isImageType,
+        isLocalModel,
+        hasUploadHandler: Boolean(onUpload),
+    });
     const effectiveInputUrl = inputUrl || data.inputUrl;
     const effectiveInputMediaType = inputMediaType || (data.inputUrl ? NodeType.IMAGE : undefined);
     const isVideoFromImageFlow = isVideoType && Boolean(effectiveInputUrl);
@@ -259,9 +266,9 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                 );
                             })}
                             {selected && isImageType && !isLocalModel && (
-                                <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-full border border-white/12 bg-black/48 px-3 py-1.5 text-[11px] font-medium text-white/90 shadow-[0_12px_28px_rgba(0,0,0,0.3)] backdrop-blur-md">
-                                    <span className="h-2 w-2 rounded-full bg-white/70" />
-                                    当前素材
+                                <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-[14px] border border-white/14 bg-black/58 px-3 py-2 text-[11px] font-medium text-white/92 shadow-[0_14px_34px_rgba(0,0,0,0.34)] backdrop-blur-md">
+                                    <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-black">1</span>
+                                    <span>素材 · 当前节点</span>
                                 </div>
                             )}
                             {selected && onUpload && (
@@ -271,7 +278,8 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                         event.stopPropagation();
                                         fileInputRef.current?.click();
                                     }}
-                                    className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-[16px] border border-white/12 bg-[#3a3a3a]/88 text-white shadow-[0_16px_34px_rgba(0,0,0,0.28)] backdrop-blur hover:bg-[#4a4a4a]"
+                                    className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-[14px] border border-white/14 bg-[#303030]/90 text-white shadow-[0_16px_34px_rgba(0,0,0,0.3)] backdrop-blur transition-colors hover:bg-[#3d3d3d]"
+                                    title="替换素材"
                                 >
                                     <Upload size={18} />
                                 </button>
@@ -368,8 +376,13 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     : `rounded-xl border border-dashed ${isDark ? 'border-white/10' : 'border-neutral-300'}`}
             ${isDark ? (isImageType && !isLocalModel && selected ? 'bg-[#1b1b1b]' : 'bg-[#141414]') : 'bg-neutral-50'}`
                 }>
-                    {selected && isImageType && !isLocalModel && (
-                        <div className="pointer-events-none absolute inset-4 rounded-[22px] border border-dashed border-white/12 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.045),transparent_58%)]" />
+                    {blankImageUiState.showSelectedBlankFrame && (
+                        <div className="pointer-events-none absolute inset-3 rounded-[24px] border border-dashed border-white/16 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.06),transparent_56%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.01))]" />
+                    )}
+                    {blankImageUiState.showSelectedBlankFrame && (
+                        <div className="pointer-events-none absolute left-4 top-4 rounded-full border border-white/10 bg-black/28 px-3 py-1 text-[10px] font-medium text-neutral-300">
+                            图片素材
+                        </div>
                     )}
                     {renderVideoModelBadges()}
 
@@ -453,19 +466,19 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                 </>
                             )}
 
-                            <div className={`${selected && isImageType && !isLocalModel ? 'text-neutral-500/55 opacity-55' : 'text-neutral-700'}`}>
+                            <div className={`relative ${blankImageUiState.showMutedIcon ? 'text-neutral-500/55 opacity-55' : 'text-neutral-700'}`}>
                                 {isVideoType ? (
                                     isLocalModel ? <><Film size={selected ? 44 : 40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <Film size={selected ? 44 : 40} />
                                 ) : (
                                     isLocalModel ? <><ImageIcon size={selected ? 48 : 40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <ImageIcon size={selected ? 48 : 40} />
                                 )}
                             </div>
-                            {selected && isImageType && !isLocalModel && onUpload && (
+                            {blankImageUiState.showSelectedUploadCta && (
                                 <button
                                     type="button"
                                     onClick={() => fileInputRef.current?.click()}
                                     onPointerDown={(e) => e.stopPropagation()}
-                                    className="flex items-center gap-2 rounded-full border border-white/10 bg-[#252525]/90 px-3.5 py-2 text-xs font-medium text-neutral-200 shadow-[0_14px_34px_rgba(0,0,0,0.32)] transition-colors hover:border-white/16 hover:bg-[#303030] hover:text-white"
+                                    className="flex items-center gap-2 rounded-[14px] border border-white/12 bg-[#252525]/92 px-4 py-2.5 text-xs font-medium text-neutral-100 shadow-[0_16px_36px_rgba(0,0,0,0.34)] transition-colors hover:border-white/18 hover:bg-[#303030] hover:text-white"
                                 >
                                     <Upload size={14} />
                                     上传或拖入素材
@@ -479,7 +492,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                             : isVideoType
                                                 ? t('nodeContent.waitingForInput')
                                                 : isImageType && !isLocalModel
-                                                    ? ''
+                                                    ? blankImageUiState.headline
                                                 : isLocalModel
                                                     ? t('nodeContent.selectModelAndPrompt')
                                                     : t('nodeContent.tryTo');

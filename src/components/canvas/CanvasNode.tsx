@@ -15,6 +15,7 @@ import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
 import {
   cropImageBySelection,
+  cutoutImageBySelection,
   eraseImageSelection,
   expandImageCanvas,
   applyLightingEffect,
@@ -286,7 +287,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
     if (mode === 'enhance' && item === '抠图' && data.resultUrl && data.focusSelection) {
       try {
-        const cropResult = await cropImageBySelection(data.resultUrl, data.focusSelection);
+        const cropResult = await cutoutImageBySelection(data.resultUrl, data.focusSelection);
         onUpdate(data.id, {
           resultUrl: cropResult.dataUrl,
           resultAspectRatio: cropResult.resultAspectRatio,
@@ -367,9 +368,9 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   const getImageToolbarButtonClass = React.useCallback(
     (active: boolean) =>
-      `flex h-9 items-center gap-1.5 whitespace-nowrap rounded-xl px-3 text-[14px] font-medium transition-colors ${
+      `flex h-10 items-center gap-1.5 whitespace-nowrap rounded-[14px] px-3 text-[14px] font-medium transition-colors ${
         active
-          ? 'bg-white text-black shadow-[0_10px_24px_rgba(255,255,255,0.12)]'
+          ? 'bg-white text-black shadow-[0_12px_26px_rgba(255,255,255,0.12)]'
           : 'text-neutral-100 hover:bg-white/8'
       }`,
     []
@@ -377,9 +378,9 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   const getImageToolbarIconButtonClass = React.useCallback(
     (active: boolean) =>
-      `flex h-9 w-9 items-center justify-center rounded-xl transition-colors ${
+      `flex h-10 w-10 items-center justify-center rounded-[14px] transition-colors ${
         active
-          ? 'bg-white text-black shadow-[0_10px_24px_rgba(255,255,255,0.12)]'
+          ? 'bg-white text-black shadow-[0_12px_26px_rgba(255,255,255,0.12)]'
           : 'text-neutral-200 hover:bg-white/8 hover:text-white'
       }`,
     []
@@ -1073,7 +1074,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
         {/* Unified Toolbar - 图片成功态仅在选中时显示，靠近 Liblib 的稳定工具条 */}
         {data.type === NodeType.IMAGE && isSuccess && data.resultUrl && (
           <div
-            className={`absolute -top-[62px] left-0 right-0 flex justify-center transition-opacity z-[120] ${
+            className={`absolute -top-[58px] left-0 right-0 flex justify-center transition-opacity z-[120] ${
               selected ? 'opacity-100' : 'pointer-events-none opacity-0'
             }`}
             style={{
@@ -1081,7 +1082,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               transformOrigin: 'bottom center'
             }}
           >
-            <div className="flex max-w-[620px] items-center gap-1.5 rounded-[22px] border border-white/12 bg-[#252525]/96 px-2.5 py-2 shadow-[0_18px_50px_rgba(0,0,0,0.55)] backdrop-blur-xl">
+            <div className="flex min-h-[50px] w-max items-center gap-1.5 rounded-[20px] border border-white/14 bg-[#252525] px-2 py-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.58)] backdrop-blur-xl">
               {/* Image tool buttons */}
               {!(data.prompt && data.prompt.startsWith('Extract panel #')) && (
                 <>

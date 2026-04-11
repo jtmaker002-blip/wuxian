@@ -13,6 +13,7 @@ import { NodeData, NodeStatus, NodeType } from '../../types';
 import { OpenAIIcon, GoogleIcon, KlingIcon, HailuoIcon } from '../icons/BrandIcons';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { LightingPanel } from './image-node/LightingPanel';
+import { getLiblibImageReferenceState } from './image-node/imageNodeUiState';
 import { LocalModel, getLocalModels } from '../../services/localModelService';
 import { useEnabledModelIdsFromStorage } from '../../hooks/useApiSettings';
 import {
@@ -568,7 +569,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             currentVideoCapability
         );
 
-        const changed = Object.entries(sanitized).some(([key, value]) => (data as Record<string, unknown>)[key] !== value);
+        const changed = Object.entries(sanitized).some(([key, value]) => (data as unknown as Record<string, unknown>)[key] !== value);
         if (changed) {
             onUpdate(data.id, sanitized);
         }
@@ -870,7 +871,12 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const isDark = canvasTheme === 'dark';
     const isLiblibImagePanel = isImageNode && !isLocalModelNode;
     const imageToolMode = data.imageToolMode || null;
-    const imageReferenceCount = connectedImageNodes.length || (inputUrl || data.resultUrl ? 1 : 0);
+    const imageReferenceState = getLiblibImageReferenceState({
+        connectedImageNodes,
+        inputUrl,
+        resultUrl: data.resultUrl,
+    });
+    const imageReferenceCount = imageReferenceState.count;
     const imageModeHint =
         imageToolMode === 'focus'
             ? data.focusSelection
@@ -1009,14 +1015,14 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             </button>
                                         );
                                     })}
-                                    {(inputUrl || data.resultUrl) ? (
-                                        <div className="relative flex h-[68px] w-[72px] shrink-0 items-center justify-center rounded-[18px] border border-white/10 bg-[#2a2a2a] p-1.5 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
+                                    {imageReferenceState.previewUrl ? (
+                                        <div className="relative flex h-[68px] w-[72px] shrink-0 items-center justify-center rounded-[18px] border border-white/14 bg-[#2a2a2a] p-1.5 shadow-[0_12px_28px_rgba(0,0,0,0.26)]">
                                             <img
-                                                src={inputUrl || data.resultUrl}
+                                                src={imageReferenceState.previewUrl}
                                                 alt="素材缩略图"
                                                 className="h-full w-full rounded-[12px] object-cover"
                                             />
-                                            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-black/68 px-1 text-[10px] font-medium text-white shadow">
+                                            <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-white px-1 text-[10px] font-semibold text-black shadow">
                                                 {imageReferenceCount}
                                             </span>
                                             <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-1.5 py-0.5 text-[9px] font-medium text-white/90">
@@ -1036,8 +1042,13 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 </div>
                                 <div className="flex min-h-[68px] items-center gap-2 pr-12">
                                     <div className="flex flex-col items-end gap-2">
-                                        {imageReferenceCount > 0 && (
-                                            <div className="rounded-full border border-white/8 bg-[#2b2b2b] px-3 py-1 text-[11px] font-medium text-neutral-300 shadow-[0_10px_18px_rgba(0,0,0,0.18)]">
+                                        {!imageReferenceState.hasReference && (
+                                            <div className="rounded-full border border-white/8 bg-[#2b2b2b] px-3 py-1 text-[11px] font-medium text-neutral-400 shadow-[0_10px_18px_rgba(0,0,0,0.18)]">
+                                                等待素材或描述
+                                            </div>
+                                        )}
+                                        {imageReferenceState.hasReference && (
+                                            <div className="rounded-full border border-white/10 bg-[#2b2b2b] px-3 py-1 text-[11px] font-medium text-neutral-200 shadow-[0_10px_18px_rgba(0,0,0,0.18)]">
                                                 已引用素材 · {imageReferenceCount}
                                             </div>
                                         )}
@@ -2345,7 +2356,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                                 ) : (
                                                                     <img
                                                                         src={input.url}
-                                                                        alt={input.type === NodeType.VIDEO ? t('nodeControls.motionRef') : t('nodeControls.characterRef')}
+                                                                        alt={t('nodeControls.characterRef')}
                                                                         className="w-full h-full object-contain"
                                                                     />
                                                                 )

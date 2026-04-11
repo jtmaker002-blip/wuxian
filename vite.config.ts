@@ -86,6 +86,8 @@ export default defineConfig({
       '**/node_modules/**',
       '**/dist/**',
       '**/.worktrees/**',
+      '**/.omx/**',
+      '**/.omc/**',
     ],
   },
 });

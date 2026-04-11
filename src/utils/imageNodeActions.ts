@@ -139,6 +139,26 @@ export async function eraseImageSelection(imageUrl: string, selection: FocusSele
   return exportCanvas(canvas);
 }
 
+export async function cutoutImageBySelection(imageUrl: string, selection: FocusSelection) {
+  const image = await loadImage(imageUrl);
+  const canvas = document.createElement('canvas');
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Canvas 2D context is not available');
+
+  context.drawImage(image, 0, 0);
+  const box = getCropBox(image.naturalWidth, image.naturalHeight, selection);
+  const rightX = box.x + box.width;
+  const bottomY = box.y + box.height;
+
+  context.clearRect(0, 0, canvas.width, box.y);
+  context.clearRect(0, box.y, box.x, box.height);
+  context.clearRect(rightX, box.y, canvas.width - rightX, box.height);
+  context.clearRect(0, bottomY, canvas.width, canvas.height - bottomY);
+  return exportCanvas(canvas);
+}
+
 export async function repaintImageSelection(imageUrl: string, selection: FocusSelection) {
   const image = await loadImage(imageUrl);
   const canvas = document.createElement('canvas');
