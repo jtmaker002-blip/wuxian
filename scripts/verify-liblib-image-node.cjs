@@ -67,10 +67,11 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const artifactDir = path.join(process.cwd(), '.omx', 'logs', 'liblib-image-node-smoke');
   fs.mkdirSync(artifactDir, { recursive: true });
+  const artifacts = [];
 
   await runCase(browser, 'blank/upload/focus', async (page) => {
     await createUploadedImageNode(page);
-    await page.screenshot({ path: path.join(artifactDir, '01-uploaded-image-node.png') });
+    await saveScreenshot(page, artifactDir, artifacts, '01-uploaded-image-node.png', 'Uploaded image node with selected bottom panel.');
     await page.getByRole('button', { name: '聚焦' }).click();
     await page.waitForTimeout(400);
     const preview = await page.locator('img[alt="聚焦模式预览"]').boundingBox();
@@ -83,7 +84,7 @@ async function main() {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     await expectText(page, '已聚焦局部');
-    await page.screenshot({ path: path.join(artifactDir, '02-focus-persisted.png') });
+    await saveScreenshot(page, artifactDir, artifacts, '02-focus-persisted.png', 'Focus selection persisted back to the image node.');
   });
 
   await runCase(browser, 'connector-menu', async (page) => {
@@ -98,7 +99,7 @@ async function main() {
     await page.waitForTimeout(500);
     await expectText(page, '图生视频');
     await expectText(page, '主路径');
-    await page.screenshot({ path: path.join(artifactDir, '03-connector-menu.png') });
+    await saveScreenshot(page, artifactDir, artifacts, '03-connector-menu.png', 'Image connector blank-drop menu with 图生视频 primary path.');
   });
 
   await runCase(browser, 'image-to-video-direct', async (page) => {
@@ -120,7 +121,7 @@ async function main() {
     await page.mouse.up();
     await page.waitForTimeout(800);
     await expectOneOfText(page, ['图生视频主路径', '首帧素材已接入', '生成视频']);
-    await page.screenshot({ path: path.join(artifactDir, '04-direct-image-to-video.png') });
+    await saveScreenshot(page, artifactDir, artifacts, '04-direct-image-to-video.png', 'Direct image node to video node connection entered image-to-video state.');
   });
 
   await runCase(browser, 'nine-grid', async (page) => {
@@ -130,11 +131,29 @@ async function main() {
     await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('剧情推演四宫格'))?.click());
     await page.waitForTimeout(1400);
     await expectOneOfText(page, ['九宫格-原图', '当前动作 · 剧情推演四宫格', '-grid']);
-    await page.screenshot({ path: path.join(artifactDir, '05-nine-grid.png') });
+    await saveScreenshot(page, artifactDir, artifacts, '05-nine-grid.png', 'Nine-grid action produced visible grid output state.');
   });
 
   await browser.close();
+  fs.writeFileSync(
+    path.join(artifactDir, 'manifest.json'),
+    JSON.stringify(
+      {
+        generatedAt: new Date().toISOString(),
+        baseUrl: 'http://127.0.0.1:5173/',
+        artifacts,
+      },
+      null,
+      2
+    )
+  );
   console.log(`Liblib image-node smoke verification passed. Artifacts: ${artifactDir}`);
+}
+
+async function saveScreenshot(page, artifactDir, artifacts, fileName, description) {
+  const filePath = path.join(artifactDir, fileName);
+  await page.screenshot({ path: filePath });
+  artifacts.push({ fileName, filePath, description });
 }
 
 async function runCase(browser, name, fn) {
