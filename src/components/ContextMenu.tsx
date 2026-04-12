@@ -320,7 +320,7 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
         isConnector
           ? 'w-[268px] rounded-[24px]'
           : 'w-64 rounded-xl'
-      } border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${canvasTheme === 'dark' ? (isConnector ? 'bg-[#202020] border-white/10' : 'bg-[#1e1e1e] border-neutral-800') : 'bg-white border-neutral-200'
+      } border shadow-2xl flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-100 ${isConnector ? 'bg-[#202020] border-white/10 text-white' : canvasTheme === 'dark' ? 'bg-[#1e1e1e] border-neutral-800' : 'bg-white border-neutral-200'
         }`}
     >
       <div className={`${isConnector ? 'px-5 pt-5 pb-2' : 'px-4 py-3 border-b'} text-sm font-medium ${canvasTheme === 'dark' ? (isConnector ? 'text-neutral-300 border-white/8' : 'text-neutral-300 border-neutral-800') : 'text-neutral-500 border-neutral-100'

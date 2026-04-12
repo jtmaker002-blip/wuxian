@@ -887,8 +887,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                 : imageToolMode === 'mark'
                     ? '标记模式已启用，可继续标注当前图片的局部意图'
                     : null;
+    const isLiblibVideoFromImagePanel = isVideoNode && Boolean(inputUrl) && selectedVideoMode === 'standard';
     const panelBg = isLiblibImagePanel
         ? 'bg-[#232323]/98 border-white/10 text-white shadow-[0_26px_80px_rgba(0,0,0,0.52)] backdrop-blur-xl'
+        : isLiblibVideoFromImagePanel
+            ? 'bg-[#232323]/98 border-white/10 text-white shadow-[0_26px_80px_rgba(0,0,0,0.52)] backdrop-blur-xl'
         : isDark ? 'bg-[#1a1a1a] border-neutral-800' : 'bg-white border-neutral-200';
     const promptText = isDark ? 'text-white placeholder-neutral-600' : 'text-neutral-900 placeholder-neutral-400';
     const selectBtn = isDark
@@ -1438,8 +1441,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             执行说明：{currentVoiceExecutionSupport.note}
                         </div>
                     )}
-                    {isVideoNode && inputUrl && selectedVideoMode === 'standard' && (
-                        <div className={`mb-3 rounded-[18px] border p-3 ${isDark ? 'border-emerald-400/18 bg-emerald-500/8 text-white' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
+                    {isLiblibVideoFromImagePanel && (
+                        <div className="mb-3 rounded-[18px] border border-emerald-400/18 bg-emerald-500/8 p-3 text-white">
                             <div className="flex items-center gap-3">
                                 <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl bg-black">
                                     <img src={inputUrl} alt="图生视频首帧素材" className="h-full w-full object-cover" />
@@ -1448,11 +1451,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 <div className="min-w-0 flex-1">
                                     <div className="flex items-center gap-2">
                                         <span className="rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-semibold text-black">图生视频</span>
-                                        <span className={isDark ? 'text-sm font-semibold text-white' : 'text-sm font-semibold text-emerald-950'}>
+                                        <span className="text-sm font-semibold text-white">
                                             首帧素材已接入
                                         </span>
                                     </div>
-                                    <div className={`mt-1 text-xs ${isDark ? 'text-emerald-100/78' : 'text-emerald-700'}`}>
+                                    <div className="mt-1 text-xs text-emerald-100/78">
                                         继续描述动作、镜头和运镜，生成会以这张图片作为视频起点。
                                     </div>
                                 </div>
