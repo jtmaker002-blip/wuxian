@@ -96,6 +96,27 @@ async function main() {
     await expectText(page, '主路径');
   });
 
+  await runCase(browser, 'image-to-video-direct', async (page) => {
+    await createUploadedImageNode(page);
+    await page.locator('div.fixed.left-4 button').first().click();
+    await page.getByText(/Add Nodes|添加节点/).click();
+    await page.getByText(/Video|视频/).first().click();
+    await page.waitForTimeout(800);
+
+    const imageRight = page.locator('[data-node-type="Image"] [data-connector-side="right"]').first();
+    const videoLeft = page.locator('[data-node-type="Video"] [data-connector-side="left"]').first();
+    const imageRightBox = await imageRight.boundingBox();
+    const videoLeftBox = await videoLeft.boundingBox();
+    if (!imageRightBox || !videoLeftBox) throw new Error('image/video connector handles not visible');
+
+    await page.mouse.move(imageRightBox.x + imageRightBox.width / 2, imageRightBox.y + imageRightBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(videoLeftBox.x + videoLeftBox.width / 2, videoLeftBox.y + videoLeftBox.height / 2, { steps: 14 });
+    await page.mouse.up();
+    await page.waitForTimeout(800);
+    await expectOneOfText(page, ['图生视频主路径', '首帧素材已接入', '生成视频']);
+  });
+
   await runCase(browser, 'nine-grid', async (page) => {
     await createUploadedImageNode(page);
     await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('九宫格'))?.click());
