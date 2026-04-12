@@ -15,7 +15,8 @@
     "desktop:pack": "npm run build && electron-builder",
     "preview": "vite preview",
     "preview:full": "concurrently \"node server/index.js\" \"vite preview\"",
-    "setup:local-models": "node -e \"require('child_process').execSync(process.platform === 'win32' ? 'setup-local-models.bat' : 'bash setup-local-models.sh', {stdio: 'inherit'})\""
+    "setup:local-models": "node -e \"require('child_process').execSync(process.platform === 'win32' ? 'setup-local-models.bat' : 'bash setup-local-models.sh', {stdio: 'inherit'})\"",
+    "verify:liblib-image-node": "node scripts/verify-liblib-image-node.cjs"
   },
   "dependencies": {
     "@fal-ai/client": "^1.8.0",
