@@ -1558,7 +1558,11 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                     )}
                     {!isLiblibImagePanel && (
                         <textarea
-                            className={`w-full text-sm outline-none resize-none font-light bg-transparent ${promptText}`}
+                            className={`w-full text-sm outline-none resize-none font-light ${
+                                isLiblibVideoFromImagePanel
+                                    ? 'rounded-[18px] border border-white/8 bg-[#1f1f1f] px-4 py-3 leading-7 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]'
+                                    : 'bg-transparent'
+                            } ${promptText}`}
                             placeholder={
                                 data.type === NodeType.VIDEO && selectedVideoMode === 'frame-to-frame'
                                     ? t('nodeControls.promptOptionalKling')
