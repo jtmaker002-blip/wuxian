@@ -268,6 +268,7 @@ describe('generation /generate-image hosted token routing', () => {
     ['grid', undefined, ['图片工具：grid', '九宫格']],
     ['split', undefined, ['图片工具：split', '分块']],
     ['mark', undefined, ['图片工具：mark', '标记区域']],
+    ['multi-angle', undefined, ['图片工具：multi-angle', '多角度']],
     ['focus', { x: 0.1, y: 0.2, width: 0.3, height: 0.4 }, ['图片工具：focus', '焦点编辑', 'x=0.1']],
     [
       'lighting',
@@ -332,6 +333,61 @@ describe('generation /generate-image hosted token routing', () => {
         expect(metadata.imageToolContext.lightingSettings).toEqual(
           imageLightingSettings || null
         );
+      } finally {
+        await new Promise((resolve) => serverHandle.server.close(resolve));
+      }
+    }
+  );
+
+  it.each([
+    ['enhance', '高清', '执行真实高清增强'],
+    ['enhance', '扩图', '向画面外侧自然延展'],
+    ['enhance', '重绘', '只重做选定区域内容'],
+    ['enhance', '擦除', '移除选定区域内的不需要内容'],
+    ['enhance', '抠图', '提取选定主体或素材'],
+    ['enhance', '裁剪', '按选定区域重新构图'],
+    ['grid', '剧情推演四宫格', '九宫格动作：剧情推演四宫格'],
+    ['split', '3x3 切分', '宫格切分：按 3 列 x 3 行'],
+    ['lighting', '打光', '把照明变化真实作用在主体和环境上'],
+  ])(
+    'adds action-specific fallback prompt guidance for %s / %s',
+    async (imageToolMode, imageToolAction, expectedPromptPart) => {
+      const router = await importFreshGenerationRouter();
+      const serverHandle = await createServer(router, {
+        IMAGES_DIR: imagesDir,
+      });
+
+      try {
+        const response = await fetch(`${serverHandle.baseUrl}/api/generate-image`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            nodeId: `${imageToolMode}-${imageToolAction}-fallback-node`,
+            prompt: '走后端兜底执行真实图片工具',
+            imageModel: 'gemini-3.1-flash-image-preview',
+            providerApiKey: 'sk-hosted-token',
+            providerBaseUrl: 'https://openaiteach.com/v1',
+            imageToolMode,
+            imageToolAction,
+            focusSelection: { x: 0.1, y: 0.2, width: 0.3, height: 0.4 },
+            imageLightingSettings:
+              imageToolMode === 'lighting'
+                ? {
+                    mode: 'global',
+                    smartMode: false,
+                    brightness: 50,
+                    color: '#ffffff',
+                    keyLight: 'front',
+                    rimLight: false,
+                  }
+                : undefined,
+          }),
+        });
+
+        expect(response.status).toBe(200);
+        const executedPrompt = mockGenerateOpenAiTeachGeminiImage.mock.calls.at(-1)?.[0]?.prompt;
+        expect(executedPrompt).toContain(expectedPromptPart);
+        expect(executedPrompt).toContain(`具体工具动作：${imageToolAction}`);
       } finally {
         await new Promise((resolve) => serverHandle.server.close(resolve));
       }

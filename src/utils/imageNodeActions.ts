@@ -121,6 +121,12 @@ export async function expandImageCanvas(imageUrl: string, paddingRatio = 0.18) {
 
   context.fillStyle = '#111111';
   context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.save();
+  context.filter = 'blur(18px) saturate(1.08) brightness(0.9)';
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  context.restore();
+  context.filter = 'none';
   context.drawImage(image, padX, padY);
   return exportCanvas(canvas);
 }

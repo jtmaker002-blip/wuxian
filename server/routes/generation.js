@@ -126,7 +126,62 @@ const IMAGE_TOOL_PROMPT_INSTRUCTIONS = {
         '图片工具：lighting',
         '打光：调整画面照明方向、强度、色温、明暗层次和轮廓光，让光源变化真实落在主体与环境上。',
     ],
+    'multi-angle': [
+        '图片工具：multi-angle',
+        '多角度：根据相机旋转、俯仰、焦距或提示要求改变拍摄视角；保持主体身份、服装、场景连续性和构图可信。',
+    ],
 };
+
+function getImageToolActionInstructions({ imageToolMode, imageToolAction }) {
+    if (!imageToolAction) return [];
+
+    const exactInstructions = {
+        '高清': [
+            '动作：高清。执行真实高清增强，提升纹理细节、边缘清晰度和局部对比，避免改变主体身份或构图。',
+        ],
+        '扩图': [
+            '动作：扩图。向画面外侧自然延展背景、光影和透视，原图主体位置和比例必须保持稳定。',
+        ],
+        '重绘': [
+            '动作：重绘。只重做选定区域内容，让新增细节与周围材质、光线、透视和风格一致。',
+        ],
+        '擦除': [
+            '动作：擦除。移除选定区域内的不需要内容，并用周围背景自然补全，不要影响未选中区域。',
+        ],
+        '抠图': [
+            '动作：抠图。提取选定主体或素材，边缘要干净自然，背景应透明或尽量弱化为可复用素材。',
+        ],
+        '裁剪': [
+            '动作：裁剪。按选定区域重新构图，只保留裁剪框内的有效画面并维持清晰度。',
+        ],
+        '打光': [
+            '动作：打光。把照明变化真实作用在主体和环境上，包括明暗层次、色温、阴影方向和轮廓光。',
+        ],
+    };
+
+    const instructions = exactInstructions[imageToolAction] ? [...exactInstructions[imageToolAction]] : [];
+
+    if (imageToolMode === 'grid') {
+        instructions.push(
+            `九宫格动作：${imageToolAction}。输出多宫格结果时保持主体、时间线和风格连续，格子之间边界清楚且不要随机拼贴。`
+        );
+    }
+
+    if (imageToolMode === 'split') {
+        const gridMatch = imageToolAction.match(/(\d+)x(\d+)/i);
+        if (gridMatch) {
+            instructions.push(
+                `宫格切分：按 ${Number(gridMatch[1])} 列 x ${Number(gridMatch[2])} 行组织画面，每个分块边界明确且可独立复用。`
+            );
+        } else {
+            instructions.push(
+                `宫格切分：${imageToolAction}。按画面内容划分清晰分块，保留连续关系并避免混叠。`
+            );
+        }
+    }
+
+    return instructions;
+}
 
 function getValidFocusSelection(focusSelection) {
     if (
@@ -157,6 +212,7 @@ function buildImageToolContext({ focusSelection, imageToolMode, imageToolAction,
 
         if (imageToolAction) {
             instructions.push(`具体工具动作：${imageToolAction}`);
+            instructions.push(...getImageToolActionInstructions({ imageToolMode, imageToolAction }));
         }
 
         if (imageToolMode === 'lighting' && imageLightingSettings) {

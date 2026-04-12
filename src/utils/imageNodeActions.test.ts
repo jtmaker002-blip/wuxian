@@ -1,12 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  applyCameraAngleFallback,
   applyLightingEffect,
+  createNineGridVariant,
+  cropImageBySelection,
   cutoutImageBySelection,
   createNineGridTiles,
+  eraseImageSelection,
   expandImageCanvas,
   getCropBox,
   getGridCropBoxes,
+  repaintImageSelection,
   splitImageIntoGrid,
   parseGridSize,
   upscaleImage2x,
@@ -227,8 +232,74 @@ describe('local image effects', () => {
     expect(result.resultAspectRatio).toBe('384/216');
     expect(canvas.context.operations).toContainEqual({ name: 'set', prop: 'fillStyle', value: '#111111' });
     expect(operationsNamed(canvas.context, 'fillRect')[0]).toEqual({ name: 'fillRect', args: [0, 0, 384, 216] });
+    expect(canvas.context.operations).toContainEqual({
+      name: 'set',
+      prop: 'filter',
+      value: 'blur(18px) saturate(1.08) brightness(0.9)',
+    });
     expect(operationsNamed(canvas.context, 'drawImage')[0]).toMatchObject({
+      args: [expect.any(Object), 0, 0, 384, 216],
+    });
+    expect(operationsNamed(canvas.context, 'drawImage')[1]).toMatchObject({
       args: [expect.any(Object), 32, 18],
+    });
+  });
+
+  it('crops a focus selection into a new image-sized export', async () => {
+    const result = await cropImageBySelection('mock://image', {
+      x: 0.1,
+      y: 0.2,
+      width: 0.3,
+      height: 0.4,
+    });
+    const canvas = createdCanvases[0];
+
+    expect(result).toEqual({
+      dataUrl: 'data:image/png;mock,96x72',
+      resultAspectRatio: '96/72',
+    });
+    expect(operationsNamed(canvas.context, 'drawImage')[0]).toMatchObject({
+      args: [expect.any(Object), 32, 36, 96, 72, 0, 0, 96, 72],
+    });
+  });
+
+  it('erases only the selected focus rectangle from the source image', async () => {
+    await eraseImageSelection('mock://image', {
+      x: 0.2,
+      y: 0.25,
+      width: 0.3,
+      height: 0.5,
+    });
+    const canvas = createdCanvases[0];
+
+    expect(operationsNamed(canvas.context, 'drawImage')[0]).toMatchObject({
+      args: [expect.any(Object), 0, 0],
+    });
+    expect(operationsNamed(canvas.context, 'clearRect')).toEqual([
+      { name: 'clearRect', args: [64, 45, 96, 90] },
+    ]);
+  });
+
+  it('repaints the selected area by clipping the blur and overlay to the focus box', async () => {
+    await repaintImageSelection('mock://image', {
+      x: 0.25,
+      y: 0.25,
+      width: 0.5,
+      height: 0.5,
+    });
+    const canvas = createdCanvases[0];
+
+    expect(operationsNamed(canvas.context, 'rect')[0]).toEqual({ name: 'rect', args: [80, 45, 160, 90] });
+    expect(operationsNamed(canvas.context, 'clip')).toHaveLength(1);
+    expect(canvas.context.operations).toContainEqual({
+      name: 'set',
+      prop: 'filter',
+      value: 'blur(8px) saturate(1.2) contrast(1.08)',
+    });
+    expect(canvas.context.operations).toContainEqual({ name: 'set', prop: 'globalAlpha', value: 0.14 });
+    expect(operationsNamed(canvas.context, 'fillRect').at(-1)).toEqual({
+      name: 'fillRect',
+      args: [80, 45, 160, 90],
     });
   });
 
@@ -254,6 +325,30 @@ describe('local image effects', () => {
       { name: 'clearRect', args: [240, 45, 80, 90] },
       { name: 'clearRect', args: [0, 135, 320, 45] },
     ]);
+  });
+
+  it('creates a real nine-grid canvas variant with nine filtered placements', async () => {
+    const result = await createNineGridVariant('mock://image');
+    const canvas = createdCanvases[0];
+
+    expect(result).toEqual({
+      dataUrl: 'data:image/png;mock,992x572',
+      resultAspectRatio: '992/572',
+    });
+    expect(operationsNamed(canvas.context, 'drawImage')).toHaveLength(9);
+    expect(canvas.context.operations).toContainEqual({
+      name: 'set',
+      prop: 'filter',
+      value: 'brightness(1.05) contrast(1.04)',
+    });
+    expect(canvas.context.operations).toContainEqual({
+      name: 'set',
+      prop: 'filter',
+      value: 'none',
+    });
+    expect(operationsNamed(canvas.context, 'drawImage')[8]).toMatchObject({
+      args: [expect.any(Object), 664, 384, 320, 180],
+    });
   });
 
   it('preserves split tile row and column metadata with per-tile exports', async () => {
@@ -310,6 +405,35 @@ describe('local image effects', () => {
     expect(operationsNamed(canvas.context, 'strokeRect')[0]).toEqual({
       name: 'strokeRect',
       args: [4, 4, 312, 172],
+    });
+  });
+
+  it('applies a multi-angle fallback transform and wide-angle vignette locally', async () => {
+    const result = await applyCameraAngleFallback('mock://image', {
+      rotation: 90,
+      tilt: -30,
+      scale: 18,
+      wideAngle: true,
+    });
+    const canvas = createdCanvases[0];
+
+    expect(result).toEqual({
+      dataUrl: 'data:image/png;mock,320x180',
+      resultAspectRatio: '320/180',
+    });
+    expect(operationsNamed(canvas.context, 'translate')[0]).toEqual({ name: 'translate', args: [160, 90] });
+    const transform = operationsNamed(canvas.context, 'transform')[0] as { name: 'transform'; args: number[] };
+    expect(transform.args[0]).toBeCloseTo(0.99);
+    expect(transform.args[1]).toBeCloseTo(-0.115);
+    expect(transform.args[2]).toBeCloseTo(0.25);
+    expect(transform.args[3]).toBeCloseTo(1.036);
+    expect(operationsNamed(canvas.context, 'createRadialGradient')[0]).toEqual({
+      name: 'createRadialGradient',
+      args: [160, 90, 36, 160, 90, 208],
+    });
+    expect(operationsNamed(canvas.context, 'fillRect').at(-1)).toEqual({
+      name: 'fillRect',
+      args: [0, 0, 320, 180],
     });
   });
 });
