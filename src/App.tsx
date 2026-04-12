@@ -1292,9 +1292,19 @@ export default function App() {
 
       updateNode(childId, {
         prompt: nextPrompt,
+        status: NodeStatus.IDLE,
         videoMode: 'standard',
         aspectRatio: inheritedAspectRatio,
         inputUrl: parentNode.resultUrl,
+        resultUrl: undefined,
+        resultAspectRatio: undefined,
+        lastFrame: undefined,
+        frameInputs: undefined,
+        requestedVideoModel: undefined,
+        executedVideoModel: undefined,
+        executedVideoMode: undefined,
+        executionProvider: undefined,
+        generationStartTime: undefined,
         isPromptExpanded: true,
         errorMessage: undefined,
       });
