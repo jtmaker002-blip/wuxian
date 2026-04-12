@@ -1399,7 +1399,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
         {/* Main Node Card - Video nodes are wider to fit more controls */}
         <div
-          className={`relative ${isImageToVideoNode ? 'w-[520px]' : data.type === NodeType.VIDEO ? 'w-[385px]' : 'w-[365px]'} rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${
+          className={`relative ${isImageToVideoNode ? 'w-[520px]' : data.type === NodeType.VIDEO ? 'w-[385px]' : data.type === NodeType.IMAGE ? 'w-[620px]' : 'w-[365px]'} rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${
             isLiblibImageNode
               ? selected
                 ? 'border-white/60 ring-0 shadow-[0_30px_90px_rgba(0,0,0,0.48)]'
@@ -1534,7 +1534,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           data.type !== NodeType.TEXT &&
           !(data.prompt && data.prompt.startsWith('Extract panel #')) &&
           !(data.type === NodeType.IMAGE && data.resultUrl && (data.angleMode || imageToolMode === 'lighting')) && (
-          <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${isLiblibImageNode ? 'w-[588px]' : isImageToVideoNode ? 'w-[520px]' : 'w-[600px]'} flex justify-center z-[100]`}>
+          <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${isLiblibImageNode ? 'w-[620px]' : isImageToVideoNode ? 'w-[520px]' : 'w-[600px]'} flex justify-center z-[100]`}>
             <NodeControls
               data={data}
               inputUrl={inputUrl}

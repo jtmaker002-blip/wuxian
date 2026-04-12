@@ -28,7 +28,7 @@ export const useConnectionDragging = () => {
     const CONNECTOR_SNAP_RADIUS = 104;
 
     const getNodeDimensions = (node: NodeData) => {
-        const width = node.type === NodeType.VIDEO ? 385 : 365;
+        const width = node.type === NodeType.VIDEO ? 385 : node.type === NodeType.IMAGE ? 620 : 365;
 
         if (node.type === NodeType.AUDIO) {
             return { width, height: width / (16 / 7) };

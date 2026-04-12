@@ -55,6 +55,7 @@ const getNodeWidth = (node: NodeData, parentNode?: NodeData): number => {
 
     // Video nodes are wider
     if (node.type === NodeType.VIDEO) return 385;
+    if (node.type === NodeType.IMAGE) return 620;
     // Camera Angle nodes have fixed width
     if (node.type === NodeType.CAMERA_ANGLE) return 340;
     // Image and other nodes
