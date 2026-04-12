@@ -1425,9 +1425,9 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                                 <span
                                                     key={`native-${tag.key}`}
                                                     className={`px-2.5 py-1 rounded-full text-[11px] border border-dashed ${isDark ? 'bg-neutral-950 text-amber-300 border-amber-700/60' : 'bg-amber-50 text-amber-700 border-amber-300'}`}
-                                                    title="模型原生支持，但当前后端未接通"
+                                                    title="模型原生能力，执行时会按当前可用后端能力路由"
                                                 >
-                                                    {tag.label}·待接入
+                                                    {tag.label}·原生支持
                                                 </span>
                                             ))}
                                         </div>
