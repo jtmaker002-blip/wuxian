@@ -238,7 +238,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     ) : (
                         <>
                             <img src={data.resultUrl} alt="Generated" className="w-full h-full object-cover pointer-events-none" />
-                            {data.imageAnnotations?.map((annotation) => {
+                            {data.imageAnnotations?.map((annotation, annotationIndex) => {
                                 const colorClass =
                                     annotation.type === 'preserve'
                                         ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100'
@@ -259,9 +259,28 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                             height: `${annotation.selection.height * 100}%`,
                                         }}
                                     >
-                                        <span className={`absolute -top-8 left-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-[11px] font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.35)] backdrop-blur-md ${colorClass}`}>
-                                            {annotation.label}
-                                        </span>
+                                        <div className={`absolute left-1 top-1 flex max-w-[calc(100%-8px)] items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold shadow-[0_10px_24px_rgba(0,0,0,0.35)] backdrop-blur-md ${colorClass}`}>
+                                            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-black/35 text-[9px] text-white">
+                                                {annotationIndex + 1}
+                                            </span>
+                                            <span className="min-w-0 truncate">{annotation.label}</span>
+                                            {selected && onUpdate && (
+                                                <button
+                                                    type="button"
+                                                    onPointerDown={(event) => event.stopPropagation()}
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        onUpdate(data.id, {
+                                                            imageAnnotations: (data.imageAnnotations || []).filter((item) => item.id !== annotation.id),
+                                                        });
+                                                    }}
+                                                    className="ml-0.5 rounded-full bg-black/32 px-1.5 py-0.5 text-[9px] text-white/86 transition-colors hover:bg-black/55 hover:text-white"
+                                                    title="删除标记"
+                                                >
+                                                    删除
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 );
                             })}

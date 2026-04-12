@@ -69,32 +69,32 @@ export function ImageToolMenuPanel({
         {items.map((item) => {
           const normalized = typeof item === 'string' ? { label: item } : item;
           return (
-          <button
-            key={normalized.label}
-            onClick={() => onSelect?.(normalized.label)}
-            className={
-              isDropdown
-                ? 'flex items-center justify-between gap-3 rounded-2xl px-3.5 py-3 text-left text-[14px] font-medium text-neutral-100 transition-colors hover:bg-white/8'
-                : 'flex items-center justify-between gap-3 rounded-2xl border border-neutral-700 bg-[#2a2a2a] px-4 py-3 text-left text-lg text-neutral-100 hover:bg-[#333]'
-            }
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              {normalized.icon && <span className="text-neutral-300">{normalized.icon}</span>}
-              <span className="min-w-0">
-                <span className="block truncate">{normalized.label}</span>
-                {normalized.description && (
-                  <span className={`mt-0.5 block truncate text-xs font-normal ${isDropdown ? 'text-neutral-400' : 'text-neutral-500'}`}>
-                    {normalized.description}
-                  </span>
-                )}
+            <button
+              key={normalized.label}
+              onClick={() => onSelect?.(normalized.label)}
+              className={
+                isDropdown
+                  ? 'flex items-center justify-between gap-3 rounded-2xl px-3.5 py-3 text-left text-[14px] font-medium text-neutral-100 transition-all hover:bg-white/8 hover:text-white active:scale-[0.99]'
+                  : 'flex items-center justify-between gap-3 rounded-2xl border border-neutral-700 bg-[#2a2a2a] px-4 py-3 text-left text-lg text-neutral-100 transition-all hover:bg-[#333] hover:text-white active:scale-[0.99]'
+              }
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                {normalized.icon && <span className="text-neutral-300">{normalized.icon}</span>}
+                <span className="min-w-0">
+                  <span className="block truncate">{normalized.label}</span>
+                  {normalized.description && (
+                    <span className={`mt-0.5 block truncate text-xs font-normal ${isDropdown ? 'text-neutral-400' : 'text-neutral-500'}`}>
+                      {normalized.description}
+                    </span>
+                  )}
+                </span>
               </span>
-            </span>
-            {normalized.badge && (
-              <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-neutral-400">
-                {normalized.badge}
-              </span>
-            )}
-          </button>
+              {normalized.badge && (
+                <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] text-neutral-400">
+                  {normalized.badge}
+                </span>
+              )}
+            </button>
         )})}
       </div>
     </div>

@@ -887,18 +887,21 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                 : imageToolMode === 'mark'
                     ? '标记模式已启用，可继续标注当前图片的局部意图'
                     : null;
+    const imageAnnotations = data.imageAnnotations || [];
+    const canUseImageRegionTools = Boolean(data.resultUrl);
     const isLiblibVideoFromImagePanel = isVideoNode && Boolean(inputUrl) && selectedVideoMode === 'standard';
     const panelBg = isLiblibImagePanel
         ? 'bg-[#232323]/98 border-white/10 text-white shadow-[0_26px_80px_rgba(0,0,0,0.52)] backdrop-blur-xl'
         : isLiblibVideoFromImagePanel
             ? 'bg-[#232323]/98 border-white/10 text-white shadow-[0_26px_80px_rgba(0,0,0,0.52)] backdrop-blur-xl'
         : isDark ? 'bg-[#1a1a1a] border-neutral-800' : 'bg-white border-neutral-200';
-    const promptText = isDark ? 'text-white placeholder-neutral-600' : 'text-neutral-900 placeholder-neutral-400';
-    const selectBtn = isDark
+    const useDarkControlChrome = isDark || isLiblibImagePanel || isLiblibVideoFromImagePanel;
+    const promptText = useDarkControlChrome ? 'text-white placeholder-neutral-600' : 'text-neutral-900 placeholder-neutral-400';
+    const selectBtn = useDarkControlChrome
         ? 'bg-[#252525] hover:bg-[#333] border-neutral-700 text-white'
         : 'bg-white hover:bg-neutral-100 border-neutral-200 text-neutral-900';
-    const dropdownPanel = isDark ? 'bg-[#252525] border-neutral-700' : 'bg-white border-neutral-200';
-    const dropdownHeader = isDark
+    const dropdownPanel = useDarkControlChrome ? 'bg-[#252525] border-neutral-700' : 'bg-white border-neutral-200';
+    const dropdownHeader = useDarkControlChrome
         ? 'bg-[#1a1a1a] border-neutral-700 text-neutral-400'
         : 'bg-neutral-50 border-neutral-200 text-neutral-500';
     const switchableOptions = getNodeTypeOptionLabels();
@@ -967,7 +970,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
     return (
         <div
-            className={`${isLiblibImagePanel ? 'relative rounded-[28px] p-4' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
+            className={`${isLiblibImagePanel || isLiblibVideoFromImagePanel ? 'relative rounded-[28px] p-4' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
             style={{
                 transform: `scale(${localScale})`,
                 transformOrigin: 'top center',
@@ -1002,18 +1005,26 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         { key: 'focus' as const, label: '聚焦', icon: <Crop size={16} /> },
                                     ].map((tool) => {
                                         const active = imageToolMode === tool.key;
+                                        const disabled = (tool.key === 'mark' || tool.key === 'focus') && !canUseImageRegionTools;
                                         return (
                                             <button
                                                 key={tool.key}
                                                 type="button"
-                                                onClick={() => onUpdate(data.id, { imageToolMode: active ? null : tool.key, imageToolAction: undefined })}
-                                                className={`flex h-[68px] w-[72px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border text-xs font-medium transition-all ${
-                                                    active
-                                                        ? 'border-white/70 bg-white text-black shadow-[0_12px_28px_rgba(255,255,255,0.12)]'
-                                                        : 'border-white/10 bg-[#2a2a2a] text-neutral-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)] hover:bg-[#343434] hover:border-white/14'
+                                                disabled={disabled}
+                                                onClick={() => {
+                                                    if (disabled) return;
+                                                    onUpdate(data.id, { imageToolMode: active ? null : tool.key, imageToolAction: undefined });
+                                                }}
+                                                className={`flex h-[68px] w-[72px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border text-xs font-medium transition-all active:scale-[0.98] ${
+                                                    disabled
+                                                        ? 'cursor-not-allowed border-white/6 bg-[#242424] text-neutral-600'
+                                                        : active
+                                                            ? 'border-white/70 bg-white text-black shadow-[0_12px_28px_rgba(255,255,255,0.12)]'
+                                                            : 'border-white/10 bg-[#2a2a2a] text-neutral-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.02)] hover:bg-[#343434] hover:border-white/14 hover:text-white'
                                                 }`}
+                                                title={disabled ? '上传或生成图片后可用' : tool.label}
                                             >
-                                                <span className={active ? 'text-black' : 'text-neutral-300'}>{tool.icon}</span>
+                                                <span className={disabled ? 'text-neutral-600' : active ? 'text-black' : 'text-neutral-300'}>{tool.icon}</span>
                                                 <span>{tool.label}</span>
                                             </button>
                                         );
@@ -1056,8 +1067,19 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             </div>
                                         )}
                                         {data.focusSelection && imageToolMode !== 'focus' && (
-                                            <div className="rounded-full border border-sky-400/20 bg-sky-500/10 px-3 py-1 text-[11px] font-medium text-sky-200 shadow-[0_10px_18px_rgba(12,74,110,0.18)]">
-                                                已聚焦局部
+                                            <div className="flex items-center gap-1 rounded-full border border-sky-300/20 bg-[#1f2d36] px-3 py-1 text-[11px] font-medium text-sky-100 shadow-[0_10px_18px_rgba(12,74,110,0.18)]">
+                                                <span>已聚焦局部</span>
+                                                <button
+                                                    type="button"
+                                                    onClick={(event) => {
+                                                        event.stopPropagation();
+                                                        onUpdate(data.id, { focusSelection: undefined });
+                                                    }}
+                                                    className="rounded-full px-1 text-sky-100/70 transition-colors hover:bg-sky-300/12 hover:text-white"
+                                                    title="清除聚焦区域"
+                                                >
+                                                    清除
+                                                </button>
                                             </div>
                                         )}
                                         {data.imageToolAction && (
@@ -1080,8 +1102,66 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 )
                             )}
                             {data.focusSelection && imageToolMode !== 'focus' && (
-                                <div className="flex min-h-11 items-center rounded-[18px] border border-sky-400/10 bg-sky-500/5 px-4 text-sm text-sky-100">
-                                    已记录聚焦区域。继续在下方描述你希望局部变化的内容后再生成。
+                                <div className="flex min-h-11 items-center justify-between gap-3 rounded-[18px] border border-sky-300/16 bg-[#1f2d36] px-4 text-sm text-sky-100">
+                                    <span>已记录聚焦区域。继续在下方描述你希望局部变化的内容后再生成。</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => onUpdate(data.id, { focusSelection: undefined })}
+                                        className="shrink-0 rounded-full border border-sky-300/16 px-2.5 py-1 text-[11px] text-sky-100/80 transition-colors hover:bg-sky-300/12 hover:text-white"
+                                    >
+                                        清除
+                                    </button>
+                                </div>
+                            )}
+                            {imageAnnotations.length > 0 && (
+                                <div className="rounded-[18px] border border-white/10 bg-[#292929] px-3 py-2.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <span className="text-[11px] font-medium text-neutral-400">标记区域 · {imageAnnotations.length}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => onUpdate(data.id, { imageAnnotations: [] })}
+                                            className="rounded-full px-2 py-1 text-[10px] font-medium text-neutral-400 transition-colors hover:bg-white/8 hover:text-white"
+                                        >
+                                            全部清除
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {imageAnnotations.map((annotation, index) => {
+                                            const tone =
+                                                annotation.type === 'preserve'
+                                                    ? 'border-emerald-300/20 bg-emerald-400/10 text-emerald-100'
+                                                    : annotation.type === 'ignore'
+                                                        ? 'border-rose-300/20 bg-rose-400/10 text-rose-100'
+                                                        : annotation.type === 'reference'
+                                                            ? 'border-sky-300/20 bg-sky-400/10 text-sky-100'
+                                                            : 'border-amber-300/20 bg-amber-400/10 text-amber-100';
+
+                                            return (
+                                                <div
+                                                    key={annotation.id}
+                                                    className={`flex h-8 max-w-[170px] items-center gap-1.5 rounded-full border pl-2 pr-1 text-[11px] font-medium ${tone}`}
+                                                    title={annotation.label}
+                                                >
+                                                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-black/24 text-[9px] text-white">
+                                                        {index + 1}
+                                                    </span>
+                                                    <span className="min-w-0 truncate">{annotation.label}</span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            onUpdate(data.id, {
+                                                                imageAnnotations: imageAnnotations.filter((item) => item.id !== annotation.id),
+                                                            })
+                                                        }
+                                                        className="rounded-full px-1.5 py-0.5 text-[10px] text-white/64 transition-colors hover:bg-white/10 hover:text-white"
+                                                        title="删除标记"
+                                                    >
+                                                        删除
+                                                    </button>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             )}
                             <div className="rounded-[22px] border border-white/8 bg-[#1f1f1f] px-4 py-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
@@ -1109,7 +1189,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setShowModelDropdown(!showModelDropdown)}
-                                            className="flex items-center gap-2 text-sm font-medium text-neutral-100"
+                                            className="flex items-center gap-2 rounded-full px-2 py-1 text-sm font-medium text-neutral-100 transition-colors hover:bg-white/8"
                                         >
                                             <Banana size={15} className="text-yellow-400" />
                                             <span>{currentImageModel?.name ?? 'Lib Nano Pro'}</span>
@@ -1189,7 +1269,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setShowSizeDropdown(!showSizeDropdown)}
-                                            className="flex items-center gap-2 text-sm font-medium text-neutral-100"
+                                            className="flex items-center gap-2 rounded-full px-2 py-1 text-sm font-medium text-neutral-100 transition-colors hover:bg-white/8"
                                         >
                                             <Crop size={14} className="text-neutral-300" />
                                             <span>{data.aspectRatio || '16:9'}</span>
@@ -1218,7 +1298,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setShowResolutionDropdown(!showResolutionDropdown)}
-                                            className="flex items-center gap-2 text-sm font-medium text-neutral-100"
+                                            className="flex items-center gap-2 rounded-full px-2 py-1 text-sm font-medium text-neutral-100 transition-colors hover:bg-white/8"
                                         >
                                             <Monitor size={14} className="text-neutral-300" />
                                             <span>{data.resolution || '2K'}</span>
@@ -1250,7 +1330,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             imageToolAction: undefined,
                                             angleSettings: data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false },
                                         })}
-                                        className="flex items-center gap-2 rounded-full border border-white/8 bg-white/5 px-3 py-1.5 text-sm text-neutral-100 transition-colors hover:bg-white/10"
+                                        className="flex items-center gap-2 rounded-full border border-white/8 bg-white/5 px-3 py-1.5 text-sm text-neutral-100 transition-all hover:bg-white/10 hover:text-white active:scale-[0.98]"
                                     >
                                         <Film size={14} className="text-neutral-300" />
                                         <span>摄像机控制</span>
@@ -1261,7 +1341,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <button
                                             type="button"
                                             onClick={() => setShowImageCountDropdown(!showImageCountDropdown)}
-                                            className="flex items-center gap-1 text-sm font-medium text-neutral-200"
+                                            className="flex items-center gap-1 rounded-full px-2 py-1 text-sm font-medium text-neutral-200 transition-colors hover:bg-white/8 hover:text-white"
                                         >
                                             {data.imageCount || 1}张
                                             <ChevronDown size={12} className="opacity-60" />
@@ -1289,7 +1369,13 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => onGenerate(data.id)}
-                                        className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#9b9b9b] text-white transition-colors hover:bg-[#b8b8b8]"
+                                        disabled={isLoading || !hasAvailableImageModels}
+                                        className={`flex h-11 w-11 items-center justify-center rounded-2xl text-white transition-all ${
+                                            isLoading || !hasAvailableImageModels
+                                                ? 'cursor-not-allowed bg-[#5f5f5f] opacity-55'
+                                                : 'bg-[#9b9b9b] hover:bg-[#b8b8b8] active:scale-[0.96]'
+                                        }`}
+                                        title={!hasAvailableImageModels ? '当前输入条件下没有可用的图片模型' : '生成图片'}
                                     >
                                         <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                             <path d="M12 19V5" />
@@ -1300,7 +1386,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             </div>
                         </div>
                     )}
-                    {shouldShowVideoCapabilitySummary && (
+                    {shouldShowVideoCapabilitySummary && !isLiblibVideoFromImagePanel && (
                         <div className="mb-3 space-y-2">
                             <div className="space-y-2">
                                 {connectedVideoFeatureChips.length > 0 && (
@@ -1442,14 +1528,14 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         </div>
                     )}
                     {isLiblibVideoFromImagePanel && (
-                        <div className="mb-3 rounded-[18px] border border-emerald-400/18 bg-emerald-500/8 p-3 text-white">
+                        <div className="mb-3 rounded-[22px] border border-emerald-400/20 bg-[#1f2a26] p-3 text-white shadow-[0_18px_44px_rgba(0,0,0,0.22)]">
                             <div className="flex items-center gap-3">
-                                <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-xl bg-black">
+                                <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-[16px] bg-black">
                                     <img src={inputUrl} alt="图生视频首帧素材" className="h-full w-full object-cover" />
                                     <div className="absolute inset-0 ring-1 ring-inset ring-white/12" />
                                 </div>
                                 <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <span className="rounded-full bg-emerald-400 px-2 py-0.5 text-[10px] font-semibold text-black">图生视频</span>
                                         <span className="text-sm font-semibold text-white">
                                             首帧素材已接入
@@ -1457,6 +1543,14 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </div>
                                     <div className="mt-1 text-xs text-emerald-100/78">
                                         继续描述动作、镜头和运镜，生成会以这张图片作为视频起点。
+                                    </div>
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                        <span className="rounded-full border border-white/10 bg-black/18 px-2 py-0.5 text-[10px] text-emerald-50/82">
+                                            主路径
+                                        </span>
+                                        <span className="rounded-full border border-white/10 bg-black/18 px-2 py-0.5 text-[10px] text-emerald-50/82">
+                                            标准模式
+                                        </span>
                                     </div>
                                 </div>
                             </div>

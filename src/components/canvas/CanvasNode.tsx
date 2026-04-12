@@ -383,17 +383,17 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
   const getImageToolbarButtonClass = React.useCallback(
     (active: boolean) =>
-      `flex h-10 items-center gap-1.5 whitespace-nowrap rounded-[14px] px-3 text-[14px] font-medium transition-colors ${
+      `group/tool flex h-10 items-center gap-1.5 whitespace-nowrap rounded-[14px] px-3 text-[14px] font-medium transition-all active:scale-[0.98] ${
         active
           ? 'bg-white text-black shadow-[0_12px_26px_rgba(255,255,255,0.12)]'
-          : 'text-neutral-100 hover:bg-white/8'
+          : 'text-neutral-100 hover:bg-white/8 hover:text-white'
       }`,
     []
   );
 
   const getImageToolbarIconButtonClass = React.useCallback(
     (active: boolean) =>
-      `flex h-10 w-10 items-center justify-center rounded-[14px] transition-colors ${
+      `flex h-10 w-10 items-center justify-center rounded-[14px] transition-all active:scale-[0.96] ${
         active
           ? 'bg-white text-black shadow-[0_12px_26px_rgba(255,255,255,0.12)]'
           : 'text-neutral-200 hover:bg-white/8 hover:text-white'
@@ -1099,7 +1099,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               transformOrigin: 'bottom center'
             }}
           >
-            <div className="flex min-h-[50px] w-max items-center gap-1.5 rounded-[20px] border border-white/14 bg-[#252525] px-2 py-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.58)] backdrop-blur-xl">
+            <div className="flex min-h-[50px] w-max items-center gap-1.5 rounded-[20px] border border-white/14 bg-[#252525]/98 px-2 py-1.5 shadow-[0_18px_50px_rgba(0,0,0,0.58)] backdrop-blur-xl">
               {/* Image tool buttons */}
               {!(data.prompt && data.prompt.startsWith('Extract panel #')) && (
                 <>
@@ -1151,7 +1151,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                       <rect x="14" y="14" width="7" height="7" rx="1.2" />
                     </svg>
                     九宫格
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-neutral-400" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg viewBox="0 0 24 24" className={`h-3.5 w-3.5 ${imageToolMode === 'grid' ? 'text-black/60' : 'text-neutral-400 group-hover/tool:text-neutral-200'}`} fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </button>
@@ -1166,7 +1166,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                       <path d="M8 10h8" />
                     </svg>
                     高清
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-neutral-400" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg viewBox="0 0 24 24" className={`h-3.5 w-3.5 ${imageToolMode === 'enhance' ? 'text-black/60' : 'text-neutral-400 group-hover/tool:text-neutral-200'}`} fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </button>
@@ -1182,7 +1182,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                       <rect x="4" y="4" width="16" height="16" rx="2" />
                     </svg>
                     宫格切分
-                    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 text-neutral-400" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg viewBox="0 0 24 24" className={`h-3.5 w-3.5 ${imageToolMode === 'split' ? 'text-black/60' : 'text-neutral-400 group-hover/tool:text-neutral-200'}`} fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="m6 9 6 6 6-6" />
                     </svg>
                   </button>
