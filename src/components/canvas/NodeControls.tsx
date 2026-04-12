@@ -2659,8 +2659,8 @@ function CameraControlOverlay({
     ];
 
     return (
-        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/18 backdrop-blur-[1px]">
-            <div className="w-[1080px] overflow-hidden rounded-[18px] border border-white/12 bg-[#282828] text-neutral-100 shadow-[0_34px_120px_rgba(0,0,0,0.46)]">
+        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/58 backdrop-blur-[2px]">
+            <div className="w-[1080px] overflow-hidden rounded-[18px] border border-white/14 bg-[#252525] text-neutral-100 shadow-[0_34px_120px_rgba(0,0,0,0.62)]">
                 <div className="flex h-[82px] items-center justify-between border-b border-white/10 px-8">
                     <div className="text-[24px] font-semibold tracking-[0.02em] text-neutral-50">摄像机控制</div>
                     <button
@@ -2685,7 +2685,7 @@ function CameraControlOverlay({
                                 >
                                     ˄
                                 </button>
-                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/10 bg-[#303030] shadow-[inset_0_0_38px_rgba(255,255,255,0.025),0_14px_34px_rgba(0,0,0,0.2)]">
+                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/12 bg-[#2f2f2f] shadow-[inset_0_0_38px_rgba(255,255,255,0.03),0_14px_34px_rgba(0,0,0,0.28)]">
                                     <div className="mb-5 text-[20px] font-medium text-neutral-300">{column.label}</div>
                                     {column.imageSrc ? (
                                         <img
