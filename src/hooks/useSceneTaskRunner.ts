@@ -95,15 +95,16 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
           continue;
         }
 
-        patchNode(active.nodeId, {
-          status: NodeStatus.LOADING,
-          taskInfo: {
-            taskId: task.taskId,
-            loading: true,
-            status: task.status,
-            progressPercent: task.progressPercent,
-          },
-        });
+          patchNode(active.nodeId, {
+            status: NodeStatus.LOADING,
+            taskInfo: {
+              taskId: task.taskId,
+              loading: true,
+              status: task.status,
+              progressPercent: task.progressPercent,
+              ...(task.childTasks ? { childTasks: task.childTasks } : {}),
+            },
+          });
       }
     }, 450);
   }, [patchNode, projectId]);

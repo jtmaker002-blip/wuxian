@@ -33,8 +33,23 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const isStoryboard25 = data.scene === SCENES.COHERENT_STORYBOARD_25;
   const isLightCorrection = data.scene === SCENES.CINEMATIC_LIGHT_CORRECTION;
   const isUpscale = data.scene === SCENES.UPSCALE;
+  const isFourGrid = data.scene === SCENES.PLOT_DEDUCTION_FOUR_GRID;
+  const isThreeView = data.scene === SCENES.CHARACTER_THREE_VIEW_GENERATE;
+  const isFrameDeduction = data.scene === SCENES.FRAME_DEDUCTION_PLUS_3S || data.scene === SCENES.FRAME_DEDUCTION_MINUS_5S;
   const selectedShot = storyboard[selectedIndex];
   const selectedImage = images[selectedIndex];
+  const childTasks = data.taskInfo && 'childTasks' in data.taskInfo ? (data.taskInfo as any).childTasks || [] : [];
+
+  const updateParam = (key: string, value: unknown) => {
+    const nextParams = {
+      ...(data.params || {}),
+      [key]: value,
+    };
+    onUpdate?.(data.id, {
+      params: nextParams,
+      prompt: key === 'storyText' || key === 'prompt' ? String(value) : data.prompt,
+    });
+  };
 
   const retryGridItem = (index: number) => {
     const nextImages = images.map((image, imageIndex) => {
@@ -144,6 +159,135 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
       </div>
 
       <div className="p-4">
+        {selected && (
+          <div className="mb-4 rounded-2xl border border-white/10 bg-black/28 p-3">
+            {(isFourGrid || isStoryboard25) && (
+              <label className="block text-xs text-neutral-400">
+                故事文本
+                <textarea
+                  value={(data.params?.storyText as string) || data.prompt || ''}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onChange={(event) => updateParam('storyText', event.target.value)}
+                  className="mt-1 min-h-[76px] w-full resize-none rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none focus:border-blue-400/70"
+                />
+              </label>
+            )}
+            {(isLightCorrection || isThreeView || isFrameDeduction || isUpscale) && (
+              <label className="block text-xs text-neutral-400">
+                描述 / Prompt
+                <textarea
+                  value={(data.params?.prompt as string) || data.prompt || ''}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onChange={(event) => updateParam('prompt', event.target.value)}
+                  className="mt-1 min-h-[68px] w-full resize-none rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none focus:border-blue-400/70"
+                />
+              </label>
+            )}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {(isFourGrid || isStoryboard25) && (
+                <label className="text-xs text-neutral-400">
+                  画幅
+                  <select
+                    value={(data.params?.ratio as string) || '16:9'}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onChange={(event) => updateParam('ratio', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+                  >
+                    <option value="16:9">16:9</option>
+                    <option value="9:16">9:16</option>
+                    <option value="1:1">1:1</option>
+                  </select>
+                </label>
+              )}
+              {(isFourGrid || isStoryboard25 || isThreeView) && (
+                <label className="text-xs text-neutral-400">
+                  风格
+                  <select
+                    value={(data.params?.visualStyle as string) || (data.params?.style as string) || 'cinematic realistic'}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onChange={(event) => updateParam(isThreeView ? 'style' : 'visualStyle', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+                  >
+                    <option value="cinematic realistic">cinematic realistic</option>
+                    <option value="anime">anime</option>
+                    <option value="concept-art">concept-art</option>
+                    <option value="documentary">documentary</option>
+                  </select>
+                </label>
+              )}
+              {isLightCorrection && (
+                <>
+                  <label className="text-xs text-neutral-400">
+                    主光方向
+                    <select
+                      value={(data.params?.keyLight as string) || 'front'}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onChange={(event) => updateParam('keyLight', event.target.value)}
+                      className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+                    >
+                      <option value="front">front</option>
+                      <option value="left">left</option>
+                      <option value="right">right</option>
+                      <option value="back">back</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-neutral-400">
+                    亮度
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      value={Number(data.params?.brightness ?? 55)}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onChange={(event) => updateParam('brightness', Number(event.target.value))}
+                      className="mt-3 w-full"
+                    />
+                  </label>
+                </>
+              )}
+              {isUpscale && (
+                <label className="text-xs text-neutral-400">
+                  目标清晰度
+                  <select
+                    value={(data.params?.targetResolution as string) || '2x'}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onChange={(event) => updateParam('targetResolution', event.target.value)}
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+                  >
+                    <option value="2x">2x</option>
+                    <option value="4x">4x</option>
+                    <option value="2048">2048</option>
+                    <option value="4096">4096</option>
+                  </select>
+                </label>
+              )}
+            </div>
+          </div>
+        )}
+
+        {childTasks.length > 0 && isLoading && (
+          <div className="mb-4 rounded-2xl border border-white/10 bg-black/28 p-3">
+            <div className="mb-2 text-xs font-semibold text-white">子任务队列 · 最大并发 4</div>
+            <div className="grid grid-cols-5 gap-1.5">
+              {childTasks.map((task: any) => (
+                <div
+                  key={task.taskId}
+                  className={`h-2 rounded-full ${
+                    task.status === 'succeeded'
+                      ? 'bg-emerald-400'
+                      : task.status === 'running'
+                        ? 'bg-blue-400'
+                        : task.status === 'failed'
+                          ? 'bg-rose-400'
+                          : 'bg-white/12'
+                  }`}
+                  title={`${task.index + 1}: ${task.status} ${task.progressPercent}%`}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {images.length > 0 ? (
           <div className={`grid ${getGridClass(images.length)} gap-2`}>
             {images.map((image, index) => {

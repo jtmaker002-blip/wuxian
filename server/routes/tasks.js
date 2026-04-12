@@ -19,6 +19,14 @@ router.post('/status', (req, res) => {
       progressPercent: task.progressPercent,
       result: task.result,
       errorMessage: task.errorMessage,
+      childTasks: task.childTasks?.map((child) => ({
+        taskId: child.taskId,
+        index: child.index,
+        status: child.status,
+        progressPercent: child.progressPercent,
+        result: child.result,
+        errorMessage: child.errorMessage,
+      })),
     })),
   });
 });
