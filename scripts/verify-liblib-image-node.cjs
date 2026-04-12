@@ -100,6 +100,10 @@ async function main() {
     await expectText(page, '图生视频');
     await expectText(page, '主路径');
     await saveScreenshot(page, artifactDir, artifacts, '03-connector-menu.png', 'Image connector blank-drop menu with 图生视频 primary path.');
+    await page.getByText('图生视频').first().click();
+    await page.waitForTimeout(800);
+    await expectOneOfText(page, ['首帧素材已接入', '图生视频主路径', '生成视频']);
+    await saveScreenshot(page, artifactDir, artifacts, '03b-connector-menu-created-video.png', 'Image connector blank-drop menu created an image-to-video node.');
   });
 
   await runCase(browser, 'image-to-video-direct', async (page) => {
