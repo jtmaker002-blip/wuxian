@@ -2632,14 +2632,14 @@ function CameraControlOverlay({
     ];
 
     return (
-        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/24 backdrop-blur-[1px]">
-            <div className="w-[1080px] overflow-hidden rounded-[18px] border border-white/18 bg-[#2b2b2b] text-white shadow-[0_34px_120px_rgba(0,0,0,0.52)]">
-                <div className="flex h-[82px] items-center justify-between border-b border-white/14 px-8">
-                    <div className="text-[24px] font-semibold tracking-[0.02em] text-white">摄像机控制</div>
+        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/18 backdrop-blur-[1px]">
+            <div className="w-[1080px] overflow-hidden rounded-[18px] border border-white/12 bg-[#282828] text-neutral-100 shadow-[0_34px_120px_rgba(0,0,0,0.46)]">
+                <div className="flex h-[82px] items-center justify-between border-b border-white/10 px-8">
+                    <div className="text-[24px] font-semibold tracking-[0.02em] text-neutral-50">摄像机控制</div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+                        className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/8 hover:text-neutral-100"
                         aria-label="关闭摄像机控制"
                     >
                         <span className="text-[42px] leading-none">×</span>
@@ -2653,28 +2653,28 @@ function CameraControlOverlay({
                                 <button
                                     type="button"
                                     onClick={() => update(column.key, -1)}
-                                    className="mb-4 text-neutral-200 transition-colors hover:text-white"
+                                    className="mb-4 text-neutral-500 transition-colors hover:text-neutral-200"
                                     aria-label={`${column.label}上一个`}
                                 >
                                     ˄
                                 </button>
-                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/18 bg-[#303030] shadow-[inset_0_0_44px_rgba(255,255,255,0.04),0_14px_34px_rgba(0,0,0,0.22)]">
-                                    <div className="mb-5 text-[20px] font-medium text-neutral-200">{column.label}</div>
+                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/10 bg-[#303030] shadow-[inset_0_0_38px_rgba(255,255,255,0.025),0_14px_34px_rgba(0,0,0,0.2)]">
+                                    <div className="mb-5 text-[20px] font-medium text-neutral-300">{column.label}</div>
                                     {column.image ? (
-                                        <div className="text-[54px] font-semibold text-white">{column.image}</div>
+                                        <div className="text-[54px] font-semibold text-neutral-100">{column.image}</div>
                                     ) : (
-                                        <div className="text-[44px] font-semibold text-white">{column.value}</div>
+                                        <div className="text-[44px] font-semibold text-neutral-50">{column.value}</div>
                                     )}
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => update(column.key, 1)}
-                                    className="mt-8 text-neutral-300 transition-colors hover:text-white"
+                                    className="mt-8 text-neutral-500 transition-colors hover:text-neutral-200"
                                     aria-label={`${column.label}下一个`}
                                 >
                                     ˅
                                 </button>
-                                <div className="mt-9 min-h-8 text-center text-[20px] font-medium text-neutral-300">
+                                <div className="mt-9 min-h-8 text-center text-[20px] font-medium text-neutral-400">
                                     {column.suffix ? `${column.value} ${column.suffix}` : column.value}
                                 </div>
                             </div>
@@ -2685,7 +2685,7 @@ function CameraControlOverlay({
                         <button
                             type="button"
                             onClick={onUse}
-                            className="rounded-[16px] bg-[#2f8cff] px-8 py-4 text-[22px] font-medium text-white shadow-[0_16px_34px_rgba(47,140,255,0.25)] transition-colors hover:bg-[#4b9dff] active:scale-[0.98]"
+                            className="rounded-[16px] bg-[#3b82f6] px-8 py-4 text-[22px] font-medium text-white shadow-[0_16px_34px_rgba(59,130,246,0.2)] transition-colors hover:bg-[#5794f7] active:scale-[0.98]"
                         >
                             使用
                         </button>
