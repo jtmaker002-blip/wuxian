@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { createRequire } = require('module');
 
 function loadPlaywright() {
@@ -157,7 +158,8 @@ async function main() {
 async function saveScreenshot(page, artifactDir, artifacts, fileName, description) {
   const filePath = path.join(artifactDir, fileName);
   await page.screenshot({ path: filePath });
-  artifacts.push({ fileName, filePath, description });
+  const sha256 = crypto.createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
+  artifacts.push({ fileName, filePath, sha256, description });
 }
 
 async function runCase(browser, name, fn) {
