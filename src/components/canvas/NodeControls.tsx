@@ -7,6 +7,7 @@
  */
 
 import React, { useState, useRef, useEffect, memo } from 'react';
+import { createPortal } from 'react-dom';
 import { Sparkles, Banana, Settings2, Check, ChevronDown, ChevronUp, GripVertical, Image as ImageIcon, Film, Clock, Expand, Shrink, Monitor, Crop, HardDrive, Zap } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { NodeData, NodeStatus, NodeType } from '../../types';
@@ -38,6 +39,20 @@ import { getAllVoiceCapabilities, getNativeVideoCapability, getNativeVideoFeatur
 import { canQuickAddStandardVideoImage, getEnabledVideoModes, resolveStandardVideoCapabilityState, sanitizeVideoNodeState } from '../../utils/videoCapabilityState';
 import { getVideoModeAvailabilityState, resolveEffectiveVideoMode } from '../../utils/videoModeResolution';
 import { useStoredOpenAiTeachProviderConfig } from '../../shared/provider/openaiteach-config';
+
+const CAMERA_CONTROL_OPTIONS = {
+    camera: ['Arri Alexa 65', 'Panavision DXL2', 'RED V-Raptor', 'Sony Venice 2'],
+    lens: ['Arri Signature Prime', 'Panavision C-series', 'Cooke S4/i', 'Zeiss Supreme Prime'],
+    focal: ['24', '35', '50', '85'],
+    aperture: ['f/2.8', 'f/4', 'f/5.6', 'f/8'],
+};
+
+type CameraControlSelection = {
+    camera: number;
+    lens: number;
+    focal: number;
+    aperture: number;
+};
 
 const TIKTOK_VIDEO_MODEL_PLACEHOLDER: CanvasVideoModel = {
     id: 'tiktok-import',
@@ -191,6 +206,13 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const [showResolutionDropdown, setShowResolutionDropdown] = useState(false);
     const [showImageCountDropdown, setShowImageCountDropdown] = useState(false);
     const [showModelDropdown, setShowModelDropdown] = useState(false);
+    const [showCameraControl, setShowCameraControl] = useState(false);
+    const [cameraControlSelection, setCameraControlSelection] = useState<CameraControlSelection>({
+        camera: 1,
+        lens: 1,
+        focal: 1,
+        aperture: 1,
+    });
     const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
     const [localPrompt, setLocalPrompt] = useState(data.prompt || '');
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -833,6 +855,25 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         setShowImageCountDropdown(false);
     };
 
+    const applyCameraControlSelection = () => {
+        const camera = CAMERA_CONTROL_OPTIONS.camera[cameraControlSelection.camera];
+        const lens = CAMERA_CONTROL_OPTIONS.lens[cameraControlSelection.lens];
+        const focal = CAMERA_CONTROL_OPTIONS.focal[cameraControlSelection.focal];
+        const aperture = CAMERA_CONTROL_OPTIONS.aperture[cameraControlSelection.aperture];
+        const hint = `摄像机控制：${camera} / ${lens} / ${focal}mm / ${aperture}`;
+        const currentPrompt = data.prompt || '';
+        const nextPrompt = currentPrompt.includes(hint)
+            ? currentPrompt
+            : `${currentPrompt}${currentPrompt ? '\n\n' : ''}${hint}`;
+
+        onUpdate(data.id, {
+            prompt: nextPrompt,
+            imageToolAction: '摄像机控制',
+            imageToolMode: null,
+        });
+        setShowCameraControl(false);
+    };
+
     // Get frame inputs with their image URLs
     // Auto-assign order: first connected = start, second = end
     // If user has explicitly set frameInputs, use those orders, otherwise auto-assign
@@ -1324,12 +1365,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </div>
                                     <button
                                         type="button"
-                                        onClick={() => onUpdate(data.id, {
-                                            angleMode: true,
-                                            imageToolMode: 'multi-angle',
-                                            imageToolAction: undefined,
-                                            angleSettings: data.angleSettings || { rotation: 0, tilt: 0, scale: 0, wideAngle: false },
-                                        })}
+                                        onClick={() => setShowCameraControl(true)}
                                         className="flex items-center gap-2 rounded-full border border-white/8 bg-white/5 px-3 py-1.5 text-sm text-neutral-100 transition-all hover:bg-white/10 hover:text-white active:scale-[0.98]"
                                     >
                                         <Film size={14} className="text-neutral-300" />
@@ -2552,9 +2588,113 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                     </div>
                 )
             }
+            {showCameraControl && createPortal(
+                <CameraControlOverlay
+                    selection={cameraControlSelection}
+                    onChange={setCameraControlSelection}
+                    onClose={() => setShowCameraControl(false)}
+                    onUse={applyCameraControlSelection}
+                />,
+                document.body
+            )}
         </div >
     );
 };
+
+function CameraControlOverlay({
+    selection,
+    onChange,
+    onClose,
+    onUse,
+}: {
+    selection: CameraControlSelection;
+    onChange: (selection: CameraControlSelection) => void;
+    onClose: () => void;
+    onUse: () => void;
+}) {
+    const update = (key: keyof CameraControlSelection, direction: 1 | -1) => {
+        const values = CAMERA_CONTROL_OPTIONS[key];
+        const next = (selection[key] + direction + values.length) % values.length;
+        onChange({ ...selection, [key]: next });
+    };
+
+    const columns: Array<{
+        key: keyof CameraControlSelection;
+        label: string;
+        image?: string;
+        value: string;
+        suffix?: string;
+    }> = [
+        { key: 'camera', label: '相机', value: CAMERA_CONTROL_OPTIONS.camera[selection.camera], image: '▧' },
+        { key: 'lens', label: '镜头', value: CAMERA_CONTROL_OPTIONS.lens[selection.lens], image: '▭' },
+        { key: 'focal', label: '焦距', value: CAMERA_CONTROL_OPTIONS.focal[selection.focal], suffix: 'mm' },
+        { key: 'aperture', label: '光圈', value: CAMERA_CONTROL_OPTIONS.aperture[selection.aperture], image: '◉' },
+    ];
+
+    return (
+        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/38 backdrop-blur-[1px]">
+            <div className="w-[1080px] overflow-hidden rounded-[18px] border border-white/10 bg-[#242424] text-white shadow-[0_34px_120px_rgba(0,0,0,0.55)]">
+                <div className="flex h-[82px] items-center justify-between border-b border-white/8 px-8">
+                    <div className="text-[24px] font-semibold tracking-[0.02em]">摄像机控制</div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/8 hover:text-white"
+                        aria-label="关闭摄像机控制"
+                    >
+                        <span className="text-[42px] leading-none">×</span>
+                    </button>
+                </div>
+
+                <div className="px-16 py-12">
+                    <div className="grid grid-cols-4 gap-12">
+                        {columns.map((column) => (
+                            <div key={column.key} className="flex flex-col items-center">
+                                <button
+                                    type="button"
+                                    onClick={() => update(column.key, -1)}
+                                    className="mb-4 text-neutral-400 transition-colors hover:text-white"
+                                    aria-label={`${column.label}上一个`}
+                                >
+                                    ˄
+                                </button>
+                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/10 bg-[#2b2b2b] shadow-[inset_0_0_40px_rgba(255,255,255,0.025)]">
+                                    <div className="mb-5 text-[20px] font-medium text-neutral-400">{column.label}</div>
+                                    {column.image ? (
+                                        <div className="text-[54px] font-semibold text-neutral-300">{column.image}</div>
+                                    ) : (
+                                        <div className="text-[44px] font-semibold text-white">{column.value}</div>
+                                    )}
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => update(column.key, 1)}
+                                    className="mt-8 text-neutral-500 transition-colors hover:text-white"
+                                    aria-label={`${column.label}下一个`}
+                                >
+                                    ˅
+                                </button>
+                                <div className="mt-9 min-h-8 text-center text-[20px] font-medium text-neutral-500">
+                                    {column.suffix ? `${column.value} ${column.suffix}` : column.value}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-10 flex justify-end">
+                        <button
+                            type="button"
+                            onClick={onUse}
+                            className="rounded-[16px] bg-[#2f8cff] px-8 py-4 text-[22px] font-medium text-white shadow-[0_16px_34px_rgba(47,140,255,0.25)] transition-colors hover:bg-[#4b9dff] active:scale-[0.98]"
+                        >
+                            使用
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 // Memoize to prevent re-renders when parent state changes
 export const NodeControls = memo(NodeControlsComponent);

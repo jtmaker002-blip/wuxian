@@ -169,6 +169,20 @@ async function main() {
     await saveScreenshot(page, artifactDir, artifacts, '04d-mark-ignore.png', 'Mark tool ignore-region selection persisted on the image node.');
   });
 
+  await runCase(browser, 'camera-control', async (page) => {
+    await createUploadedImageNode(page);
+    await page.getByText('摄像机控制').click();
+    await page.waitForTimeout(500);
+    await expectText(page, '相机');
+    await expectText(page, '镜头');
+    await expectText(page, '焦距');
+    await expectText(page, '光圈');
+    await saveScreenshot(page, artifactDir, artifacts, '04e-camera-control.png', 'Camera control modal opened from the image node bottom panel.');
+    await page.getByText('使用').click();
+    await page.waitForTimeout(400);
+    await expectText(page, '当前动作 · 摄像机控制');
+  });
+
   await runCase(browser, 'nine-grid', async (page) => {
     await createUploadedImageNode(page);
     await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('九宫格'))?.click());
