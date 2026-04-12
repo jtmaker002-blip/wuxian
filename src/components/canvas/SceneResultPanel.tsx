@@ -3,6 +3,7 @@ import { Download, Loader2, Play, RotateCcw } from 'lucide-react';
 import { getSceneDefinition } from '../../services/scenes/registry';
 import { SCENES } from '../../types/scene';
 import type { NodeData } from '../../types';
+import { makeMockImageDataUrl } from '../../services/mock/sceneAssets';
 
 type SceneResultPanelProps = {
   data: NodeData;
@@ -21,6 +22,7 @@ function getGridClass(count: number) {
 }
 
 export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoading, selected, onGenerate, onUpdate }) => {
+  const [selectedIndex, setSelectedIndex] = React.useState(0);
   const definition = getSceneDefinition(data.scene);
   const images = data.outputs?.imageList || [];
   const structuredData = data.structuredData || data.outputs?.structuredData;
@@ -31,6 +33,38 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const isStoryboard25 = data.scene === SCENES.COHERENT_STORYBOARD_25;
   const isLightCorrection = data.scene === SCENES.CINEMATIC_LIGHT_CORRECTION;
   const isUpscale = data.scene === SCENES.UPSCALE;
+  const selectedShot = storyboard[selectedIndex];
+  const selectedImage = images[selectedIndex];
+
+  const retryGridItem = (index: number) => {
+    const nextImages = images.map((image, imageIndex) => {
+      if (imageIndex !== index) return image;
+      const label = image.label || `Result ${index + 1}`;
+      return {
+        ...image,
+        url: makeMockImageDataUrl(`${definition?.label || 'scene'} · 单格重试 · ${label}`, '#22c55e', index + 1),
+        status: 'succeeded',
+      };
+    });
+
+    onUpdate?.(data.id, {
+      outputs: {
+        ...(data.outputs || {}),
+        imageList: nextImages,
+        structuredData,
+      },
+      resultUrl: nextImages[0]?.url,
+      structuredData,
+      taskInfo: data.taskInfo
+        ? {
+          ...data.taskInfo,
+          status: 'succeeded',
+          loading: false,
+          progressPercent: 100,
+        }
+        : data.taskInfo,
+    });
+  };
 
   const exportStoryboard = () => {
     const payload = JSON.stringify(structuredData || {}, null, 2);
@@ -115,15 +149,38 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
             {images.map((image, index) => {
               const shot = storyboard[index];
               return (
-                <div key={`${image.url}-${index}`} className="group relative overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                <button
+                  key={`${image.url}-${index}`}
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setSelectedIndex(index);
+                  }}
+                  className={`group relative overflow-hidden rounded-xl border bg-black/40 text-left transition-colors ${
+                    selectedIndex === index ? 'border-blue-300/80' : 'border-white/10 hover:border-white/28'
+                  }`}
+                >
                   <img src={image.url} alt={image.label || `scene ${index + 1}`} className="aspect-video w-full object-cover" />
+                  <div className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[9px] font-semibold text-white">
+                    #{index + 1}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      retryGridItem(index);
+                    }}
+                    className="absolute right-2 top-2 rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100"
+                  >
+                    单格重试
+                  </button>
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/88 to-transparent p-2">
                     <div className="text-[10px] font-semibold">{image.label || `#${index + 1}`}</div>
                     {shot?.plotDescription && !isStoryboard25 && (
                       <div className="mt-0.5 line-clamp-2 text-[9px] text-white/72">{shot.plotDescription}</div>
                     )}
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -133,6 +190,35 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
             <div className="mt-1 max-w-[320px] text-xs text-neutral-500">
               点击运行后会创建 taskId、轮询状态，并把 mock 结果回填到 outputs / structuredData。
             </div>
+          </div>
+        )}
+
+        {(selectedShot || selectedImage) && images.length > 1 && (
+          <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3 text-xs text-neutral-300">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="font-semibold text-white">单格详情 · #{selectedIndex + 1}</div>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  retryGridItem(selectedIndex);
+                }}
+                className="rounded-full border border-white/14 px-2 py-1 text-[10px] text-white"
+              >
+                只重试这一格
+              </button>
+            </div>
+            {selectedShot ? (
+              <div className="grid gap-1.5">
+                <div>剧情：{selectedShot.plotDescription}</div>
+                <div>情绪：{selectedShot.emotion || '未指定'}</div>
+                <div>景别：{selectedShot.shotSize || '未指定'}</div>
+                <div>光影：{selectedShot.lightingAndAtmosphere || '未指定'}</div>
+                <div className="text-neutral-500">Prompt：{selectedShot.imageGenerationPrompt}</div>
+              </div>
+            ) : (
+              <div>{selectedImage?.label || `Result ${selectedIndex + 1}`}</div>
+            )}
           </div>
         )}
 

@@ -20,6 +20,8 @@ import storyboardRoutes from './routes/storyboard.js';
 import openaiteachProxyRoutes from './routes/openaiteach-proxy.js';
 import modelCapabilitiesRoutes from './routes/model-capabilities.js';
 import taskRoutes from './routes/tasks.js';
+import projectRoutes from './routes/projects.js';
+import templateRoutes from './routes/templates.js';
 import { resolveRuntimePaths, resolveServerPort } from './runtime-paths.js';
 import { registerSpaFallback } from './spa-fallback.js';
 
@@ -38,8 +40,9 @@ const {
     chatsDir: CHATS_DIR,
     libraryAssetsDir: LIBRARY_ASSETS_DIR,
 } = resolveRuntimePaths({ serverDir: __dirname });
+const TEMPLATES_DIR = path.join(WORKFLOWS_DIR, 'templates');
 
-[LIBRARY_DIR, WORKFLOWS_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
+[LIBRARY_DIR, WORKFLOWS_DIR, TEMPLATES_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
@@ -143,6 +146,8 @@ app.locals.SEEDANCE_API_KEY = SEEDANCE_API_KEY;
 app.locals.IMAGES_DIR = IMAGES_DIR;
 app.locals.VIDEOS_DIR = VIDEOS_DIR;
 app.locals.LIBRARY_DIR = LIBRARY_DIR;
+app.locals.WORKFLOWS_DIR = WORKFLOWS_DIR;
+app.locals.TEMPLATES_DIR = TEMPLATES_DIR;
 
 // ============================================================================
 // WORKFLOW SANITIZATION HELPERS
@@ -274,6 +279,10 @@ app.use('/api/storyboard', storyboardRoutes);
 
 // Unified task routes for scene pipeline orchestration
 app.use('/api/tasks', taskRoutes);
+
+// Project/template routes for canvas persistence and reusable workflows
+app.use('/api/projects', projectRoutes);
+app.use('/api/templates', templateRoutes);
 
 // NOTE: Old Kling helpers removed - now in server/services/kling.js
 
