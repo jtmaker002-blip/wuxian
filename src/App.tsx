@@ -19,6 +19,7 @@ import { useNodeManagement } from './hooks/useNodeManagement';
 import { useConnectionDragging } from './hooks/useConnectionDragging';
 import { useNodeDragging } from './hooks/useNodeDragging';
 import { useGeneration } from './hooks/useGeneration';
+import { useSceneTaskRunner } from './hooks/useSceneTaskRunner';
 import { useSelectionBox } from './hooks/useSelectionBox';
 import { useGroupManagement } from './hooks/useGroupManagement';
 import { useHistory } from './hooks/useHistory';
@@ -77,6 +78,8 @@ import {
 } from './services/remoteCapabilitiesService';
 import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
 import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
+import { getSceneDefinition } from './services/scenes/registry';
+import type { SceneId } from './types/scene';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
@@ -435,12 +438,61 @@ export default function App() {
     nodes,
     updateNode
   });
+  const { runSceneNode } = useSceneTaskRunner({
+    nodes,
+    projectId: workflowId || 'local-draft-project',
+    setNodes,
+  });
+
+  const handleGenerateNode = React.useCallback(async (nodeId: string) => {
+    const handledByScene = await runSceneNode(nodeId);
+    if (handledByScene) return;
+    await handleGenerate(nodeId);
+  }, [handleGenerate, runSceneNode]);
 
   // Keep a ref to handleGenerate so setTimeout callbacks can access the latest version
-  const handleGenerateRef = React.useRef(handleGenerate);
+  const handleGenerateRef = React.useRef(handleGenerateNode);
   React.useEffect(() => {
-    handleGenerateRef.current = handleGenerate;
-  }, [handleGenerate]);
+    handleGenerateRef.current = handleGenerateNode;
+  }, [handleGenerateNode]);
+
+  const handleCreateSceneNode = React.useCallback((scene: SceneId) => {
+    const definition = getSceneDefinition(scene);
+    if (!definition) return;
+
+    const centerX = (-viewport.x + window.innerWidth / 2) / viewport.zoom - 220;
+    const centerY = (-viewport.y + window.innerHeight / 2) / viewport.zoom - 180;
+    const nodeType =
+      definition.nodeType === 'storyboard'
+        ? NodeType.STORYBOARD
+        : definition.nodeType === 'image'
+          ? NodeType.IMAGE
+          : NodeType.TOOL;
+    const nodeId = crypto.randomUUID();
+    const newNode: NodeData = {
+      id: nodeId,
+      type: nodeType,
+      x: centerX,
+      y: centerY,
+      prompt: definition.defaultParams.storyText || definition.defaultParams.prompt || definition.label,
+      status: NodeStatus.IDLE,
+      model: 'mock-scene-pipeline',
+      imageModel: nodeType === NodeType.IMAGE ? 'gemini-3-pro-image-preview' : undefined,
+      aspectRatio: definition.defaultParams.ratio || '16:9',
+      resolution: definition.scene === 'upscale' ? '2x' : 'Auto',
+      title: definition.label,
+      name: definition.label,
+      scene,
+      params: { ...definition.defaultParams },
+      outputs: undefined,
+      taskInfo: undefined,
+      parentIds: [],
+      isPromptExpanded: true,
+    };
+
+    setNodes((prev) => [...prev, newNode]);
+    setSelectedNodeIds([nodeId]);
+  }, [setNodes, setSelectedNodeIds, viewport]);
 
   // Create new canvas
   const handleNewCanvas = () => {
@@ -567,7 +619,7 @@ export default function App() {
     handleImageToImage,
     handleImageToVideo,
     handleChangeAngleGenerate
-  } = useImageNodeHandlers({ nodes, setNodes, setSelectedNodeIds, onGenerateNode: handleGenerate });
+  } = useImageNodeHandlers({ nodes, setNodes, setSelectedNodeIds, onGenerateNode: handleGenerateNode });
 
   // Asset handlers (create asset modal)
   const {
@@ -1363,6 +1415,7 @@ export default function App() {
           onAssetsClick={handleAssetsClick}
           onTikTokClick={openTikTokModal}
           onStoryboardClick={storyboardGenerator.openModal}
+          onSceneSelect={handleCreateSceneNode}
           onToolsOpen={() => {
             closeWorkflowPanel();
             closeHistoryPanel();
@@ -1574,7 +1627,7 @@ export default function App() {
                 connectedImageNodes={connectedPreviewNodes}
                 onUpdate={updateNodeWithSync}
                 onSwitchType={switchNodeType}
-                onGenerate={handleGenerate}
+                onGenerate={handleGenerateNode}
                 onAddNext={handleAddNext}
                 onQuickAddInputNode={handleQuickAddInputNode}
                 onSplitImageGrid={handleSplitImageGrid}

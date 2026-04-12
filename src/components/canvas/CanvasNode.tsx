@@ -1523,6 +1523,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             onImageToVideo={onImageToVideo}
             onUpdate={onUpdate}
             onPostToX={onPostToX}
+            onGenerate={onGenerate}
             canvasTheme={canvasTheme}
           />
         </div>
@@ -1532,6 +1533,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
         {selected &&
           showControls &&
           data.type !== NodeType.TEXT &&
+          !data.scene &&
           !(data.prompt && data.prompt.startsWith('Extract panel #')) &&
           !(data.type === NodeType.IMAGE && data.resultUrl && (data.angleMode || imageToolMode === 'lighting')) && (
           <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${isLiblibImageNode ? 'w-[620px]' : isImageToVideoNode ? 'w-[520px]' : 'w-[600px]'} flex justify-center z-[100]`}>

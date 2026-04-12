@@ -10,6 +10,8 @@ import {
   Film
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { NineGridMenu } from './menus/NineGridMenu';
+import type { SceneId } from '../types/scene';
 
 // ============================================================================
 // TIKTOK ICON COMPONENT
@@ -38,6 +40,7 @@ interface ToolbarProps {
   onAssetsClick?: (e: React.MouseEvent) => void;
   onTikTokClick?: (e: React.MouseEvent) => void;
   onStoryboardClick?: (e: React.MouseEvent) => void;
+  onSceneSelect?: (scene: SceneId) => void;
   onToolsOpen?: () => void; // Called when tools dropdown opens to close other panels
   canvasTheme?: 'dark' | 'light';
 }
@@ -53,6 +56,7 @@ export const Toolbar: React.FC<ToolbarProps> = ({
   onAssetsClick,
   onTikTokClick,
   onStoryboardClick,
+  onSceneSelect,
   onToolsOpen,
   canvasTheme = 'dark'
 }) => {
@@ -144,6 +148,15 @@ export const Toolbar: React.FC<ToolbarProps> = ({
           {isToolsOpen && (
             <div className={`absolute left-10 top-0 rounded-lg shadow-2xl py-2 min-w-[240px] z-50 ${isDark ? 'bg-[#1a1a1a] border border-neutral-700' : 'bg-white border border-neutral-200'
               }`}>
+              {onSceneSelect && (
+                <NineGridMenu
+                  isDark={isDark}
+                  onSelectScene={(scene) => {
+                    setIsToolsOpen(false);
+                    onSceneSelect(scene);
+                  }}
+                />
+              )}
               <button
                 onClick={handleToolClick(onTikTokClick)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 transition-colors group ${isDark ? 'hover:bg-neutral-800' : 'hover:bg-neutral-100'

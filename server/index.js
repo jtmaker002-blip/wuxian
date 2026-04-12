@@ -19,6 +19,7 @@ import localModelsRoutes from './routes/local-models.js';
 import storyboardRoutes from './routes/storyboard.js';
 import openaiteachProxyRoutes from './routes/openaiteach-proxy.js';
 import modelCapabilitiesRoutes from './routes/model-capabilities.js';
+import taskRoutes from './routes/tasks.js';
 import { resolveRuntimePaths, resolveServerPort } from './runtime-paths.js';
 import { registerSpaFallback } from './spa-fallback.js';
 
@@ -270,6 +271,9 @@ app.use('/api/local-models', localModelsRoutes);
 
 // Mount Storyboard routes (AI script generation)
 app.use('/api/storyboard', storyboardRoutes);
+
+// Unified task routes for scene pipeline orchestration
+app.use('/api/tasks', taskRoutes);
 
 // NOTE: Old Kling helpers removed - now in server/services/kling.js
 

@@ -1,0 +1,120 @@
+import { SCENES, type SceneDefinition, type SceneId } from '../../types/scene';
+
+export const SCENE_DEFINITIONS: SceneDefinition[] = [
+  {
+    scene: SCENES.MULTI_VIEW_NINE_GRID,
+    label: '多机位九宫格',
+    description: '围绕同一画面生成九个机位角度',
+    icon: 'grid',
+    taskType: 'image',
+    nodeType: 'tool',
+    defaultParams: {
+      prompt: '同一场景的九个电影机位变化',
+      ratio: '16:9',
+    },
+  },
+  {
+    scene: SCENES.PLOT_DEDUCTION_FOUR_GRID,
+    label: '剧情推演四宫格',
+    description: '先生成四条结构化分镜，再生成 2x2 画面',
+    icon: 'story',
+    taskType: 'image',
+    nodeType: 'storyboard',
+    defaultParams: {
+      storyText: '一个角色发现隐藏线索并做出关键选择',
+      visualStyle: 'cinematic realistic',
+      ratio: '16:9',
+      referenceImages: [],
+      consistencyLevel: 'high',
+    },
+  },
+  {
+    scene: SCENES.COHERENT_STORYBOARD_25,
+    label: '25宫格连贯分镜',
+    description: '生成角色圣经、世界圣经与 25 个连续镜头',
+    icon: 'storyboard',
+    taskType: 'image',
+    nodeType: 'storyboard',
+    defaultParams: {
+      storyText: '一段完整短片分镜：起因、发展、转折、高潮、结尾',
+      visualStyle: 'cinematic realistic',
+      durationSeconds: 100,
+      ratio: '16:9',
+      referenceImages: [],
+    },
+  },
+  {
+    scene: SCENES.CINEMATIC_LIGHT_CORRECTION,
+    label: '电影级光影校正',
+    description: '独立 relighting pipeline，输出前后对比',
+    icon: 'light',
+    taskType: 'image',
+    nodeType: 'image',
+    defaultParams: {
+      originImage: '',
+      keyLight: 'front',
+      rimLightEnabled: true,
+      rimLightDirection: 'back',
+      lightColor: 'neutral',
+      brightness: 55,
+      prompt: '保持主体，增强电影级层次光影',
+      referenceImage: '',
+    },
+  },
+  {
+    scene: SCENES.CHARACTER_THREE_VIEW_GENERATE,
+    label: '角色三视图生成',
+    description: '提取角色 profile，生成 front / side / back',
+    icon: 'character',
+    taskType: 'image',
+    nodeType: 'tool',
+    defaultParams: {
+      characterImageUrl: '',
+      style: 'realistic',
+      background: 'plain',
+      keepCostumeConsistency: true,
+      outputLayout: 'grid',
+    },
+  },
+  {
+    scene: SCENES.FRAME_DEDUCTION_PLUS_3S,
+    label: '画面推演-3秒后',
+    description: '理解当前帧并生成未来关键帧',
+    icon: 'future',
+    taskType: 'image',
+    nodeType: 'tool',
+    defaultParams: {
+      imageUrl: '',
+      prompt: '推演 3 秒后的关键帧',
+    },
+  },
+  {
+    scene: SCENES.FRAME_DEDUCTION_MINUS_5S,
+    label: '画面推演-5秒前',
+    description: '理解当前帧并生成过去关键帧',
+    icon: 'past',
+    taskType: 'image',
+    nodeType: 'tool',
+    defaultParams: {
+      imageUrl: '',
+      prompt: '推演 5 秒前的关键帧',
+    },
+  },
+  {
+    scene: SCENES.UPSCALE,
+    label: '高清放大',
+    description: '独立 upscale pipeline，返回高分图',
+    icon: 'upscale',
+    taskType: 'image',
+    nodeType: 'image',
+    defaultParams: {
+      imageUrl: '',
+      targetResolution: '2x',
+      detailMode: 'cinematic',
+    },
+  },
+];
+
+export function getSceneDefinition(scene: SceneId | string | undefined) {
+  return SCENE_DEFINITIONS.find((definition) => definition.scene === scene);
+}

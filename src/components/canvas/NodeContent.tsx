@@ -10,6 +10,7 @@ import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { useTranslation } from 'react-i18next';
 import { getLiblibBlankImageNodeState } from './image-node/imageNodeUiState';
+import { SceneResultPanel } from './SceneResultPanel';
 
 function formatExecutionProviderLabel(provider?: string): string | undefined {
     if (!provider) return undefined;
@@ -58,6 +59,7 @@ interface NodeContentProps {
     onUpdate?: (nodeId: string, updates: Partial<NodeData>) => void;
     // Social sharing
     onPostToX?: (nodeId: string, mediaUrl: string, mediaType: 'image' | 'video') => void;
+    onGenerate?: (nodeId: string) => void;
     canvasTheme?: 'dark' | 'light';
 }
 
@@ -81,6 +83,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     onImageToVideo,
     onUpdate,
     onPostToX,
+    onGenerate,
     canvasTheme = 'dark'
 }) => {
     const { t } = useTranslation();
@@ -220,8 +223,15 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                 />
             )}
 
-            {/* Result View - Show when successful OR when regenerating (loading with existing content) */}
-            {(isSuccess || isLoading) && data.resultUrl ? (
+            {data.scene ? (
+                <SceneResultPanel
+                    data={data}
+                    selected={selected}
+                    isLoading={isLoading}
+                    onGenerate={onGenerate}
+                    onUpdate={onUpdate}
+                />
+            ) : (isSuccess || isLoading) && data.resultUrl ? (
                 <div
                     className={`relative w-full bg-black group/image ${!selected ? '' : 'rounded-[28px] overflow-hidden'}`}
                     style={getAspectRatioStyle()}

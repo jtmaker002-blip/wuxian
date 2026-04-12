@@ -4,6 +4,7 @@ export enum NodeType {
   IMAGE = 'Image',
   VIDEO = 'Video',
   AUDIO = 'Audio',
+  TOOL = 'Tool',
   IMAGE_EDITOR = 'Image Editor',
   VIDEO_EDITOR = 'Video Editor',
   STORYBOARD = 'Storyboard Manager',
@@ -167,6 +168,26 @@ export interface NodeData {
 
   // Storyboard Generator specific
   characterReferenceUrls?: string[]; // URLs of character images for reference in generation
+
+  // Scene / pipeline tool node fields
+  name?: string;
+  scene?: string;
+  params?: Record<string, any>;
+  outputs?: {
+    textList?: string[];
+    imageList?: Array<{ url: string; width?: number; height?: number; label?: string; status?: string }>;
+    videoList?: Array<{ url: string; duration?: number }>;
+    audioList?: Array<{ url: string; duration?: number }>;
+    structuredData?: any;
+  };
+  structuredData?: any;
+  taskInfo?: {
+    taskId?: string;
+    loading?: boolean;
+    status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+    failedReason?: string;
+    progressPercent?: number;
+  };
 }
 
 export interface ContextMenuState {
