@@ -60,6 +60,13 @@ export interface ImageAnnotation {
   selection: FocusSelection;
 }
 
+export interface ImageCameraSettings {
+  camera: string;
+  lens: string;
+  focalLengthMm: string;
+  aperture: string;
+}
+
 export interface NodeData {
   id: string;
   type: NodeType;
@@ -146,6 +153,7 @@ export interface NodeData {
   };
   imageToolMode?: ImageToolMode;
   imageToolAction?: string;
+  imageCameraSettings?: ImageCameraSettings;
   imageLightingSettings?: ImageLightingSettings;
   focusSelection?: FocusSelection;
   activeImageAnnotationType?: ImageAnnotationType;

@@ -441,4 +441,49 @@ describe('generation /generate-image hosted token routing', () => {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }
   });
+
+  it('injects camera control settings into the executed image prompt and metadata', async () => {
+    const router = await importFreshGenerationRouter();
+    const serverHandle = await createServer(router, {
+      IMAGES_DIR: imagesDir,
+    });
+
+    try {
+      const response = await fetch(`${serverHandle.baseUrl}/api/generate-image`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodeId: 'camera-control-image-node',
+          prompt: '按摄像机设置生成',
+          imageModel: 'gemini-3.1-flash-image-preview',
+          providerApiKey: 'sk-hosted-token',
+          providerBaseUrl: 'https://openaiteach.com/v1',
+          imageCameraSettings: {
+            camera: 'Panavision DXL2',
+            lens: 'Zeiss Ultra Prime',
+            focalLengthMm: '35',
+            aperture: 'f/4',
+          },
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const executedPrompt = mockGenerateOpenAiTeachGeminiImage.mock.calls.at(-1)?.[0]?.prompt;
+      expect(executedPrompt).toContain('摄像机控制');
+      expect(executedPrompt).toContain('camera=Panavision DXL2');
+      expect(executedPrompt).toContain('focalLength=35mm');
+
+      const metadata = JSON.parse(
+        fs.readFileSync(path.join(imagesDir, 'camera-control-image-node.json'), 'utf8')
+      );
+      expect(metadata.imageCameraSettings).toEqual({
+        camera: 'Panavision DXL2',
+        lens: 'Zeiss Ultra Prime',
+        focalLengthMm: '35',
+        aperture: 'f/4',
+      });
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
 });

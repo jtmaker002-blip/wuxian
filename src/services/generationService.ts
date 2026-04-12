@@ -7,7 +7,7 @@
  * - Video: Veo 3.1, Kling AI
  */
 
-import type { FocusSelection, ImageAnnotation, ImageLightingSettings, ImageToolMode } from '../types';
+import type { FocusSelection, ImageAnnotation, ImageCameraSettings, ImageLightingSettings, ImageToolMode } from '../types';
 import { readStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
 
 export interface GenerateImageParams {
@@ -27,6 +27,7 @@ export interface GenerateImageParams {
   imageAnnotations?: ImageAnnotation[];
   imageToolMode?: Exclude<ImageToolMode, null>;
   imageToolAction?: string;
+  imageCameraSettings?: ImageCameraSettings;
   imageLightingSettings?: ImageLightingSettings;
 }
 

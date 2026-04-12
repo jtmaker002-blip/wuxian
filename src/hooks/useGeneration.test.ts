@@ -258,6 +258,41 @@ describe('useGeneration 视频链路保护', () => {
     );
   });
 
+  it('图片生成会把摄像机控制参数附带到请求里', async () => {
+    const updateNode = vi.fn();
+    generateImageMock.mockResolvedValue('https://example.com/result.png');
+
+    const cameraSettings = {
+      camera: 'Panavision DXL2',
+      lens: 'Zeiss Ultra Prime',
+      focalLengthMm: '35',
+      aperture: 'f/4',
+    };
+
+    const nodes = [
+      createImageNode('source-image', 'data:image/png;base64,source'),
+      {
+        ...createImageNode('image-node'),
+        id: 'image-node',
+        status: NodeStatus.IDLE,
+        prompt: '使用摄像机控制生成',
+        resultUrl: undefined,
+        parentIds: ['source-image'],
+        imageCameraSettings: cameraSettings,
+      },
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('image-node');
+
+    expect(generateImageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        imageCameraSettings: cameraSettings,
+      })
+    );
+  });
+
   it('切到不支持具体动作的图片工具时不会发送旧动作', async () => {
     const updateNode = vi.fn();
     generateImageMock.mockResolvedValue('https://example.com/result.png');

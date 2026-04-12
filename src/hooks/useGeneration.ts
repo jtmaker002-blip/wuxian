@@ -337,6 +337,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                         node.imageToolMode === 'style'
                             ? node.imageToolAction
                             : undefined,
+                    imageCameraSettings: node.imageCameraSettings,
                     imageLightingSettings:
                         node.imageToolMode === 'lighting'
                             ? node.imageLightingSettings

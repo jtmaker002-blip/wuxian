@@ -890,6 +890,12 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         onUpdate(data.id, {
             prompt: nextPrompt,
             imageToolAction: '摄像机控制',
+            imageCameraSettings: {
+                camera,
+                lens,
+                focalLengthMm: focal,
+                aperture,
+            },
             imageToolMode: null,
         });
         setShowCameraControl(false);

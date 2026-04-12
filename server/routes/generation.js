@@ -197,7 +197,7 @@ function getValidFocusSelection(focusSelection) {
     return null;
 }
 
-function buildImageToolContext({ focusSelection, imageToolMode, imageToolAction, imageLightingSettings, imageAnnotations }) {
+function buildImageToolContext({ focusSelection, imageToolMode, imageToolAction, imageCameraSettings, imageLightingSettings, imageAnnotations }) {
     const validFocusSelection = getValidFocusSelection(focusSelection);
     const instructions = [];
 
@@ -220,6 +220,12 @@ function buildImageToolContext({ focusSelection, imageToolMode, imageToolAction,
                 `打光设置：mode=${imageLightingSettings.mode}, smartMode=${imageLightingSettings.smartMode}, brightness=${imageLightingSettings.brightness}, color=${imageLightingSettings.color}, keyLight=${imageLightingSettings.keyLight}, rimLight=${imageLightingSettings.rimLight}。`
             );
         }
+    }
+
+    if (imageCameraSettings) {
+        instructions.push(
+            `摄像机控制：camera=${imageCameraSettings.camera}, lens=${imageCameraSettings.lens}, focalLength=${imageCameraSettings.focalLengthMm}mm, aperture=${imageCameraSettings.aperture}。生成时按该相机、镜头、焦距和光圈控制透视、景深和镜头质感。`
+        );
     }
 
     const validAnnotations = Array.isArray(imageAnnotations)
@@ -282,6 +288,7 @@ router.post('/generate-image', async (req, res) => {
             imageAnnotations,
             imageToolMode,
             imageToolAction,
+            imageCameraSettings,
             imageLightingSettings,
             providerApiKey,
             providerBaseUrl,
@@ -301,6 +308,7 @@ router.post('/generate-image', async (req, res) => {
             imageAnnotations,
             imageToolMode,
             imageToolAction,
+            imageCameraSettings,
             imageLightingSettings,
         });
         const executionPrompt = buildImagePromptWithToolContext({
@@ -516,6 +524,7 @@ router.post('/generate-image', async (req, res) => {
             imageAnnotations: imageToolContext.annotations,
             imageToolMode: imageToolMode || null,
             imageToolAction: imageToolAction || null,
+            imageCameraSettings: imageCameraSettings || null,
             imageLightingSettings: imageLightingSettings || null,
             imageToolContext: imageToolContext.promptInstructions.length > 0 ? imageToolContext : null,
             createdAt: new Date().toISOString(),
