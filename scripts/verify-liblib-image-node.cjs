@@ -129,6 +129,23 @@ async function main() {
     await saveScreenshot(page, artifactDir, artifacts, '04-direct-image-to-video.png', 'Direct image node to video node connection entered image-to-video state.');
   });
 
+  await runCase(browser, 'mark-preserve', async (page) => {
+    await createUploadedImageNode(page);
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('标记'))?.click());
+    await page.waitForTimeout(300);
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('保留区域'))?.click());
+    await page.waitForTimeout(500);
+    const preview = await page.locator('img[alt="聚焦模式预览"]').boundingBox();
+    if (!preview) throw new Error('mark preserve preview not visible');
+    await page.mouse.move(preview.x + preview.width * 0.25, preview.y + preview.height * 0.25);
+    await page.mouse.down();
+    await page.mouse.move(preview.x + preview.width * 0.62, preview.y + preview.height * 0.58, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    await expectText(page, '保留区域');
+    await saveScreenshot(page, artifactDir, artifacts, '04b-mark-preserve.png', 'Mark tool preserve-region selection persisted on the image node.');
+  });
+
   await runCase(browser, 'nine-grid', async (page) => {
     await createUploadedImageNode(page);
     await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('九宫格'))?.click());
