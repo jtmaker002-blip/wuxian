@@ -138,6 +138,16 @@ https://github.com/user-attachments/assets/3c36de54-d37e-4875-8403-5b6e4a6216e0
    ```bash
    npm run dev
    ```
+
+### Liblib Image Node Parity Verification
+
+The scoped Liblib Canvas parity lane covers only image nodes and the image-to-video main path. After starting the dev server, run:
+
+```bash
+npm run verify:liblib-image-node
+```
+
+This browser smoke creates an image node, uploads a sample image, verifies focus selection, checks the image connector `图生视频` primary menu, verifies direct image-to-video state, and exercises the nine-grid action. Screenshot artifacts are written to `.omx/logs/liblib-image-node-smoke/`.
    
    This starts both:
    - **Frontend dev server**: `http://localhost:5173`
@@ -507,4 +517,3 @@ If you are using this project for commercial purposes or building a commercial p
 ---
 
 **Built with ❤️ using React, TypeScript, and AI APIs from OpenAI, Google, Kling, MiniMax, and Fal.ai (2025)**
-
