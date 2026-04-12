@@ -184,7 +184,23 @@ export async function generateGeminiImage({ prompt, imageBase64Array, aspectRati
  * Generate video using Veo
  * @returns {Promise<Buffer>} Video buffer
  */
-export async function generateVeoVideo({ prompt, imageBase64, lastFrameBase64, aspectRatio, resolution, duration, videoModel, generateAudio = true, apiKey }) {
+function toVeoImage(imageBase64) {
+    const match = imageBase64.match(/^data:(image\/\w+);base64,/);
+    let mimeType = match ? match[1] : "image/png";
+    const base64Clean = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+
+    // Veo prefers JPEG; the API accepts base64 bytes with the declared mime type.
+    if (mimeType === 'image/png' || mimeType === 'image/webp') {
+        mimeType = 'image/jpeg';
+    }
+
+    return {
+        imageBytes: base64Clean,
+        mimeType,
+    };
+}
+
+export async function generateVeoVideo({ prompt, imageBase64, referenceImagesBase64, lastFrameBase64, aspectRatio, resolution, duration, videoModel, generateAudio = true, apiKey }) {
     const ai = getGeminiClient(apiKey);
     const model = resolveVeoVideoModel(videoModel);
 
@@ -211,6 +227,14 @@ export async function generateVeoVideo({ prompt, imageBase64, lastFrameBase64, a
         throw new Error('Veo 路线当前未接通音频生成');
     }
 
+    if (imageBase64 && Array.isArray(referenceImagesBase64) && referenceImagesBase64.length > 0) {
+        throw new Error('Veo 当前不能同时混用首帧图生和参考图模式');
+    }
+
+    if (Array.isArray(referenceImagesBase64) && referenceImagesBase64.length > 3) {
+        throw new Error('Veo 标准参考图当前最多支持 3 张素材');
+    }
+
     // Build API arguments
     // Note: generateAudio is NOT supported by @google/genai library yet (throws error)
     // Even though Veo 3.1 API docs mention it, the SDK doesn't expose this parameter
@@ -228,41 +252,19 @@ export async function generateVeoVideo({ prompt, imageBase64, lastFrameBase64, a
 
     // Add image inputs
     if (imageBase64) {
-        const match = imageBase64.match(/^data:(image\/\w+);base64,/);
-        let mimeType = match ? match[1] : "image/png";
-        let base64Clean = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+        args.image = toVeoImage(imageBase64);
+    }
 
-        // Veo prefers JPEG, but accepts other formats
-        // Just update the mimeType header - the API handles conversion
-        if (mimeType === 'image/png' || mimeType === 'image/webp') {
-            mimeType = 'image/jpeg';
-        }
-
-        args.image = {
-            imageBytes: base64Clean,
-            mimeType: mimeType
-        };
+    if (Array.isArray(referenceImagesBase64) && referenceImagesBase64.length > 0) {
+        args.config.referenceImages = referenceImagesBase64.map((referenceImageBase64) => ({
+            image: toVeoImage(referenceImageBase64),
+            referenceType: 'ASSET',
+        }));
     }
 
     // Add last frame for interpolation
     if (lastFrameBase64) {
-        const match = lastFrameBase64.match(/^data:(image\/\w+);base64,/);
-        let mimeType = match ? match[1] : "image/png";
-        let base64Clean = lastFrameBase64.replace(/^data:image\/\w+;base64,/, "");
-
-        // Veo prefers JPEG
-        if (mimeType === 'image/png' || mimeType === 'image/webp') {
-            mimeType = 'image/jpeg';
-        }
-
-        args.referenceImages = [{
-            referenceId: 1,
-            referenceType: 'REFERENCE_TYPE_LAST_FRAME',
-            image: {
-                imageBytes: base64Clean,
-                mimeType: mimeType
-            }
-        }];
+        args.config.lastFrame = toVeoImage(lastFrameBase64);
     }
 
     console.log('Calling Veo API with args:', {
@@ -270,6 +272,8 @@ export async function generateVeoVideo({ prompt, imageBase64, lastFrameBase64, a
         prompt: args.prompt.substring(0, 100) + '...',
         config: args.config,
         image: args.image ? { mimeType: args.image.mimeType, length: args.image.imageBytes?.length } : undefined,
+        referenceImages: args.config.referenceImages?.length || 0,
+        hasLastFrame: Boolean(args.config.lastFrame),
         requestedDuration: duration,
         mappedDuration: mappedDuration
     });

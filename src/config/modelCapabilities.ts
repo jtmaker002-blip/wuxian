@@ -149,6 +149,8 @@ export const LOCAL_VIDEO_CAPABILITIES: VideoCapabilitiesMap = {
   }),
   'veo3.1': createCapability('veo3.1', 'veo-3.1-fast-generate-preview', {
     standard: {
+      supportsMultiImage: true,
+      supportsFullReference: true,
       durations: [4, 6, 8],
       defaultDuration: 4,
       supportsAudio: false,
@@ -686,7 +688,7 @@ export const NATIVE_VIDEO_FEATURE_KEYS: Partial<Record<string, NativeVideoFeatur
 
 export const NATIVE_VIDEO_MODEL_NOTES: NativeVideoModelNotes = {
   'sora-2': ['官方 API 文档支持音频与参考图；当前后端只接了标准文生/图生，且时长仍按 4/8/12 秒执行。'],
-  'veo3.1': ['官方文档支持参考图与首尾帧；当前后端首尾帧已接通，标准参考图仍待接入。'],
+  'veo3.1': ['官方文档支持图生视频、参考图与首尾帧；当前后端已接通标准单图/多图参考与首尾帧，音频仍受当前 SDK 路线限制。'],
   'kling-v2-6': ['官方资料明确支持主体参考、运动参考与原生音频。'],
   'kling-v2-5-turbo': ['官方公开资料确认 5 秒 1080p，并提到参考图风格一致性。'],
   'kling-v3': ['官方资料确认多图参考、参考视频和原生音频。'],

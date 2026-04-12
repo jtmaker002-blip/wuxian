@@ -1002,6 +1002,7 @@ router.post('/generate-video', async (req, res) => {
             videoBuffer = await generateVeoVideo({
                 prompt,
                 imageBase64,
+                referenceImagesBase64,
                 lastFrameBase64,
                 aspectRatio,
                 resolution,

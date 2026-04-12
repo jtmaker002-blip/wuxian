@@ -142,7 +142,9 @@ export function resolveStandardVideoInputState(
       ? supportsReferenceImages &&
         (standardCapability.supportsMultiImage || standardCapability.supportsFullReference)
       : visualInputCount === 1
-        ? supportsReferenceImages && standardCapability.supportsFullReference
+        ? supportsReferenceImages &&
+          standardCapability.supportsFullReference &&
+          !standardCapability.supportsImageToVideo
         : false;
 
   const supportsCurrentInputMode =

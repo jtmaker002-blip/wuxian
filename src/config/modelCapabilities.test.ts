@@ -140,7 +140,8 @@ describe('model capabilities', () => {
     expect(LOCAL_VIDEO_CAPABILITIES['grok-video-3'].modes.standard.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['grok-video-3'].modes.standard.supportsMultiImage).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['sora-2'].modes.standard.supportsFullReference).toBe(false);
-    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard.supportsFullReference).toBe(false);
+    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard.supportsFullReference).toBe(true);
+    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard.supportsMultiImage).toBe(true);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v3'].modes.standard.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-6'].modes.standard.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-5-turbo'].modes.standard.supportsFullReference).toBe(false);

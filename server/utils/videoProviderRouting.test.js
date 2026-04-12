@@ -219,6 +219,20 @@ describe('resolveVideoExecutionPlan', () => {
     });
   });
 
+  it('resolves Veo standard reference-images mode separately from first-frame image-to-video', () => {
+    expect(
+      resolveVideoExecutionPlan({
+        modelId: 'veo3.1',
+        referenceImagesBase64: ['img-a', 'img-b'],
+      })
+    ).toEqual({
+      provider: 'veo',
+      normalizedModel: 'veo-3.1-fast-generate-preview',
+      executionMode: 'standard-reference-images',
+      executionProvider: 'veo',
+    });
+  });
+
   it('resolves jimeng standard text-to-video mode', () => {
     expect(
       resolveVideoExecutionPlan({

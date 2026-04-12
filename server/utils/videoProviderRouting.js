@@ -177,7 +177,7 @@ export function resolveVideoExecutionPlan({
     };
   }
 
-  if (provider === 'hailuo' && hasReferenceImages) {
+  if ((provider === 'hailuo' || provider === 'veo') && hasReferenceImages) {
     return {
       provider,
       normalizedModel,

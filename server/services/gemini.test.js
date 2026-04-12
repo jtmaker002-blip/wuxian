@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { generateContentMock } = vi.hoisted(() => ({
+const { generateContentMock, generateVideosMock, operationGetMock } = vi.hoisted(() => ({
   generateContentMock: vi.fn(),
+  generateVideosMock: vi.fn(),
+  operationGetMock: vi.fn(),
 }));
 
 vi.mock('@google/genai', () => ({
@@ -9,10 +11,10 @@ vi.mock('@google/genai', () => ({
     return {
       models: {
         generateContent: generateContentMock,
-        generateVideos: vi.fn(),
+        generateVideos: generateVideosMock,
       },
       operations: {
-        get: vi.fn(),
+        get: operationGetMock,
       },
     };
   }),
@@ -71,6 +73,128 @@ describe('generateGeminiImage', () => {
     ).rejects.toThrow(/unsupported gemini image model/i);
 
     expect(generateContentMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('generateVeoVideo', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    generateVideosMock.mockReset();
+    operationGetMock.mockReset();
+    generateVideosMock.mockResolvedValue({
+      done: true,
+      response: {
+        generatedVideos: [
+          {
+            videoBytes: Buffer.from('video-bytes').toString('base64'),
+          },
+        ],
+      },
+    });
+  });
+
+  it('sends a single image as the standard first-frame image-to-video input', async () => {
+    const { generateVeoVideo } = await import('./gemini.js');
+
+    await generateVeoVideo({
+      prompt: 'push in on a portrait',
+      imageBase64: 'data:image/png;base64,start-frame',
+      videoModel: 'veo3.1',
+      aspectRatio: '16:9',
+      resolution: '720p',
+      duration: 4,
+      generateAudio: false,
+      apiKey: 'test-key',
+    });
+
+    expect(generateVideosMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        model: 'veo-3.1-fast-generate-preview',
+        image: {
+          imageBytes: 'start-frame',
+          mimeType: 'image/jpeg',
+        },
+        config: expect.objectContaining({
+          durationSeconds: 4,
+          aspectRatio: '16:9',
+          resolution: '720p',
+        }),
+      })
+    );
+    expect(generateVideosMock.mock.calls[0][0].config.referenceImages).toBeUndefined();
+    expect(generateVideosMock.mock.calls[0][0].config.lastFrame).toBeUndefined();
+  });
+
+  it('sends Veo full-reference images through config.referenceImages as asset references', async () => {
+    const { generateVeoVideo } = await import('./gemini.js');
+
+    await generateVeoVideo({
+      prompt: 'keep these product assets consistent',
+      referenceImagesBase64: [
+        'data:image/png;base64,asset-a',
+        'data:image/jpeg;base64,asset-b',
+      ],
+      videoModel: 'veo3.1',
+      aspectRatio: '16:9',
+      resolution: '720p',
+      duration: 4,
+      generateAudio: false,
+      apiKey: 'test-key',
+    });
+
+    expect(generateVideosMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          referenceImages: [
+            {
+              image: {
+                imageBytes: 'asset-a',
+                mimeType: 'image/jpeg',
+              },
+              referenceType: 'ASSET',
+            },
+            {
+              image: {
+                imageBytes: 'asset-b',
+                mimeType: 'image/jpeg',
+              },
+              referenceType: 'ASSET',
+            },
+          ],
+        }),
+      })
+    );
+    expect(generateVideosMock.mock.calls[0][0].image).toBeUndefined();
+  });
+
+  it('sends Veo end-frame interpolation through config.lastFrame', async () => {
+    const { generateVeoVideo } = await import('./gemini.js');
+
+    await generateVeoVideo({
+      prompt: 'interpolate between two frames',
+      imageBase64: 'data:image/png;base64,start-frame',
+      lastFrameBase64: 'data:image/png;base64,end-frame',
+      videoModel: 'veo3.1',
+      aspectRatio: '16:9',
+      resolution: '720p',
+      duration: 4,
+      generateAudio: false,
+      apiKey: 'test-key',
+    });
+
+    expect(generateVideosMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        image: expect.objectContaining({
+          imageBytes: 'start-frame',
+        }),
+        config: expect.objectContaining({
+          lastFrame: {
+            imageBytes: 'end-frame',
+            mimeType: 'image/jpeg',
+          },
+        }),
+      })
+    );
   });
 });
 

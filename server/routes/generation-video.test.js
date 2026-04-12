@@ -13,6 +13,7 @@ const mockGenerateKlingVideo = vi.fn();
 const mockGenerateKlingTextToVideo = vi.fn();
 const mockGenerateOpenAIVideo = vi.fn();
 const mockGenerateOpenAiTeachUnifiedVideo = vi.fn();
+const mockGenerateVeoVideo = vi.fn();
 const SUPPORTED_KLING_VIDEO_MODELS = new Set([
   'kling-v2-1',
   'kling-v2-1-master',
@@ -86,7 +87,7 @@ function registerGenerationMocks() {
     DEFAULT_GEMINI_IMAGE_MODEL: 'gemini-2.5-flash-image-preview',
     DEFAULT_VEO_VIDEO_MODEL: 'veo-3.1-fast-generate-preview',
     generateGeminiImage: vi.fn(),
-    generateVeoVideo: vi.fn(),
+    generateVeoVideo: mockGenerateVeoVideo,
     resolveGeminiImageModel: vi.fn((modelId) => modelId || 'gemini-2.5-flash-image-preview'),
     resolveVeoVideoModel: vi.fn((modelId) => {
       if (!modelId) {
@@ -446,6 +447,58 @@ describe('generation /generate-video model passthrough', () => {
         fs.readFileSync(path.join(videosDir, 'veo-hosted-node.json'), 'utf8')
       );
       expect(metadata.executionProvider).toBe('openaiteach-hosted');
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
+  it('Veo 标准图生在本地 key 可用时会调用 generateVeoVideo 并传入首帧图片', async () => {
+    mockGenerateVeoVideo.mockResolvedValue(Buffer.from('veo-local-video'));
+
+    const router = await importFreshGenerationRouter();
+    const serverHandle = await createServer(router, {
+      GEMINI_API_KEY: 'gemini-key',
+      IMAGES_DIR: imagesDir,
+      VIDEOS_DIR: videosDir,
+    });
+
+    try {
+      const response = await fetch(`${serverHandle.baseUrl}/api/generate-video`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nodeId: 'veo-i2v-node',
+          prompt: '一个镜头推近人物脸部',
+          videoModel: 'veo3.1',
+          imageBase64: 'data:image/png;base64,start-frame',
+          aspectRatio: '16:9',
+          resolution: '720p',
+          duration: 4,
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toMatchObject({
+        requestedModel: 'veo3.1',
+        executedModel: 'veo-3.1-fast-generate-preview',
+        executionMode: 'standard-image-to-video',
+        executionProvider: 'veo',
+      });
+      expect(mockGenerateVeoVideo).toHaveBeenCalledWith(
+        expect.objectContaining({
+          imageBase64: 'data:image/png;base64,start-frame',
+          referenceImagesBase64: undefined,
+          lastFrameBase64: null,
+          videoModel: 'veo-3.1-fast-generate-preview',
+          apiKey: 'gemini-key',
+        })
+      );
+
+      const metadata = JSON.parse(
+        fs.readFileSync(path.join(videosDir, 'veo-i2v-node.json'), 'utf8')
+      );
+      expect(metadata.executionMode).toBe('standard-image-to-video');
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }

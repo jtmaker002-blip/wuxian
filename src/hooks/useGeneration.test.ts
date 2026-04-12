@@ -2,9 +2,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { useGeneration } from './useGeneration';
 import { NodeStatus, NodeType, type NodeData } from '../types';
 import {
-  getAllVideoCapabilities,
   resetRuntimeVideoCapabilities,
-  setRuntimeVideoCapabilities,
 } from '../config/modelCapabilities';
 
 const generateImageMock = vi.fn();
@@ -590,6 +588,38 @@ describe('useGeneration 视频链路保护', () => {
     );
   });
 
+  it('Veo 标准模式单图输入会走普通图生视频，而不是误走首尾帧或参考图链', async () => {
+    const updateNode = vi.fn();
+    generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
+    extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
+
+    const nodes = [
+      createImageNode('image-a', 'data:image/png;base64,veo-start'),
+      createVideoNode({
+        videoModel: 'veo3.1',
+        videoMode: 'standard',
+        parentIds: ['image-a'],
+        frameInputs: [
+          { nodeId: 'image-a', order: 'start' },
+          { nodeId: 'missing-end', order: 'end' },
+        ],
+      }),
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('video-node');
+
+    expect(generateVideoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoModel: 'veo3.1',
+        imageBase64: 'data:image/png;base64,veo-start',
+        referenceImagesBase64: undefined,
+        lastFrameBase64: undefined,
+      })
+    );
+  });
+
   it('Kling 2.6 运动参考模式只会发送视频参考、角色图，并移除音频开关', async () => {
     const updateNode = vi.fn();
     generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
@@ -671,8 +701,10 @@ describe('useGeneration 视频链路保护', () => {
     );
   });
 
-  it('标准模式多图输入但当前模型不支持时会明确报错，而不是静默只取第一张图', async () => {
+  it('Veo 标准模式多图输入会作为全图参考发送，而不是锁到首尾帧模式', async () => {
     const updateNode = vi.fn();
+    generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
+    extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
     const nodes = [
       createImageNode('image-a', 'data:image/png;base64,image-a'),
       createImageNode('image-b', 'data:image/png;base64,image-b'),
@@ -687,12 +719,15 @@ describe('useGeneration 视频链路保护', () => {
 
     await handleGenerate('video-node');
 
-    expect(generateVideoMock).not.toHaveBeenCalled();
-    expect(updateNode).toHaveBeenCalledWith(
-      'video-node',
+    expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        status: NodeStatus.ERROR,
-        errorMessage: '当前后端尚未接通标准模式的多图/全图参考，请先减少为单图，或改用已接通的专用模式。',
+        videoModel: 'veo3.1',
+        referenceImagesBase64: [
+          'data:image/png;base64,image-a',
+          'data:image/png;base64,image-b',
+        ],
+        imageBase64: undefined,
+        lastFrameBase64: undefined,
       })
     );
   });
@@ -752,7 +787,7 @@ describe('useGeneration 视频链路保护', () => {
     );
   });
 
-  it('minimax-hailuo 标准模式单图输入也会走参考图链，而不是退回普通单图视频', async () => {
+  it('minimax-hailuo 标准模式单图输入会保留普通图生视频主路径', async () => {
     const updateNode = vi.fn();
     generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
     extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
@@ -772,31 +807,16 @@ describe('useGeneration 视频链路保护', () => {
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
         videoModel: 'minimax-hailuo',
-        referenceImagesBase64: ['data:image/png;base64:image-a'],
-        imageBase64: undefined,
+        imageBase64: 'data:image/png;base64:image-a',
+        referenceImagesBase64: undefined,
       })
     );
   });
 
-  it('当最终能力表显式开启标准模式全图参考时，会按 referenceImages 链发送，而不是继续走单图降级', async () => {
+  it('Veo 标准模式全图参考会按 referenceImages 链发送，而不是继续走单图降级', async () => {
     const updateNode = vi.fn();
     generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
     extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
-    const currentCapabilities = getAllVideoCapabilities();
-    setRuntimeVideoCapabilities({
-      ...currentCapabilities,
-      'veo3.1': {
-        ...currentCapabilities['veo3.1'],
-        modes: {
-          ...currentCapabilities['veo3.1'].modes,
-          standard: {
-            ...currentCapabilities['veo3.1'].modes.standard,
-            supportsFullReference: true,
-          },
-        },
-      },
-    });
-
     const nodes = [
       createImageNode('image-a', 'data:image/png;base64,image-a'),
       createImageNode('image-b', 'data:image/png;base64,image-b'),

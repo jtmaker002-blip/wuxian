@@ -183,7 +183,7 @@ describe('sanitizeVideoNodeState', () => {
     expect(next.frameInputs).toBe(frameInputs);
   });
 
-  it('标准模式单图且能力表开启全图参考时，会优先走 reference images 链', () => {
+  it('标准模式单图同时支持图生和全图参考时，会优先保留普通图生视频主路径', () => {
     const state = resolveStandardVideoInputState(LOCAL_VIDEO_CAPABILITIES['minimax-hailuo'], {
       sources: [{ type: 'image', url: 'image-a' }],
     });
@@ -191,7 +191,7 @@ describe('sanitizeVideoNodeState', () => {
     expect(state.inputMode).toBe('image-to-video');
     expect(state.supportsCurrentInputMode).toBe(true);
     expect(state.supportsReferenceImages).toBe(true);
-    expect(state.usesReferenceImages).toBe(true);
+    expect(state.usesReferenceImages).toBe(false);
     expect(state.hasUnsupportedMultipleImageInputs).toBe(false);
   });
 
@@ -280,7 +280,7 @@ describe('sanitizeVideoNodeState', () => {
     )).toBe(true);
   });
 
-  it('标准模式仅支持单图图生时，接入首张图后不会再继续暴露追加图片入口', () => {
+  it('Veo 标准模式支持全图参考时，接入首张图后仍允许继续追加参考图入口', () => {
     const standardState = resolveStandardVideoCapabilityState(LOCAL_VIDEO_CAPABILITIES['veo3.1'], {
       sources: [{ type: 'image', url: 'image-a' }],
     });
@@ -289,6 +289,6 @@ describe('sanitizeVideoNodeState', () => {
       LOCAL_VIDEO_CAPABILITIES['veo3.1'],
       standardState,
       1
-    )).toBe(false);
+    )).toBe(true);
   });
 });

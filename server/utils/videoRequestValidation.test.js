@@ -61,6 +61,42 @@ describe('validateVideoRequest', () => {
     ).toThrow(/仅支持 512p、720p 或 1080p/i);
   });
 
+  it('allows valid Veo standard image-to-video request', () => {
+    expect(() =>
+      validateVideoRequest({
+        videoModel: 'veo3.1',
+        imageBase64: 'img',
+        duration: 4,
+        aspectRatio: '16:9',
+        resolution: '720p',
+      })
+    ).not.toThrow();
+  });
+
+  it('allows valid Veo standard reference-images request', () => {
+    expect(() =>
+      validateVideoRequest({
+        videoModel: 'veo3.1',
+        referenceImagesBase64: ['ref-a', 'ref-b', 'ref-c'],
+        duration: 4,
+        aspectRatio: '16:9',
+        resolution: '720p',
+      })
+    ).not.toThrow();
+  });
+
+  it('rejects Veo standard reference-images above the supported asset limit', () => {
+    expect(() =>
+      validateVideoRequest({
+        videoModel: 'veo3.1',
+        referenceImagesBase64: ['ref-a', 'ref-b', 'ref-c', 'ref-d'],
+        duration: 4,
+        aspectRatio: '16:9',
+        resolution: '720p',
+      })
+    ).toThrow(/最多支持 3 张素材/i);
+  });
+
   it('rejects unsupported Kling aspect ratios', () => {
     expect(() =>
       validateVideoRequest({

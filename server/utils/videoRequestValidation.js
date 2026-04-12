@@ -53,8 +53,8 @@ export function validateVideoRequest({
     throw new Error('运动参考目前只支持 Kling 2.6');
   }
 
-  if (isHailuoModel && hasStartFrame && hasReferenceImages) {
-    throw new Error('Hailuo 当前不能同时混用首帧图生和参考图模式');
+  if ((isHailuoModel || isVeoLikeModel) && hasStartFrame && hasReferenceImages) {
+    throw new Error(`${isVeoLikeModel ? 'Veo' : 'Hailuo'} 当前不能同时混用首帧图生和参考图模式`);
   }
 
   if (isWanModel && !hasStartFrame) {
@@ -97,7 +97,11 @@ export function validateVideoRequest({
     throw new Error('Sora 2 当前不支持首尾帧模式');
   }
 
-  if (hasReferenceImages && !isGrokModel && !isHailuoModel) {
+  if (isVeoLikeModel && hasReferenceImages && referenceImagesBase64.length > 3) {
+    throw new Error('Veo 标准参考图当前最多支持 3 张素材');
+  }
+
+  if (hasReferenceImages && !isGrokModel && !isHailuoModel && !isVeoLikeModel) {
     throw new Error('当前后端尚未接通标准模式的多图/全图参考，请先减少为单图，或改用已接通的专用模式。');
   }
 
