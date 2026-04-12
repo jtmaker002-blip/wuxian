@@ -47,6 +47,27 @@ const CAMERA_CONTROL_OPTIONS = {
     aperture: ['f/2.8', 'f/4', 'f/5.6', 'f/8'],
 };
 
+const CAMERA_CONTROL_IMAGES = {
+    camera: [
+        '/liblib-camera-control/camera-arri-alexa-65.png',
+        '/liblib-camera-control/camera-panavision-dxl2.png',
+        '/liblib-camera-control/camera-panavision-dxl2.png',
+        '/liblib-camera-control/camera-arri-alexa-65.png',
+    ],
+    lens: [
+        '/liblib-camera-control/lens-arri-signature-prime.png',
+        '/liblib-camera-control/lens-panavision-c-series.png',
+        '/liblib-camera-control/lens-panavision-c-series.png',
+        '/liblib-camera-control/lens-arri-signature-prime.png',
+    ],
+    aperture: [
+        '/liblib-camera-control/aperture-f4.png',
+        '/liblib-camera-control/aperture-f4.png',
+        '/liblib-camera-control/aperture-f4.png',
+        '/liblib-camera-control/aperture-f4.png',
+    ],
+};
+
 type CameraControlSelection = {
     camera: number;
     lens: number;
@@ -2621,14 +2642,14 @@ function CameraControlOverlay({
     const columns: Array<{
         key: keyof CameraControlSelection;
         label: string;
-        image?: string;
+        imageSrc?: string;
         value: string;
         suffix?: string;
     }> = [
-        { key: 'camera', label: '相机', value: CAMERA_CONTROL_OPTIONS.camera[selection.camera], image: '▧' },
-        { key: 'lens', label: '镜头', value: CAMERA_CONTROL_OPTIONS.lens[selection.lens], image: '▭' },
+        { key: 'camera', label: '相机', value: CAMERA_CONTROL_OPTIONS.camera[selection.camera], imageSrc: CAMERA_CONTROL_IMAGES.camera[selection.camera] },
+        { key: 'lens', label: '镜头', value: CAMERA_CONTROL_OPTIONS.lens[selection.lens], imageSrc: CAMERA_CONTROL_IMAGES.lens[selection.lens] },
         { key: 'focal', label: '焦距', value: CAMERA_CONTROL_OPTIONS.focal[selection.focal], suffix: 'mm' },
-        { key: 'aperture', label: '光圈', value: CAMERA_CONTROL_OPTIONS.aperture[selection.aperture], image: '◉' },
+        { key: 'aperture', label: '光圈', value: CAMERA_CONTROL_OPTIONS.aperture[selection.aperture], imageSrc: CAMERA_CONTROL_IMAGES.aperture[selection.aperture] },
     ];
 
     return (
@@ -2660,8 +2681,13 @@ function CameraControlOverlay({
                                 </button>
                                 <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/10 bg-[#303030] shadow-[inset_0_0_38px_rgba(255,255,255,0.025),0_14px_34px_rgba(0,0,0,0.2)]">
                                     <div className="mb-5 text-[20px] font-medium text-neutral-300">{column.label}</div>
-                                    {column.image ? (
-                                        <div className="text-[54px] font-semibold text-neutral-100">{column.image}</div>
+                                    {column.imageSrc ? (
+                                        <img
+                                            src={column.imageSrc}
+                                            alt={column.label}
+                                            className="max-h-[72px] max-w-[112px] object-contain opacity-95"
+                                            draggable={false}
+                                        />
                                     ) : (
                                         <div className="text-[44px] font-semibold text-neutral-50">{column.value}</div>
                                     )}
