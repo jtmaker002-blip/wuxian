@@ -2659,14 +2659,14 @@ function CameraControlOverlay({
     ];
 
     return (
-        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/26 backdrop-blur-[2px]">
-            <div className="w-[1080px] overflow-hidden rounded-[34px] border border-white/70 bg-[#ececec]/88 text-neutral-950 shadow-[0_34px_120px_rgba(0,0,0,0.28)] backdrop-blur-2xl">
-                <div className="flex h-[82px] items-center justify-between border-b border-black/8 px-8">
-                    <div className="text-[24px] font-semibold tracking-[0.02em] text-neutral-950">摄像机控制</div>
+        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/44 backdrop-blur-[1px]">
+            <div className="w-[1080px] overflow-hidden rounded-[18px] border border-white/16 bg-[#171717] text-white shadow-[0_34px_120px_rgba(0,0,0,0.64)]">
+                <div className="flex h-[82px] items-center justify-between border-b border-white/12 px-8">
+                    <div className="text-[24px] font-semibold tracking-[0.02em] text-white">摄像机控制</div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-black/8 hover:text-neutral-900"
+                        className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
                         aria-label="关闭摄像机控制"
                     >
                         <span className="text-[42px] leading-none">×</span>
@@ -2680,18 +2680,18 @@ function CameraControlOverlay({
                                 <button
                                     type="button"
                                     onClick={() => update(column.key, -1)}
-                                    className="mb-4 text-neutral-500 transition-colors hover:text-neutral-900"
+                                    className="mb-4 text-neutral-300 transition-colors hover:text-white"
                                     aria-label={`${column.label}上一个`}
                                 >
                                     ˄
                                 </button>
-                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/12 bg-[#222] shadow-[inset_0_0_38px_rgba(255,255,255,0.035),0_14px_34px_rgba(0,0,0,0.22)]">
-                                    <div className="mb-5 text-[20px] font-medium text-neutral-200">{column.label}</div>
+                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/18 bg-[#252525] shadow-[inset_0_0_42px_rgba(255,255,255,0.045),0_14px_34px_rgba(0,0,0,0.34)]">
+                                    <div className="mb-5 text-[20px] font-semibold text-neutral-100">{column.label}</div>
                                     {column.imageSrc ? (
                                         <img
                                             src={column.imageSrc}
                                             alt={column.label}
-                                            className="max-h-[72px] max-w-[112px] object-contain opacity-95"
+                                            className="max-h-[86px] max-w-[126px] object-contain opacity-100 brightness-[1.55] contrast-[1.18]"
                                             draggable={false}
                                         />
                                     ) : (
@@ -2701,12 +2701,12 @@ function CameraControlOverlay({
                                 <button
                                     type="button"
                                     onClick={() => update(column.key, 1)}
-                                    className="mt-8 text-neutral-500 transition-colors hover:text-neutral-900"
+                                    className="mt-8 text-neutral-300 transition-colors hover:text-white"
                                     aria-label={`${column.label}下一个`}
                                 >
                                     ˅
                                 </button>
-                                <div className="mt-9 min-h-8 text-center text-[20px] font-medium text-neutral-700">
+                                <div className="mt-9 min-h-8 text-center text-[20px] font-semibold text-neutral-200">
                                     {column.suffix ? `${column.value} ${column.suffix}` : column.value}
                                 </div>
                             </div>
