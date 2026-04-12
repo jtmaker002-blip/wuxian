@@ -2182,6 +2182,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             const isInvalidMotionMode = isVideoNode && selectedVideoMode === 'motion-control' && !canUseMotionMode;
                             const isUnsupportedSelectedMode = isSelectedVideoModeUnsupported;
                             const isStandardVideoInputBlocked = selectedVideoMode === 'standard' && Boolean(standardVideoBlockedReason);
+                            const isImageToVideoPrimary = isVideoNode && Boolean(inputUrl) && selectedVideoMode === 'standard';
                             const isHostedTokenMissing =
                                 (isVideoNode && currentVideoExecutionSupport?.mode === 'hosted-token' && !hasHostedToken) ||
                                 (isRegistryImageNode && currentImageExecutionSupport?.mode === 'hosted-token' && !hasHostedToken);
@@ -2225,14 +2226,17 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         onGenerate(data.id);
                                     }}
                                     disabled={isGenerateBlocked}
-                                    className={`group w-9 h-9 rounded-full flex items-center justify-center transition-all duration-200 ${isGenerateBlocked
+                                    className={`group ${isImageToVideoPrimary ? 'h-10 rounded-full px-4 gap-2' : 'w-9 h-9 rounded-full'} flex items-center justify-center transition-all duration-200 ${isGenerateBlocked
                                         ? 'bg-neutral-700/50 cursor-not-allowed opacity-50'
                                         : isDark
                                             ? 'bg-white text-neutral-900 hover:bg-neutral-100 active:scale-95'
                                             : 'bg-neutral-900 text-white hover:bg-neutral-800 active:scale-95'
                                         }`}
                                     title={generateTitle}
-                                >
+                                    >
+                                    {isImageToVideoPrimary && (
+                                        <span className="text-sm font-semibold whitespace-nowrap">生成视频</span>
+                                    )}
                                     <svg
                                         viewBox="0 0 24 24"
                                         className="w-4 h-4 transition-transform duration-200"
