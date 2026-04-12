@@ -144,6 +144,29 @@ async function main() {
     await page.waitForTimeout(500);
     await expectText(page, '保留区域');
     await saveScreenshot(page, artifactDir, artifacts, '04b-mark-preserve.png', 'Mark tool preserve-region selection persisted on the image node.');
+    await page.getByText('删除').first().click();
+    await page.waitForTimeout(400);
+    if ((await page.getByRole('button', { name: '删除' }).count()) > 0) {
+      throw new Error('preserve annotation remained after delete');
+    }
+    await saveScreenshot(page, artifactDir, artifacts, '04c-mark-delete.png', 'Selected annotation delete control removed the preserve mark.');
+  });
+
+  await runCase(browser, 'mark-ignore', async (page) => {
+    await createUploadedImageNode(page);
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('标记'))?.click());
+    await page.waitForTimeout(300);
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('忽略区域'))?.click());
+    await page.waitForTimeout(500);
+    const preview = await page.locator('img[alt="聚焦模式预览"]').boundingBox();
+    if (!preview) throw new Error('mark ignore preview not visible');
+    await page.mouse.move(preview.x + preview.width * 0.2, preview.y + preview.height * 0.2);
+    await page.mouse.down();
+    await page.mouse.move(preview.x + preview.width * 0.5, preview.y + preview.height * 0.52, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(500);
+    await expectText(page, '忽略区域');
+    await saveScreenshot(page, artifactDir, artifacts, '04d-mark-ignore.png', 'Mark tool ignore-region selection persisted on the image node.');
   });
 
   await runCase(browser, 'nine-grid', async (page) => {
