@@ -69,7 +69,7 @@ describe('resolveStandaloneNodeCanvasPosition', () => {
     const viewport = { x: 0, y: 0, zoom: 1 };
 
     expect(resolveStandaloneNodeCanvasPosition(62, 24, viewport)).toEqual({
-      canvasX: 132,
+      canvasX: 220,
       canvasY: 72,
     });
   });
@@ -87,7 +87,7 @@ describe('resolveStandaloneNodeCanvasPosition', () => {
     const viewport = { x: -180, y: -40, zoom: 2 };
 
     expect(resolveStandaloneNodeCanvasPosition(80, 60, viewport)).toEqual({
-      canvasX: 156,
+      canvasX: 200,
       canvasY: 56,
     });
   });

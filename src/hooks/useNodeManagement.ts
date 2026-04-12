@@ -12,7 +12,7 @@ import { switchNodeTypeData } from '../utils/nodeTypeSwitch';
 
 const DEFAULT_NODE_X_OFFSET = 170;
 const DEFAULT_NODE_Y_OFFSET = 100;
-const MIN_VISIBLE_NODE_X = 132;
+const MIN_VISIBLE_NODE_X = 220;
 const MIN_VISIBLE_NODE_Y = 72;
 
 export function resolveStandaloneNodeCanvasPosition(
