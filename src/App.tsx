@@ -82,6 +82,7 @@ import { getSceneDefinition } from './services/scenes/registry';
 import { SCENES, type SceneId } from './types/scene';
 import type { GridSplitSelection } from './components/menus/GridSplitMenu';
 import { createSceneGridImageNode, createSceneGridUpscaleNode } from './utils/sceneGridActions';
+import { getCanvasPointerAction } from './utils/canvasPointerAction';
 import { cancelTasks } from './services/tasks/taskClient';
 import {
   cropImageBySelection,
@@ -1337,8 +1338,8 @@ export default function App() {
 
   const handlePointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).id === 'canvas-background') {
-      // Left-click (button 0): Start selection box
-      if (e.button === 0) {
+      const action = getCanvasPointerAction(e.nativeEvent);
+      if (action === 'select') {
         startSelection(e);
         clearSelection();
         setSelectedConnection(null);
@@ -1346,12 +1347,14 @@ export default function App() {
         closeWorkflowPanel();
         closeHistoryPanel();
         closeAssetLibrary();
-      }
-      // Middle-click (button 1) or other: Start panning
-      else {
+      } else {
+        clearSelection();
         startPanning(e);
         setSelectedConnection(null);
         setContextMenu(prev => ({ ...prev, isOpen: false }));
+        closeWorkflowPanel();
+        closeHistoryPanel();
+        closeAssetLibrary();
       }
     }
   };
