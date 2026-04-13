@@ -1,7 +1,7 @@
 import { generateOpenAIImage, generateOpenAIText } from './openai.js';
 import { generateGeminiImage } from './gemini.js';
 import { generateOpenAiTeachGeminiImage } from './openaiteachGeminiImage.js';
-import { detectImageExtensionFromBuffer, saveBufferToFile } from '../utils/imageHelpers.js';
+import { detectImageExtensionFromBuffer, resolveImageToBase64, saveBufferToFile } from '../utils/imageHelpers.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -316,12 +316,13 @@ async function generateRealImages({ prompts, params, runtime }) {
   const geminiApiKey = params.providerApiKey || runtime.GEMINI_API_KEY;
   if ((!apiKey && !geminiApiKey) || !runtime.IMAGES_DIR) return null;
 
+  const imageInputs = collectSceneImageInputs(params);
   const urls = [];
   for (let index = 0; index < prompts.length; index += 1) {
     const buffer = usesGeminiImageModel && params.providerApiKey
       ? await generateOpenAiTeachGeminiImage({
         prompt: prompts[index],
-        imageBase64Array: params.imageBase64Array,
+        imageBase64Array: imageInputs,
         imageModel,
         apiKey: params.providerApiKey,
         baseUrl,
@@ -329,7 +330,7 @@ async function generateRealImages({ prompts, params, runtime }) {
       : usesGeminiImageModel
         ? await generateGeminiImage({
           prompt: prompts[index],
-          imageBase64Array: params.imageBase64Array,
+          imageBase64Array: imageInputs,
           aspectRatio: params.ratio || params.aspectRatio || '16:9',
           resolution: params.resolution || '1K',
           imageModel,
@@ -337,7 +338,7 @@ async function generateRealImages({ prompts, params, runtime }) {
         })
         : await generateOpenAIImage({
           prompt: prompts[index],
-          imageBase64Array: params.imageBase64Array,
+          imageBase64Array: imageInputs,
           aspectRatio: params.ratio || params.aspectRatio || '16:9',
           resolution: params.resolution || '1K',
           imageModel,
@@ -349,6 +350,27 @@ async function generateRealImages({ prompts, params, runtime }) {
     urls.push(saved.url);
   }
   return urls;
+}
+
+function collectSceneImageInputs(params = {}) {
+  const candidates = [
+    params.imageUrl,
+    params.characterImageUrl,
+    params.originImage,
+    params.referenceImage,
+    ...(Array.isArray(params.referenceImages) ? params.referenceImages : []),
+    ...(Array.isArray(params.imageBase64Array) ? params.imageBase64Array : []),
+  ].filter(Boolean);
+
+  const seen = new Set();
+  return candidates
+    .map((candidate) => resolveImageToBase64(candidate))
+    .filter(Boolean)
+    .filter((dataUrl) => {
+      if (seen.has(dataUrl)) return false;
+      seen.add(dataUrl);
+      return true;
+    });
 }
 
 function buildMockResult(request, extraStructuredData = {}) {

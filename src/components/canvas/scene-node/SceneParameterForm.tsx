@@ -26,6 +26,10 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
     });
   };
 
+  const referenceImagesText = Array.isArray(data.params?.referenceImages)
+    ? data.params.referenceImages.join('\n')
+    : '';
+
   return (
     <div className="mb-4 rounded-2xl border border-white/10 bg-black/28 p-3">
       {(isFourGrid || isStoryboard25) && (
@@ -97,6 +101,22 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
             />
           </label>
         )}
+        {(isFourGrid || isStoryboard25 || isLightCorrection) && (
+          <label className="col-span-2 text-xs text-neutral-400">
+            参考图 URL（每行一个）
+            <textarea
+              value={referenceImagesText}
+              onPointerDown={(event) => event.stopPropagation()}
+              onChange={(event) => updateParam(
+                isLightCorrection ? 'referenceImage' : 'referenceImages',
+                isLightCorrection
+                  ? event.target.value.split('\n').map((item) => item.trim()).filter(Boolean)[0] || ''
+                  : event.target.value.split('\n').map((item) => item.trim()).filter(Boolean)
+              )}
+              className="mt-1 min-h-[58px] w-full resize-none rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none focus:border-blue-400/70"
+            />
+          </label>
+        )}
         {(isFourGrid || isStoryboard25) && (
           <label className="text-xs text-neutral-400">
             画幅
@@ -110,6 +130,35 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
               <option value="9:16">9:16</option>
               <option value="1:1">1:1</option>
             </select>
+          </label>
+        )}
+        {isFourGrid && (
+          <label className="text-xs text-neutral-400">
+            一致性
+            <select
+              value={(data.params?.consistencyLevel as string) || 'high'}
+              onPointerDown={(event) => event.stopPropagation()}
+              onChange={(event) => updateParam('consistencyLevel', event.target.value)}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+            >
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+            </select>
+          </label>
+        )}
+        {isStoryboard25 && (
+          <label className="text-xs text-neutral-400">
+            分镜时长
+            <input
+              type="number"
+              min="25"
+              max="300"
+              value={Number(data.params?.durationSeconds ?? 100)}
+              onPointerDown={(event) => event.stopPropagation()}
+              onChange={(event) => updateParam('durationSeconds', Number(event.target.value))}
+              className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+            />
           </label>
         )}
         {(isFourGrid || isStoryboard25 || isThreeView) && (
@@ -131,6 +180,21 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
         {isLightCorrection && (
           <>
             <label className="text-xs text-neutral-400">
+              色温
+              <select
+                value={(data.params?.lightColor as string) || 'neutral'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('lightColor', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="neutral">neutral</option>
+                <option value="warm">warm</option>
+                <option value="cold">cold</option>
+                <option value="sunset">sunset</option>
+                <option value="neon">neon</option>
+              </select>
+            </label>
+            <label className="text-xs text-neutral-400">
               主光方向
               <select
                 value={(data.params?.keyLight as string) || 'front'}
@@ -139,6 +203,31 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
                 className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
               >
                 <option value="front">front</option>
+                <option value="left">left</option>
+                <option value="right">right</option>
+                <option value="back">back</option>
+              </select>
+            </label>
+            <label className="text-xs text-neutral-400">
+              轮廓光
+              <select
+                value={data.params?.rimLightEnabled === false ? 'off' : 'on'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('rimLightEnabled', event.target.value === 'on')}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="on">开启</option>
+                <option value="off">关闭</option>
+              </select>
+            </label>
+            <label className="text-xs text-neutral-400">
+              轮廓光方向
+              <select
+                value={(data.params?.rimLightDirection as string) || 'back'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('rimLightDirection', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
                 <option value="left">left</option>
                 <option value="right">right</option>
                 <option value="back">back</option>
@@ -158,21 +247,65 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
             </label>
           </>
         )}
+        {isThreeView && (
+          <>
+            <label className="text-xs text-neutral-400">
+              背景
+              <select
+                value={(data.params?.background as string) || 'plain'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('background', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="plain">plain</option>
+                <option value="gray">gray</option>
+                <option value="transparent-look">transparent-look</option>
+              </select>
+            </label>
+            <label className="text-xs text-neutral-400">
+              排版
+              <select
+                value={(data.params?.outputLayout as string) || 'grid'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('outputLayout', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="grid">grid</option>
+                <option value="split">split</option>
+              </select>
+            </label>
+          </>
+        )}
         {isUpscale && (
-          <label className="text-xs text-neutral-400">
-            目标清晰度
-            <select
-              value={(data.params?.targetResolution as string) || '2x'}
-              onPointerDown={(event) => event.stopPropagation()}
-              onChange={(event) => updateParam('targetResolution', event.target.value)}
-              className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
-            >
-              <option value="2x">2x</option>
-              <option value="4x">4x</option>
-              <option value="2048">2048</option>
-              <option value="4096">4096</option>
-            </select>
-          </label>
+          <>
+            <label className="text-xs text-neutral-400">
+              目标清晰度
+              <select
+                value={(data.params?.targetResolution as string) || '2x'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('targetResolution', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="2x">2x</option>
+                <option value="4x">4x</option>
+                <option value="2048">2048</option>
+                <option value="4096">4096</option>
+              </select>
+            </label>
+            <label className="text-xs text-neutral-400">
+              细节模式
+              <select
+                value={(data.params?.detailMode as string) || 'cinematic'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('detailMode', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="natural">natural</option>
+                <option value="sharp">sharp</option>
+                <option value="cinematic">cinematic</option>
+              </select>
+            </label>
+          </>
         )}
       </div>
     </div>

@@ -349,6 +349,42 @@ describe('tasks routes', () => {
     }
   });
 
+  it('keeps image input references available for real Nano Banana scene tasks while redacting secrets', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const createResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          params: {
+            scene: 'frame_deduction_plus_3s',
+            executionMode: 'real',
+            imageModel: 'gemini-3-pro-image-preview',
+            providerApiKey: 'sk-hosted-token',
+            imageUrl: 'data:image/png;base64,input-frame',
+            referenceImages: ['data:image/png;base64,reference-a'],
+          },
+          metadata: { node_id: 'node-image-input', project_id: 'project-1' },
+          provider: 'openai',
+          model: 'gemini-3-pro-image-preview',
+          taskType: 'image',
+          requestId: 'request-image-input',
+        }),
+      });
+      const created = await createResponse.json();
+      const raw = fs.readFileSync(path.join(tasksDir, `${created.taskId}.json`), 'utf8');
+      const persisted = JSON.parse(raw);
+
+      expect(raw).not.toContain('sk-hosted-token');
+      expect(persisted.request.params.imageUrl).toBe('data:image/png;base64,input-frame');
+      expect(persisted.request.params.referenceImages).toEqual(['data:image/png;base64,reference-a']);
+      expect(persisted.request.params.imageModel).toBe('gemini-3-pro-image-preview');
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
   it('creates retry tasks through the async retry endpoint', async () => {
     const serverHandle = await createServer();
 
