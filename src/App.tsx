@@ -237,6 +237,20 @@ export default function App() {
     zoomBy
   } = useCanvasNavigation();
 
+  const {
+    nodes,
+    setNodes,
+    selectedNodeIds,
+    setSelectedNodeIds,
+    addNode,
+    updateNode,
+    switchNodeType,
+    deleteNode,
+    deleteNodes,
+    clearSelection,
+    handleSelectTypeFromMenu
+  } = useNodeManagement();
+
   // Wrap handleWheel to pass hovered node for zoom-to-center
   const handleWheel = (e: React.WheelEvent) => {
     const hoveredNode = canvasHoveredNodeId ? nodes.find(n => n.id === canvasHoveredNodeId) : undefined;
@@ -296,20 +310,6 @@ export default function App() {
       y: window.innerHeight / 2 - centerY * nextZoom,
     });
   }, [getNodeLayoutParent, nodes, setViewport]);
-
-  const {
-    nodes,
-    setNodes,
-    selectedNodeIds,
-    setSelectedNodeIds,
-    addNode,
-    updateNode,
-    switchNodeType,
-    deleteNode,
-    deleteNodes,
-    clearSelection,
-    handleSelectTypeFromMenu
-  } = useNodeManagement();
 
   useEffect(() => {
     setNodes(prev =>
