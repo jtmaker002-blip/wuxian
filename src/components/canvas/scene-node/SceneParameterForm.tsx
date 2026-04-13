@@ -66,11 +66,14 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
         <label className="text-xs text-neutral-400">
           图片模型
           <select
-            value={(data.params?.imageModel as string) || 'gpt-image-1.5'}
+            value={(data.params?.imageModel as string) || 'gemini-3-pro-image-preview'}
             onPointerDown={(event) => event.stopPropagation()}
             onChange={(event) => updateParam('imageModel', event.target.value)}
             className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
           >
+            <option value="gemini-3-pro-image-preview">Nano Banana Pro</option>
+            <option value="gemini-3.1-flash-image-preview">Nano Banana 2</option>
+            <option value="gemini-2.5-flash-image-preview">Nano Banana 1</option>
             <option value="gpt-image-1.5">gpt-image-1.5</option>
             <option value="gpt-image-1">gpt-image-1</option>
           </select>

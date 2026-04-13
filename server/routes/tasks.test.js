@@ -311,8 +311,39 @@ describe('tasks routes', () => {
 
       expect(status.tasks[0].status).toBe('succeeded');
       expect(status.tasks[0].result.structuredData.realProviderRequested).toBe(true);
+      expect(status.tasks[0].result.structuredData.imageModel).toBeUndefined();
       expect(status.tasks[0].result.structuredData.providerFallback).toContain('OPENAI_API_KEY');
       expect(status.tasks[0].result.imageList[0].url).toMatch(/^data:image\/svg\+xml;base64,/);
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
+  it('persists Nano Banana Pro model selection without provider secrets for real tasks', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const createResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          params: {
+            scene: 'plot_deduction_four_grid',
+            executionMode: 'real',
+            providerApiKey: 'sk-hosted-token',
+            storyText: 'Nano Banana Pro 默认模型测试',
+          },
+          metadata: { node_id: 'node-nano', project_id: 'project-1' },
+          provider: 'openai',
+          model: 'gemini-3-pro-image-preview',
+          taskType: 'image',
+          requestId: 'request-nano',
+        }),
+      });
+      const created = await createResponse.json();
+      const raw = fs.readFileSync(path.join(tasksDir, `${created.taskId}.json`), 'utf8');
+      expect(raw).toContain('gemini-3-pro-image-preview');
+      expect(raw).not.toContain('sk-hosted-token');
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }

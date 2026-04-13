@@ -723,7 +723,7 @@ export default function App() {
       y: data.y || 0,
       prompt: data.prompt || '',
       status: data.status || NodeStatus.IDLE,
-      model: data.model || 'gpt-image-1.5',
+      model: data.model || 'gemini-3-pro-image-preview',
       imageModel: data.imageModel,
       aspectRatio: data.aspectRatio || '16:9',
       resolution: data.resolution || '1K',

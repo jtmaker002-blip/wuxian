@@ -1,10 +1,13 @@
 import { generateOpenAIImage, generateOpenAIText } from './openai.js';
+import { generateGeminiImage } from './gemini.js';
+import { generateOpenAiTeachGeminiImage } from './openaiteachGeminiImage.js';
 import { detectImageExtensionFromBuffer, saveBufferToFile } from '../utils/imageHelpers.js';
 import fs from 'fs';
 import path from 'path';
 
 const tasks = new Map();
 const MAX_CHILD_CONCURRENCY = 4;
+const NANO_BANANA_PRO_MODEL = 'gemini-3-pro-image-preview';
 const DEFAULT_TIMING = {
   childWaveMs: 1800,
   childDurationMs: 1100,
@@ -308,18 +311,39 @@ Required shape:
 async function generateRealImages({ prompts, params, runtime }) {
   const apiKey = params.providerApiKey || runtime.OPENAI_API_KEY;
   const baseUrl = params.providerBaseUrl;
-  if (!apiKey || !runtime.IMAGES_DIR) return null;
+  const imageModel = params.imageModel || NANO_BANANA_PRO_MODEL;
+  const usesGeminiImageModel = String(imageModel).startsWith('gemini-');
+  const geminiApiKey = params.providerApiKey || runtime.GEMINI_API_KEY;
+  if ((!apiKey && !geminiApiKey) || !runtime.IMAGES_DIR) return null;
 
   const urls = [];
   for (let index = 0; index < prompts.length; index += 1) {
-    const buffer = await generateOpenAIImage({
-      prompt: prompts[index],
-      aspectRatio: params.ratio || params.aspectRatio || '16:9',
-      resolution: params.resolution || '1K',
-      imageModel: params.imageModel || 'gpt-image-1.5',
-      apiKey,
-      baseUrl,
-    });
+    const buffer = usesGeminiImageModel && params.providerApiKey
+      ? await generateOpenAiTeachGeminiImage({
+        prompt: prompts[index],
+        imageBase64Array: params.imageBase64Array,
+        imageModel,
+        apiKey: params.providerApiKey,
+        baseUrl,
+      })
+      : usesGeminiImageModel
+        ? await generateGeminiImage({
+          prompt: prompts[index],
+          imageBase64Array: params.imageBase64Array,
+          aspectRatio: params.ratio || params.aspectRatio || '16:9',
+          resolution: params.resolution || '1K',
+          imageModel,
+          apiKey: geminiApiKey,
+        })
+        : await generateOpenAIImage({
+          prompt: prompts[index],
+          imageBase64Array: params.imageBase64Array,
+          aspectRatio: params.ratio || params.aspectRatio || '16:9',
+          resolution: params.resolution || '1K',
+          imageModel,
+          apiKey,
+          baseUrl,
+        });
     const ext = detectImageExtensionFromBuffer(buffer, 'png');
     const saved = saveBufferToFile(buffer, runtime.IMAGES_DIR, 'scene_img', ext);
     urls.push(saved.url);
@@ -386,6 +410,7 @@ async function buildTaskOutput(request, runtime = {}) {
         scene,
         requestId: request?.requestId,
         executionMode: 'real',
+        imageModel: params.imageModel || NANO_BANANA_PRO_MODEL,
         styleAnchor: plan?.styleAnchor,
         characterBible: plan?.characterBible,
         worldBible: plan?.worldBible,
