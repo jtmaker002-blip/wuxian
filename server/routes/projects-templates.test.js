@@ -75,6 +75,32 @@ describe('project and template routes', () => {
     }
   });
 
+  it('deletes a saved project through the project API', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const saveResponse = await fetch(`${serverHandle.baseUrl}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: 'Delete Me',
+          nodes: [],
+        }),
+      });
+      const saved = await saveResponse.json();
+
+      const deleteResponse = await fetch(`${serverHandle.baseUrl}/api/projects/${saved.project.id}`, {
+        method: 'DELETE',
+      });
+      expect(deleteResponse.status).toBe(200);
+
+      const loadResponse = await fetch(`${serverHandle.baseUrl}/api/projects/${saved.project.id}`);
+      expect(loadResponse.status).toBe(404);
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
   it('publishes a project as a template and creates a new project copy', async () => {
     const serverHandle = await createServer();
 

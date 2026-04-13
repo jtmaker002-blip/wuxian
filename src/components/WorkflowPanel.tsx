@@ -9,7 +9,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Trash2, FileText, Loader2, Maximize2, Pencil, Check } from 'lucide-react';
 import { LazyImage } from './LazyImage';
 import { useTranslation } from 'react-i18next';
-import { listProjects } from '../services/projects/projectClient';
+import { deleteProject, listProjects } from '../services/projects/projectClient';
+import { createProjectFromTemplate, listTemplates, publishProjectTemplate, type TemplateSummary } from '../services/templates/templateClient';
 
 interface WorkflowSummary {
     id: string;
@@ -48,7 +49,8 @@ export const WorkflowPanel: React.FC<WorkflowPanelProps> = ({
     const { t } = useTranslation();
     const [workflows, setWorkflows] = useState<WorkflowSummary[]>([]);
     const [publicWorkflows, setPublicWorkflows] = useState<WorkflowSummary[]>([]);
-    const [activeTab, setActiveTab] = useState<'my' | 'public'>('my');
+    const [templates, setTemplates] = useState<TemplateSummary[]>([]);
+    const [activeTab, setActiveTab] = useState<'my' | 'public' | 'templates'>('my');
     const [loading, setLoading] = useState(false);
     const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
@@ -70,6 +72,7 @@ export const WorkflowPanel: React.FC<WorkflowPanelProps> = ({
         if (isOpen) {
             fetchWorkflows();
             fetchPublicWorkflows();
+            fetchTemplates();
         }
     }, [isOpen]);
 
@@ -113,18 +116,52 @@ export const WorkflowPanel: React.FC<WorkflowPanelProps> = ({
         }
     };
 
+    const fetchTemplates = async () => {
+        try {
+            setTemplates(await listTemplates());
+        } catch (error) {
+            console.error('Failed to fetch templates:', error);
+        }
+    };
+
     const handleDelete = async (id: string) => {
         try {
-            const response = await fetch(`http://localhost:3001/api/workflows/${id}`, {
-                method: 'DELETE'
-            });
-            if (response.ok) {
-                setWorkflows(prev => prev.filter(w => w.id !== id));
-            }
+            await deleteProject(id);
+            setWorkflows(prev => prev.filter(w => w.id !== id));
         } catch (error) {
-            console.error('Failed to delete workflow:', error);
+            console.error('Failed to delete project:', error);
+            try {
+                const response = await fetch(`http://localhost:3001/api/workflows/${id}`, {
+                    method: 'DELETE'
+                });
+                if (response.ok) {
+                    setWorkflows(prev => prev.filter(w => w.id !== id));
+                }
+            } catch (fallbackError) {
+                console.error('Failed to delete workflow:', fallbackError);
+            }
         }
         setDeleteConfirm(null);
+    };
+
+    const handlePublishCurrentTemplate = async () => {
+        if (!currentWorkflowId) return;
+        try {
+            await publishProjectTemplate(currentWorkflowId);
+            await fetchTemplates();
+            setActiveTab('templates');
+        } catch (error) {
+            console.error('Failed to publish template:', error);
+        }
+    };
+
+    const handleCreateFromTemplate = async (templateId: string, name: string) => {
+        try {
+            const project = await createProjectFromTemplate(templateId, `${name} Copy`);
+            onLoadWorkflow(project.id || '');
+        } catch (error) {
+            console.error('Failed to create project from template:', error);
+        }
     };
 
     // Load more covers callback for infinite scroll
@@ -228,6 +265,12 @@ export const WorkflowPanel: React.FC<WorkflowPanelProps> = ({
                         >
                             {t('workflowPanel.publicWorkflows')}
                         </button>
+                        <button
+                            onClick={() => setActiveTab('templates')}
+                            className={`font-medium pb-1 transition-colors ${activeTab === 'templates' ? isDark ? 'text-white border-b-2 border-white' : 'text-neutral-900 border-b-2 border-neutral-900' : isDark ? 'text-neutral-500 hover:text-neutral-300' : 'text-neutral-400 hover:text-neutral-600'}`}
+                        >
+                            模板库
+                        </button>
                     </div>
                     <button
                         onClick={onClose}
@@ -315,7 +358,7 @@ export const WorkflowPanel: React.FC<WorkflowPanelProps> = ({
                                 ))}
                             </div>
                         )
-                    ) : (
+                    ) : activeTab === 'public' ? (
                         /* Public Workflows Tab */
                         publicWorkflows.length === 0 ? (
                             <div className="flex flex-col items-center justify-center h-40 text-neutral-500 gap-2">
@@ -361,6 +404,58 @@ export const WorkflowPanel: React.FC<WorkflowPanelProps> = ({
                                 ))}
                             </div>
                         )
+                    ) : (
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between">
+                                <div className={`text-sm ${isDark ? 'text-neutral-400' : 'text-neutral-600'}`}>
+                                    将当前项目发布为模板，或从模板创建新的项目副本。
+                                </div>
+                                <button
+                                    disabled={!currentWorkflowId}
+                                    onClick={handlePublishCurrentTemplate}
+                                    className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+                                        currentWorkflowId
+                                            ? 'bg-blue-600 text-white hover:bg-blue-500'
+                                            : 'cursor-not-allowed bg-neutral-700 text-neutral-400'
+                                    }`}
+                                >
+                                    发布当前项目为模板
+                                </button>
+                            </div>
+                            {templates.length === 0 ? (
+                                <div className="flex items-center justify-center h-40 text-neutral-500">
+                                    暂无模板
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-3 gap-4">
+                                    {templates.map((template) => (
+                                        <button
+                                            key={template.id}
+                                            type="button"
+                                            onClick={() => handleCreateFromTemplate(template.id, template.name)}
+                                            className={`rounded-xl border p-4 text-left transition-colors ${
+                                                isDark
+                                                    ? 'border-neutral-800 bg-neutral-900/50 hover:border-neutral-600'
+                                                    : 'border-neutral-200 bg-neutral-100/90 hover:border-neutral-400'
+                                            }`}
+                                        >
+                                            <div className={`font-medium text-sm truncate ${isDark ? 'text-white' : 'text-neutral-900'}`}>
+                                                {template.name}
+                                            </div>
+                                            <div className={`mt-1 text-xs ${isDark ? 'text-neutral-500' : 'text-neutral-600'}`}>
+                                                {template.nodeCount} nodes
+                                            </div>
+                                            {template.description && (
+                                                <div className={`mt-2 line-clamp-2 text-xs ${isDark ? 'text-neutral-500' : 'text-neutral-500'}`}>
+                                                    {template.description}
+                                                </div>
+                                            )}
+                                            <div className="mt-3 text-xs text-blue-400">创建项目副本</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>

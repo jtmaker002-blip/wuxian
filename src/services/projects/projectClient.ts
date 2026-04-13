@@ -47,3 +47,10 @@ export async function listProjects(): Promise<ProjectListResponse['projects']> {
   const response = await requestJson<ProjectListResponse>('/api/projects');
   return response.projects;
 }
+
+export async function deleteProject(projectId: string): Promise<boolean> {
+  await requestJson<{ success: boolean }>(`/api/projects/${projectId}`, {
+    method: 'DELETE',
+  });
+  return true;
+}

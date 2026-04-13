@@ -98,4 +98,17 @@ router.get('/:projectId', (req, res) => {
   }
 });
 
+router.delete('/:projectId', (req, res) => {
+  try {
+    const filePath = safeJsonPath(getProjectDir(req), req.params.projectId);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    fs.unlinkSync(filePath);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ error: error.message });
+  }
+});
+
 export default router;
