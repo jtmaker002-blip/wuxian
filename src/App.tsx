@@ -134,12 +134,6 @@ export default function App() {
 
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('light');
   const hasRestoredDraftRef = React.useRef(false);
-  const rightButtonPanRef = React.useRef({
-    active: false,
-    moved: false,
-    startX: 0,
-    startY: 0,
-  });
 
   // ── OpenAiTeach session ──────────────────────────────────────────────────
   const session = useSessionStore((s) => s.session);
@@ -1355,14 +1349,6 @@ export default function App() {
         closeAssetLibrary();
       } else {
         e.preventDefault();
-        if (e.button === 2) {
-          rightButtonPanRef.current = {
-            active: true,
-            moved: false,
-            startX: e.clientX,
-            startY: e.clientY,
-          };
-        }
         clearSelection();
         startPanning(e);
         setSelectedConnection(null);
