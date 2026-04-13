@@ -184,6 +184,25 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
               </label>
             )}
             <div className="mt-3 grid grid-cols-2 gap-2">
+              {(isLightCorrection || isUpscale || isFrameDeduction || isThreeView) && (
+                <label className="col-span-2 text-xs text-neutral-400">
+                  输入图片 URL
+                  <input
+                    value={(isLightCorrection ? data.params?.originImage : data.params?.imageUrl || data.params?.characterImageUrl) as string || ''}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onChange={(event) => {
+                      const key = isLightCorrection
+                        ? 'originImage'
+                        : isThreeView
+                          ? 'characterImageUrl'
+                          : 'imageUrl';
+                      updateParam(key, event.target.value);
+                    }}
+                    placeholder="可填 /library/images/... 或 data:image/..."
+                    className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none focus:border-blue-400/70"
+                  />
+                </label>
+              )}
               {(isFourGrid || isStoryboard25) && (
                 <label className="text-xs text-neutral-400">
                   画幅
