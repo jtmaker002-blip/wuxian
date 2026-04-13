@@ -16,6 +16,26 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
+function isSafeId(id) {
+  return typeof id === 'string' && /^[A-Za-z0-9_-]+$/.test(id);
+}
+
+function safeJsonPath(baseDir, id) {
+  if (!isSafeId(id)) {
+    const error = new Error('Invalid project id');
+    error.statusCode = 400;
+    throw error;
+  }
+  const resolvedBase = path.resolve(baseDir);
+  const resolvedPath = path.resolve(resolvedBase, `${id}.json`);
+  if (!resolvedPath.startsWith(`${resolvedBase}${path.sep}`)) {
+    const error = new Error('Invalid project path');
+    error.statusCode = 400;
+    throw error;
+  }
+  return resolvedPath;
+}
+
 function projectSummary(project) {
   return {
     id: project.id,
@@ -39,7 +59,7 @@ router.get('/', (req, res) => {
       .sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
     res.json({ success: true, projects });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
@@ -49,7 +69,7 @@ router.post('/', (req, res) => {
     const now = new Date().toISOString();
     const project = {
       ...req.body,
-      id: req.body?.id || crypto.randomUUID(),
+      id: isSafeId(req.body?.id) ? req.body.id : crypto.randomUUID(),
       name: req.body?.name || req.body?.title || 'Untitled Project',
       title: req.body?.title || req.body?.name || 'Untitled Project',
       nodes: Array.isArray(req.body?.nodes) ? req.body.nodes : [],
@@ -59,22 +79,22 @@ router.post('/', (req, res) => {
       createdAt: req.body?.createdAt || now,
       updatedAt: now,
     };
-    fs.writeFileSync(path.join(dir, `${project.id}.json`), JSON.stringify(project, null, 2));
+    fs.writeFileSync(safeJsonPath(dir, project.id), JSON.stringify(project, null, 2));
     res.json({ success: true, project });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 
 router.get('/:projectId', (req, res) => {
   try {
-    const filePath = path.join(getProjectDir(req), `${req.params.projectId}.json`);
+    const filePath = safeJsonPath(getProjectDir(req), req.params.projectId);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ error: 'Project not found' });
     }
     res.json({ success: true, project: readJson(filePath) });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.statusCode || 500).json({ error: error.message });
   }
 });
 

@@ -40,7 +40,16 @@ describe('taskClient', () => {
     mockFetch({
       success: true,
       tasks: [
-        { taskId: 'task-1', requestId: 'request-1', status: 'running', progressPercent: 50 },
+        {
+          taskId: 'task-1',
+          requestId: 'request-1',
+          status: 'running',
+          progressPercent: 50,
+          maxConcurrency: 4,
+          childTasks: [
+            { taskId: 'task-1-child-1', index: 0, status: 'running', progressPercent: 50 },
+          ],
+        },
         { taskId: 'task-2', requestId: 'request-2', status: 'succeeded', progressPercent: 100 },
       ],
     });
@@ -48,9 +57,23 @@ describe('taskClient', () => {
     const tasks = await pollTasks(['task-1', 'task-2']);
 
     expect(tasks).toHaveLength(2);
+    expect(tasks[0].maxConcurrency).toBe(4);
+    expect(tasks[0].childTasks?.[0].taskId).toBe('task-1-child-1');
     expect(global.fetch).toHaveBeenCalledWith('/api/tasks/status', expect.objectContaining({
       body: JSON.stringify({ taskIds: ['task-1', 'task-2'] }),
     }));
+  });
+
+  it('returns an empty array for an empty task status response', async () => {
+    mockFetch({ success: true, tasks: [] });
+
+    await expect(pollTasks(['missing-task'])).resolves.toEqual([]);
+  });
+
+  it('throws the backend error message for failed task requests', async () => {
+    mockFetch({ error: 'task backend exploded' }, false);
+
+    await expect(createTask(request)).rejects.toThrow('task backend exploded');
   });
 
   it('supports cancel, batch cancel, and cost estimation', async () => {

@@ -116,6 +116,7 @@ export type TaskSnapshot = {
   progressPercent: number;
   result?: PipelineOutput | null;
   errorMessage?: string | null;
+  maxConcurrency?: number;
   childTasks?: Array<{
     taskId: string;
     index: number;

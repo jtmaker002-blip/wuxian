@@ -89,8 +89,21 @@ describe('project and template routes', () => {
               id: 'node-1',
               scene: 'coherent_storyboard_25',
               status: 'loading',
+              params: { executionMode: 'real', imageModel: 'gpt-image-1.5' },
               taskInfo: { taskId: 'task-1', status: 'running', loading: true },
             },
+            {
+              id: 'node-2',
+              scene: 'upscale',
+              parentIds: ['node-1'],
+              status: 'idle',
+            },
+          ],
+          edges: [
+            { id: 'edge-1', source_node_id: 'node-1', target_node_id: 'node-2', source: 'node-1', target: 'node-2' },
+          ],
+          groups: [
+            { id: 'group-1', nodeIds: ['node-1', 'node-2'], label: 'Storyboard Group' },
           ],
         }),
       });
@@ -114,7 +127,31 @@ describe('project and template routes', () => {
       expect(copy.success).toBe(true);
       expect(copy.project.id).not.toBe(saved.project.id);
       expect(copy.project.nodes[0].id).not.toBe('node-1');
+      expect(copy.project.nodes[0].params).toEqual({ executionMode: 'real', imageModel: 'gpt-image-1.5' });
+      expect(copy.project.edges[0].source_node_id).toBe(copy.project.nodes[0].id);
+      expect(copy.project.edges[0].target_node_id).toBe(copy.project.nodes[1].id);
+      expect(copy.project.edges[0].source).toBe(copy.project.nodes[0].id);
+      expect(copy.project.edges[0].target).toBe(copy.project.nodes[1].id);
+      expect(copy.project.groups[0].nodeIds).toEqual([copy.project.nodes[0].id, copy.project.nodes[1].id]);
       expect(copy.project.templateId).toBe(template.template.id);
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
+  it('rejects unsafe project and template ids instead of reading outside storage dirs', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const projectResponse = await fetch(`${serverHandle.baseUrl}/api/projects/../secret`);
+      expect(projectResponse.status).toBe(404);
+
+      const templateResponse = await fetch(`${serverHandle.baseUrl}/api/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId: '../secret', name: 'Bad Template' }),
+      });
+      expect(templateResponse.status).toBe(400);
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }

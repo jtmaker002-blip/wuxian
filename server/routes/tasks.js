@@ -3,8 +3,8 @@ import { cancelTask, createTask, estimateCost, getTasks } from '../services/mock
 
 const router = express.Router();
 
-router.post('/create', (req, res) => {
-  const task = createTask(req.body);
+router.post('/create', async (req, res) => {
+  const task = createTask(req.body, req.app.locals);
   res.json({ success: true, taskId: task.taskId });
 });
 
@@ -19,6 +19,7 @@ router.post('/status', (req, res) => {
       progressPercent: task.progressPercent,
       result: task.result,
       errorMessage: task.errorMessage,
+      maxConcurrency: task.maxConcurrency,
       childTasks: task.childTasks?.map((child) => ({
         taskId: child.taskId,
         index: child.index,
@@ -51,8 +52,8 @@ router.post('/calculate-cost', (req, res) => {
   });
 });
 
-router.post('/retry', (req, res) => {
-  const task = createTask(req.body?.request || {});
+router.post('/retry', async (req, res) => {
+  const task = createTask(req.body?.request || {}, req.app.locals);
   res.json({ success: true, taskId: task.taskId });
 });
 

@@ -105,6 +105,7 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
               status: task.status,
               progressPercent: task.progressPercent,
               ...(task.childTasks ? { childTasks: task.childTasks } : {}),
+              ...(task.maxConcurrency ? { maxConcurrency: task.maxConcurrency } : {}),
             },
           });
       }
@@ -131,7 +132,7 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       return true;
     }
 
-    const params = {
+    const params: Record<string, any> = {
       ...definition.defaultParams,
       ...(node.params || {}),
       prompt: node.prompt || node.params?.prompt || definition.defaultParams.prompt,

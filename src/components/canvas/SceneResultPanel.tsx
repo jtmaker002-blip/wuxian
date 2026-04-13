@@ -29,6 +29,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const storyboard = structuredData?.storyboard || [];
   const frameDeduction = structuredData?.frameDeduction;
   const lightingRequest = structuredData?.lightingRequest;
+  const providerFallback = structuredData?.providerFallback;
   const progress = data.taskInfo?.progressPercent ?? 0;
   const isStoryboard25 = data.scene === SCENES.COHERENT_STORYBOARD_25;
   const isLightCorrection = data.scene === SCENES.CINEMATIC_LIGHT_CORRECTION;
@@ -39,6 +40,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const selectedShot = storyboard[selectedIndex];
   const selectedImage = images[selectedIndex];
   const childTasks = data.taskInfo && 'childTasks' in data.taskInfo ? (data.taskInfo as any).childTasks || [] : [];
+  const maxConcurrency = data.taskInfo && 'maxConcurrency' in data.taskInfo ? (data.taskInfo as any).maxConcurrency || 4 : 4;
 
   const updateParam = (key: string, value: unknown) => {
     const nextParams = {
@@ -184,6 +186,30 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
               </label>
             )}
             <div className="mt-3 grid grid-cols-2 gap-2">
+              <label className="text-xs text-neutral-400">
+                执行模式
+                <select
+                  value={(data.params?.executionMode as string) || 'mock'}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onChange={(event) => updateParam('executionMode', event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+                >
+                  <option value="mock">Mock 全流程</option>
+                  <option value="real">真实服务优先</option>
+                </select>
+              </label>
+              <label className="text-xs text-neutral-400">
+                图片模型
+                <select
+                  value={(data.params?.imageModel as string) || 'gpt-image-1.5'}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onChange={(event) => updateParam('imageModel', event.target.value)}
+                  className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+                >
+                  <option value="gpt-image-1.5">gpt-image-1.5</option>
+                  <option value="gpt-image-1">gpt-image-1</option>
+                </select>
+              </label>
               {(isLightCorrection || isUpscale || isFrameDeduction || isThreeView) && (
                 <label className="col-span-2 text-xs text-neutral-400">
                   输入图片 URL
@@ -286,7 +312,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
 
         {childTasks.length > 0 && isLoading && (
           <div className="mb-4 rounded-2xl border border-white/10 bg-black/28 p-3">
-            <div className="mb-2 text-xs font-semibold text-white">子任务队列 · 最大并发 4</div>
+            <div className="mb-2 text-xs font-semibold text-white">子任务队列 · 最大并发 {maxConcurrency}</div>
             <div className="grid grid-cols-5 gap-1.5">
               {childTasks.map((task: any) => (
                 <div
@@ -353,6 +379,13 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
             <div className="mt-1 max-w-[320px] text-xs text-neutral-500">
               点击运行后会创建 taskId、轮询状态，并把 mock 结果回填到 outputs / structuredData。
             </div>
+          </div>
+        )}
+
+        {providerFallback && (
+          <div className="mt-3 rounded-2xl border border-amber-300/30 bg-amber-500/12 p-3 text-xs text-amber-100">
+            <div className="font-semibold">真实服务未执行，已回退 Mock</div>
+            <div className="mt-1 text-amber-100/78">{providerFallback}</div>
           </div>
         )}
 
