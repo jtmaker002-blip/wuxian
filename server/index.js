@@ -35,6 +35,7 @@ const {
     publicWorkflowsDir: PUBLIC_WORKFLOWS_DIR,
     libraryDir: LIBRARY_DIR,
     workflowsDir: WORKFLOWS_DIR,
+    tasksDir: TASKS_DIR,
     imagesDir: IMAGES_DIR,
     videosDir: VIDEOS_DIR,
     chatsDir: CHATS_DIR,
@@ -42,7 +43,7 @@ const {
 } = resolveRuntimePaths({ serverDir: __dirname });
 const TEMPLATES_DIR = path.join(WORKFLOWS_DIR, 'templates');
 
-[LIBRARY_DIR, WORKFLOWS_DIR, TEMPLATES_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
+[LIBRARY_DIR, WORKFLOWS_DIR, TEMPLATES_DIR, TASKS_DIR, IMAGES_DIR, VIDEOS_DIR, CHATS_DIR, LIBRARY_ASSETS_DIR].forEach(dir => {
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });
     }
@@ -148,6 +149,7 @@ app.locals.VIDEOS_DIR = VIDEOS_DIR;
 app.locals.LIBRARY_DIR = LIBRARY_DIR;
 app.locals.WORKFLOWS_DIR = WORKFLOWS_DIR;
 app.locals.TEMPLATES_DIR = TEMPLATES_DIR;
+app.locals.TASKS_DIR = TASKS_DIR;
 
 // ============================================================================
 // WORKFLOW SANITIZATION HELPERS

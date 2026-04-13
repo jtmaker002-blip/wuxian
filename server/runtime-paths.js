@@ -7,6 +7,17 @@ function resolveExistingPath(candidates, exists = fs.existsSync) {
     return found || filtered[0] || null;
 }
 
+function isAbsoluteLike(candidate) {
+    return path.isAbsolute(candidate) || /^[A-Za-z]:[\\/]/.test(String(candidate || ''));
+}
+
+function resolveParent(candidate) {
+    if (isAbsoluteLike(candidate)) {
+        return path.join(candidate, '..');
+    }
+    return path.resolve(candidate, '..');
+}
+
 export function resolveServerPort(env = process.env) {
     const candidates = [env.PORT, env.TWITCANVA_SERVER_PORT];
 
@@ -26,7 +37,7 @@ export function resolveRuntimePaths({
     env = process.env,
     exists = fs.existsSync,
 } = {}) {
-    const unpackedRoot = path.resolve(serverDir, '..');
+    const unpackedRoot = resolveParent(serverDir);
     const bundledRoot = resourcesPath
         ? path.join(resourcesPath, 'app.asar')
         : unpackedRoot.includes('app.asar.unpacked')
@@ -47,8 +58,14 @@ export function resolveRuntimePaths({
         path.join(unpackedRoot, 'dist', 'workflows'),
     ], exists);
 
-    const libraryDir = env.LIBRARY_DIR || env.TWITCANVA_LIBRARY_DIR || path.join(unpackedRoot, 'library');
-    const runtimeDir = env.TWITCANVA_RUNTIME_DIR || path.join(libraryDir, '.runtime');
+    const configuredLibraryDir = env.LIBRARY_DIR || env.TWITCANVA_LIBRARY_DIR;
+    const libraryDir = configuredLibraryDir && isAbsoluteLike(configuredLibraryDir)
+        ? configuredLibraryDir
+        : path.join(unpackedRoot, 'library');
+    const configuredRuntimeDir = env.TWITCANVA_RUNTIME_DIR;
+    const runtimeDir = configuredRuntimeDir && isAbsoluteLike(configuredRuntimeDir)
+        ? configuredRuntimeDir
+        : path.join(libraryDir, '.runtime');
 
     return {
         unpackedRoot,
@@ -58,6 +75,7 @@ export function resolveRuntimePaths({
         libraryDir,
         runtimeDir,
         workflowsDir: path.join(libraryDir, 'workflows'),
+        tasksDir: path.join(libraryDir, 'tasks'),
         imagesDir: path.join(libraryDir, 'images'),
         videosDir: path.join(libraryDir, 'videos'),
         chatsDir: path.join(libraryDir, 'chats'),

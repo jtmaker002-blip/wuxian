@@ -1,11 +1,47 @@
 import { generateOpenAIImage, generateOpenAIText } from './openai.js';
 import { detectImageExtensionFromBuffer, saveBufferToFile } from '../utils/imageHelpers.js';
+import fs from 'fs';
+import path from 'path';
 
 const tasks = new Map();
 const MAX_CHILD_CONCURRENCY = 4;
 
 function makeTaskId() {
   return `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function isSafeTaskId(taskId) {
+  return typeof taskId === 'string' && /^[A-Za-z0-9_-]+$/.test(taskId);
+}
+
+function getTasksDir(runtime = {}) {
+  const dir = runtime.TASKS_DIR;
+  if (!dir) return null;
+  fs.mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
+function taskFilePath(taskId, runtime = {}) {
+  if (!isSafeTaskId(taskId)) return null;
+  const dir = getTasksDir(runtime);
+  if (!dir) return null;
+  return path.join(dir, `${taskId}.json`);
+}
+
+function persistTask(task, runtime = {}) {
+  const filePath = taskFilePath(task.taskId, runtime);
+  if (!filePath) return;
+  fs.writeFileSync(filePath, JSON.stringify(task, null, 2));
+}
+
+function loadTask(taskId, runtime = {}) {
+  const existing = tasks.get(taskId);
+  if (existing) return existing;
+  const filePath = taskFilePath(taskId, runtime);
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  const task = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  tasks.set(taskId, task);
+  return task;
 }
 
 function getSceneResultCount(scene) {
@@ -271,18 +307,22 @@ async function executeTask(taskId, request, runtime) {
     const output = await buildTaskOutput(request, runtime);
     const task = tasks.get(taskId);
     if (!task || task.status === 'cancelled') return;
-    tasks.set(taskId, {
+    const nextTask = {
       ...task,
       output,
-    });
+    };
+    tasks.set(taskId, nextTask);
+    persistTask(nextTask, runtime);
   } catch (error) {
     const task = tasks.get(taskId);
     if (!task || task.status === 'cancelled') return;
-    tasks.set(taskId, {
+    const nextTask = {
       ...task,
       status: 'failed',
       errorMessage: error instanceof Error ? error.message : '任务执行失败',
-    });
+    };
+    tasks.set(taskId, nextTask);
+    persistTask(nextTask, runtime);
   }
 }
 
@@ -306,16 +346,17 @@ export function createTask(request, runtime = {}) {
     maxConcurrency: childTasks.length > 0 ? MAX_CHILD_CONCURRENCY : undefined,
   };
   tasks.set(taskId, task);
+  persistTask(task, runtime);
   void executeTask(taskId, request, runtime);
   return task;
 }
 
-export function getTasks(taskIds) {
+export function getTasks(taskIds, runtime = {}) {
   const now = Date.now();
   return taskIds.flatMap((taskId) => {
-    const task = tasks.get(taskId);
+    const task = loadTask(taskId, runtime);
     if (!task) return [];
-    if (task.status === 'cancelled' || task.status === 'failed') return [task];
+    if (task.status === 'cancelled' || task.status === 'failed' || task.status === 'succeeded') return [task];
 
     task.childTasks = updateChildTasks(task, now);
     if (task.childTasks.length > 0) {
@@ -332,12 +373,13 @@ export function getTasks(taskIds) {
       task.result = task.status === 'succeeded' ? task.output : null;
     }
     tasks.set(taskId, task);
+    persistTask(task, runtime);
     return [task];
   });
 }
 
-export function cancelTask(taskId) {
-  const task = tasks.get(taskId);
+export function cancelTask(taskId, runtime = {}) {
+  const task = loadTask(taskId, runtime);
   if (!task) return false;
   task.status = 'cancelled';
   task.errorMessage = '任务已取消';
@@ -349,6 +391,7 @@ export function cancelTask(taskId) {
     ));
   }
   tasks.set(taskId, task);
+  persistTask(task, runtime);
   return true;
 }
 

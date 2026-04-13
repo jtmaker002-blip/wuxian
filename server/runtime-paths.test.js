@@ -36,6 +36,7 @@ describe('resolveRuntimePaths', () => {
     expect(paths.rendererDistDir).toBe(path.join(resourcesPath, 'app.asar', 'dist'));
     expect(paths.publicWorkflowsDir).toBe(path.join(resourcesPath, 'app.asar', 'dist', 'workflows'));
     expect(paths.libraryDir).toBe(path.join(resourcesPath, 'app.asar.unpacked', 'library'));
+    expect(paths.tasksDir).toBe(path.join(resourcesPath, 'app.asar.unpacked', 'library', 'tasks'));
     expect(paths.runtimeDir).toBe(path.join(resourcesPath, 'app.asar.unpacked', 'library', '.runtime'));
     expect(paths.proxySessionStoreFile).toBe(path.join(resourcesPath, 'app.asar.unpacked', 'library', '.runtime', 'openaiteach-proxy-sessions.json'));
   });
@@ -75,6 +76,7 @@ describe('resolveRuntimePaths', () => {
     expect(paths.rendererDistDir).toBe(path.join(repoRoot, 'dist'));
     expect(paths.publicWorkflowsDir).toBe(path.join(repoRoot, 'public', 'workflows'));
     expect(paths.libraryDir).toBe(path.join(repoRoot, 'library'));
+    expect(paths.tasksDir).toBe(path.join(repoRoot, 'library', 'tasks'));
     expect(paths.proxySessionStoreFile).toBe(path.join(repoRoot, 'library', '.runtime', 'openaiteach-proxy-sessions.json'));
   });
 
@@ -90,6 +92,7 @@ describe('resolveRuntimePaths', () => {
     });
 
     expect(paths.libraryDir).toBe(userDataLibrary);
+    expect(paths.tasksDir).toBe(path.join(userDataLibrary, 'tasks'));
     expect(paths.imagesDir).toBe(path.join(userDataLibrary, 'images'));
     expect(paths.videosDir).toBe(path.join(userDataLibrary, 'videos'));
     expect(paths.proxySessionStoreFile).toBe(path.join(userDataLibrary, '.runtime', 'openaiteach-proxy-sessions.json'));

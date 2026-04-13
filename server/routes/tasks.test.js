@@ -1,10 +1,17 @@
 import express from 'express';
-import { describe, expect, it } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import tasksRouter from './tasks.js';
+
+let rootDir;
+let tasksDir;
 
 async function createServer() {
   const app = express();
   app.use(express.json());
+  app.locals.TASKS_DIR = tasksDir;
   app.use('/api/tasks', tasksRouter);
   return await new Promise((resolve) => {
     const server = app.listen(0, () => {
@@ -18,6 +25,16 @@ async function createServer() {
 }
 
 describe('tasks routes', () => {
+  beforeEach(() => {
+    rootDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tasks-routes-'));
+    tasksDir = path.join(rootDir, 'tasks');
+    fs.mkdirSync(tasksDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(rootDir, { recursive: true, force: true });
+  });
+
   it('creates, polls, estimates, and cancels mock tasks', async () => {
     const serverHandle = await createServer();
 
@@ -37,6 +54,7 @@ describe('tasks routes', () => {
       const created = await createResponse.json();
       expect(created.success).toBe(true);
       expect(created.taskId).toMatch(/^task_/);
+      expect(fs.existsSync(path.join(tasksDir, `${created.taskId}.json`))).toBe(true);
 
       const costResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/calculate-cost`, {
         method: 'POST',
@@ -107,6 +125,46 @@ describe('tasks routes', () => {
       expect(status.tasks[0].childTasks).toHaveLength(4);
       expect(status.tasks[0].result.imageList).toHaveLength(4);
       expect(status.tasks[0].result.imageList[0].url).toMatch(/^data:image\/svg\+xml;base64,/);
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
+  it('restores persisted task snapshots from disk after memory-only route recreation', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const persistedTask = {
+        taskId: 'task_persisted',
+        requestId: 'request-persisted',
+        status: 'succeeded',
+        progressPercent: 100,
+        result: {
+          imageList: [{ url: 'data:image/svg+xml;base64,PHN2Zy8+', label: 'Persisted' }],
+          structuredData: { scene: 'plot_deduction_four_grid' },
+        },
+        output: {
+          imageList: [{ url: 'data:image/svg+xml;base64,PHN2Zy8+', label: 'Persisted' }],
+          structuredData: { scene: 'plot_deduction_four_grid' },
+        },
+        childTasks: [],
+        errorMessage: null,
+      };
+      fs.writeFileSync(path.join(tasksDir, 'task_persisted.json'), JSON.stringify(persistedTask, null, 2));
+
+      const statusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: ['task_persisted'] }),
+      });
+      const status = await statusResponse.json();
+
+      expect(status.tasks[0]).toMatchObject({
+        taskId: 'task_persisted',
+        status: 'succeeded',
+        progressPercent: 100,
+      });
+      expect(status.tasks[0].result.imageList[0].label).toBe('Persisted');
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }

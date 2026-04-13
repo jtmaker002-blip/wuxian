@@ -12,7 +12,7 @@ router.post('/status', (req, res) => {
   const taskIds = Array.isArray(req.body?.taskIds) ? req.body.taskIds : [];
   res.json({
     success: true,
-    tasks: getTasks(taskIds).map((task) => ({
+    tasks: getTasks(taskIds, req.app.locals).map((task) => ({
       taskId: task.taskId,
       requestId: task.requestId,
       status: task.status,
@@ -33,14 +33,14 @@ router.post('/status', (req, res) => {
 });
 
 router.post('/cancel', (req, res) => {
-  res.json({ success: Boolean(req.body?.taskId && cancelTask(req.body.taskId)) });
+  res.json({ success: Boolean(req.body?.taskId && cancelTask(req.body.taskId, req.app.locals)) });
 });
 
 router.post('/cancel-batch', (req, res) => {
   const taskIds = Array.isArray(req.body?.taskIds) ? req.body.taskIds : [];
   res.json({
     success: true,
-    cancelledTaskIds: taskIds.filter((taskId) => cancelTask(taskId)),
+    cancelledTaskIds: taskIds.filter((taskId) => cancelTask(taskId, req.app.locals)),
   });
 });
 
