@@ -38,6 +38,16 @@ import {
 import { getAllVoiceCapabilities, getNativeVideoCapability, getNativeVideoFeatureKeys, getNativeVideoModelNotes, getNativeVideoModelSources, getVideoCapability, type NativeVideoFeatureKey } from '../../config/modelCapabilities';
 import { canQuickAddStandardVideoImage, getEnabledVideoModes, resolveStandardVideoCapabilityState, sanitizeVideoNodeState } from '../../utils/videoCapabilityState';
 import { getVideoModeAvailabilityState, resolveEffectiveVideoMode } from '../../utils/videoModeResolution';
+import {
+    getLegacyVideoModeForPanelMode,
+    getVideoPanelInputCounts,
+    getVideoPanelModeByKey,
+    getVideoPanelModeReferencePolicy,
+    getVideoPanelModeValidation,
+    PRIMARY_VIDEO_PANEL_MODE_KEYS,
+    resolveVideoPanelModeKey,
+    type VideoPanelMediaType,
+} from '../../utils/videoPanelModes';
 import { useStoredOpenAiTeachProviderConfig } from '../../shared/provider/openaiteach-config';
 
 const CAMERA_CONTROL_OPTIONS = {
@@ -95,8 +105,8 @@ function renderExecutionBadge(
     const config =
         support.mode === 'hosted-token'
             ? { label: 'Token', className: 'bg-emerald-600/20 text-emerald-300' }
-            : support.mode === 'local-key'
-                ? { label: '本地', className: 'bg-amber-600/20 text-amber-300' }
+        : support.mode === 'local-key'
+                ? { label: '前端', className: 'bg-amber-600/20 text-amber-300' }
                 : { label: '未实现', className: 'bg-rose-600/20 text-rose-300' };
 
     return (
@@ -125,7 +135,7 @@ function getExecutionSupportBadgeLabel(
     mode: 'hosted-token' | 'local-key' | 'unimplemented' | undefined
 ) {
     if (mode === 'hosted-token') return 'TOKEN';
-    if (mode === 'local-key') return '本地Key';
+    if (mode === 'local-key') return '前端';
     if (mode === 'unimplemented') return '未实现';
     return null;
 }
@@ -753,6 +763,115 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         (selectedVideoMode === 'motion-control' && !hasCharacterImageInput)
     );
     const shouldShowQuickAddVideo = Boolean(onQuickAddInputNode) && isVideoNode && selectedVideoMode === 'motion-control' && !hasVideoReferenceInput;
+    const activeVideoPanelMode = isVideoNode ? resolveVideoPanelModeKey(data) : 'text2video';
+    const activeVideoPanelDefinition = getVideoPanelModeByKey(activeVideoPanelMode);
+    const activeVideoPanelPolicy = getVideoPanelModeReferencePolicy(activeVideoPanelMode);
+    const videoPanelInputCounts = getVideoPanelInputCounts(
+        connectedImageNodes.map((node) => ({
+            id: node.id,
+            type: node.type,
+            url: node.url,
+        }))
+    );
+    const videoPanelValidation = getVideoPanelModeValidation(activeVideoPanelMode, videoPanelInputCounts);
+    const videoPanelReferenceItems = isVideoNode
+        ? connectedImageNodes
+            .filter((node) => {
+                if (activeVideoPanelMode === 'text2video') return false;
+                if ((node.type === NodeType.IMAGE || node.type === NodeType.IMAGE_EDITOR) && activeVideoPanelPolicy.acceptsImage) return true;
+                if (node.type === NodeType.VIDEO && activeVideoPanelPolicy.acceptsVideo) return true;
+                if (node.type === NodeType.AUDIO && activeVideoPanelPolicy.acceptsAudio) return true;
+                return false;
+            })
+            .map((node, index) => {
+                const mediaType: VideoPanelMediaType =
+                    node.type === NodeType.VIDEO
+                        ? 'video'
+                        : node.type === NodeType.AUDIO
+                            ? 'audio'
+                            : 'image';
+                const label =
+                    activeVideoPanelMode === 'frames2video'
+                        ? index === 0 ? '首帧' : index === 1 ? '尾帧' : `参考 ${index + 1}`
+                        : mediaType === 'video'
+                            ? `视频 ${index + 1}`
+                            : mediaType === 'audio'
+                                ? `音频 ${index + 1}`
+                                : activeVideoPanelMode === 'singleImage2video'
+                                    ? '首帧'
+                                    : `图片 ${index + 1}`;
+                return {
+                    ...node,
+                    mediaType,
+                    label,
+                };
+            })
+        : [];
+    const selectedCharacterReferenceUrl = isVideoNode ? data.characterReferenceUrls?.[0] : undefined;
+
+    const handleVideoPanelModeChange = (mode: typeof activeVideoPanelMode) => {
+        const nextVideoMode = getLegacyVideoModeForPanelMode(mode);
+        const updates: Partial<NodeData> = {
+            videoPanelMode: mode,
+            videoMode: nextVideoMode,
+            errorMessage: undefined,
+        };
+
+        if (mode === 'frames2video') {
+            const initialFrameInputs =
+                data.frameInputs && data.frameInputs.length > 0
+                    ? data.frameInputs
+                    : connectedFrameSourceNodes.slice(0, 2).map((node, idx) => ({
+                        nodeId: node.id,
+                        order: idx === 0 ? 'start' : 'end' as 'start' | 'end',
+                    }));
+            updates.frameInputs = initialFrameInputs;
+        }
+
+        onUpdate(data.id, updates);
+    };
+
+    const appendVideoPromptToken = (token: string, updates: Partial<NodeData> = {}) => {
+        const currentPrompt = localPrompt || data.prompt || '';
+        const nextPrompt = currentPrompt.includes(token)
+            ? currentPrompt
+            : `${currentPrompt}${currentPrompt ? '\n\n' : ''}${token}`;
+        setLocalPrompt(nextPrompt);
+        lastSentPromptRef.current = nextPrompt;
+        onUpdate(data.id, { prompt: nextPrompt, ...updates });
+    };
+
+    const handleVideoMark = () => {
+        const markerIndex = (localPrompt.match(/\[标记:/g) || []).length + 1;
+        appendVideoPromptToken(`[标记:参考点#${markerIndex}]`, {
+            imageToolAction: `视频标记 #${markerIndex}`,
+        });
+    };
+
+    const handlePresetCameraMove = () => {
+        if (!activeVideoPanelPolicy.canUsePresetCamera) return;
+        appendVideoPromptToken('运镜：平滑推进，轻微环绕主体，保持画面稳定。', {
+            imageToolAction: '预设运镜',
+            imageCameraSettings: {
+                camera: 'Arri Alexa 65',
+                lens: 'Arri Signature Prime',
+                focalLengthMm: '35',
+                aperture: 'f/4',
+            },
+        });
+    };
+
+    const handleCharacterReferenceSelect = () => {
+        const imageReference = connectedImageNodes.find((node) => node.type === NodeType.IMAGE || node.type === NodeType.IMAGE_EDITOR);
+        if (!imageReference) {
+            onQuickAddInputNode?.(data.id, 'image');
+            return;
+        }
+        appendVideoPromptToken('@角色库{角色参考1}', {
+            characterReferenceUrls: [imageReference.url],
+            imageToolAction: '角色库引用',
+        });
+    };
 
     // Get available durations for current model
     const availableDurations = shouldLockVideoParameterControls ? [] : currentVideoModeCapability?.durations ?? [];
@@ -1050,6 +1169,149 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             {/* Prompt Textarea with Expand Button - Hidden for storyboard-generated scenes */}
             {!isOfflineReadonlyVideoNode && !isStoryboardGeneratedScene && (
                 <div className="mb-3">
+                    {isVideoNode && (
+                        <div className="space-y-3">
+                            <div className="flex items-center gap-1.5 overflow-x-auto rounded-[22px] border border-white/8 bg-[#1f1f1f] p-1.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                                {PRIMARY_VIDEO_PANEL_MODE_KEYS.map((modeKey) => {
+                                    const mode = getVideoPanelModeByKey(modeKey);
+                                    const active = activeVideoPanelMode === mode.key;
+
+                                    return (
+                                        <button
+                                            key={mode.key}
+                                            type="button"
+                                            onClick={() => handleVideoPanelModeChange(mode.key)}
+                                            className={`h-9 shrink-0 rounded-[14px] px-3 text-sm font-medium transition-all ${
+                                                active
+                                                    ? 'bg-white text-black shadow-[0_10px_24px_rgba(255,255,255,0.12)]'
+                                                    : 'text-neutral-300 hover:bg-white/8 hover:text-white'
+                                            }`}
+                                            title={mode.description}
+                                        >
+                                            {mode.label}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+
+                            <div className="grid grid-cols-1 gap-3 min-[680px]:grid-cols-[auto_1fr]">
+                                <div className="grid grid-cols-4 gap-2 min-[680px]:flex min-[680px]:flex-wrap">
+                                    <button
+                                        type="button"
+                                        onClick={handleVideoMark}
+                                        className="flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border border-white/10 bg-[#2a2a2a] text-xs font-medium text-neutral-100 transition-colors hover:border-white/18 hover:bg-[#333] min-[680px]:w-[76px]"
+                                    >
+                                        <Settings2 size={16} />
+                                        <span>标记</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={!activeVideoPanelPolicy.canUsePresetCamera}
+                                        onClick={handlePresetCameraMove}
+                                        className={`flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border text-xs font-medium transition-colors min-[680px]:w-[76px] ${
+                                            activeVideoPanelPolicy.canUsePresetCamera
+                                                ? 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
+                                                : 'cursor-not-allowed border-white/6 bg-[#242424] text-neutral-600'
+                                        }`}
+                                        title={activeVideoPanelPolicy.canUsePresetCamera ? '写入预设运镜' : '当前模式不支持预设运镜'}
+                                    >
+                                        <Film size={16} />
+                                        <span>运镜</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handleCharacterReferenceSelect}
+                                        className={`relative flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border text-xs font-medium transition-colors min-[680px]:w-[76px] ${
+                                            selectedCharacterReferenceUrl
+                                                ? 'border-emerald-300/40 bg-emerald-400/12 text-emerald-100'
+                                                : 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
+                                        }`}
+                                        title={selectedCharacterReferenceUrl ? '已选择角色参考图' : '从已连接图片中选择角色参考；没有图片时会新建图片输入'}
+                                    >
+                                        <Sparkles size={16} />
+                                        <span>角色库</span>
+                                        {selectedCharacterReferenceUrl && (
+                                            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-300" />
+                                        )}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => onQuickAddInputNode?.(data.id, activeVideoPanelPolicy.acceptsVideo ? 'video' : 'image')}
+                                        className="flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border border-dashed border-white/14 bg-[#2a2a2a] text-xs font-medium text-neutral-200 transition-colors hover:border-white/22 hover:bg-[#333] min-[680px]:w-[76px]"
+                                    >
+                                        <ImageIcon size={16} />
+                                        <span>参考素材</span>
+                                    </button>
+                                </div>
+
+                                <div className="min-w-0 rounded-[20px] border border-white/8 bg-[#252525] p-3">
+                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                        <div className="min-w-0">
+                                            <div className="text-[11px] font-medium text-neutral-400">
+                                                {activeVideoPanelDefinition.label} · {activeVideoPanelDefinition.listKey ?? 'prompt'}
+                                            </div>
+                                            <div className="mt-0.5 truncate text-[11px] text-neutral-500">
+                                                {videoPanelValidation.reason ?? activeVideoPanelDefinition.description}
+                                            </div>
+                                        </div>
+                                        <div className="shrink-0 rounded-full border border-white/8 bg-black/20 px-2 py-1 text-[10px] text-neutral-300">
+                                            {videoPanelReferenceItems.length} 个素材
+                                        </div>
+                                    </div>
+                                    {videoPanelReferenceItems.length > 0 ? (
+                                        <div className="flex gap-2 overflow-x-auto pb-1">
+                                            {videoPanelReferenceItems.map((item) => (
+                                                <div
+                                                    key={`${item.id}-${item.label}`}
+                                                    className="relative h-[72px] w-[104px] shrink-0 overflow-hidden rounded-[14px] border border-white/10 bg-black"
+                                                >
+                                                    {item.mediaType === 'video' ? (
+                                                        <video src={item.url} className="h-full w-full object-cover opacity-85" muted playsInline preload="metadata" />
+                                                    ) : item.mediaType === 'audio' ? (
+                                                        <div className="flex h-full w-full items-center justify-center bg-[#161616] text-cyan-300">
+                                                            <Sparkles size={22} />
+                                                        </div>
+                                                    ) : (
+                                                        <img src={item.url} alt={item.label} className="h-full w-full object-cover" />
+                                                    )}
+                                                    <div className="absolute inset-0 bg-gradient-to-t from-black/72 via-transparent to-transparent" />
+                                                    <span className="absolute bottom-1.5 left-1.5 right-1.5 truncate rounded-full bg-black/58 px-2 py-0.5 text-center text-[10px] font-medium text-white">
+                                                        {item.label}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="flex h-[72px] items-center justify-center rounded-[14px] border border-dashed border-white/10 bg-black/16 px-4 text-center text-xs text-neutral-500">
+                                            {activeVideoPanelMode === 'text2video'
+                                                ? '当前模式只读取 prompt。已连接素材不会参与提交。'
+                                                : '添加或连接素材后，这里会显示引用卡片。'}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-[22px] border border-white/8 bg-[#1f1f1f] px-4 py-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                                <textarea
+                                    className="min-h-[132px] w-full resize-none bg-transparent text-[16px] font-light leading-8 text-neutral-100 outline-none placeholder:text-neutral-500"
+                                    placeholder="描述你想要生成的画面内容，@引用素材"
+                                    rows={data.isPromptExpanded ? 12 : 4}
+                                    style={{ minHeight: data.isPromptExpanded ? 220 : 132 }}
+                                    value={localPrompt}
+                                    onChange={(e) => handlePromptChange(e.target.value)}
+                                    onWheel={(e) => e.stopPropagation()}
+                                    onBlur={() => {
+                                        if (updateTimeoutRef.current) {
+                                            clearTimeout(updateTimeoutRef.current);
+                                        }
+                                        if (localPrompt !== data.prompt) {
+                                            onUpdate(data.id, { prompt: localPrompt });
+                                        }
+                                    }}
+                                />
+                            </div>
+                        </div>
+                    )}
                     {isLiblibImagePanel && (
                         <div className="mb-0 space-y-3">
                             <button
@@ -1449,7 +1711,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             </div>
                         </div>
                     )}
-                    {shouldShowVideoCapabilitySummary && !isLiblibVideoFromImagePanel && (
+                    {shouldShowVideoCapabilitySummary && !isLiblibVideoFromImagePanel && !isVideoNode && (
                         <div className="mb-3 space-y-2">
                             <div className="space-y-2">
                                 {connectedVideoFeatureChips.length > 0 && (
@@ -1619,7 +1881,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             </div>
                         </div>
                     )}
-                    {!isLiblibImagePanel && (
+                    {!isLiblibImagePanel && !isVideoNode && (
                         <textarea
                             className={`w-full text-sm outline-none resize-none font-light ${
                                 isLiblibVideoFromImagePanel
@@ -1649,7 +1911,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                         />
                     )}
                     {/* Expand/Shrink Button - Below textarea */}
-                    {!isLiblibImagePanel && (
+                    {!isLiblibImagePanel && !isVideoNode && (
                         <div className="flex justify-end mt-1">
                             <button
                                 onClick={() => onUpdate(data.id, { isPromptExpanded: !data.isPromptExpanded })}
@@ -2338,6 +2600,68 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             </div>
                         )}
 
+                        {isVideoNode && (
+                            <div className="relative" ref={imageCountDropdownRef}>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowImageCountDropdown(!showImageCountDropdown)}
+                                    className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border ${selectBtn}`}
+                                >
+                                    {data.videoCount || 1}个
+                                    <ChevronDown size={12} className="opacity-50" />
+                                </button>
+                                {showImageCountDropdown && (
+                                    <div className={`absolute bottom-full mb-2 right-0 w-20 rounded-lg shadow-xl overflow-hidden z-50 border ${dropdownPanel}`}>
+                                        {[1, 2, 3, 4].map((count) => (
+                                            <button
+                                                key={count}
+                                                type="button"
+                                                onClick={() => {
+                                                    onUpdate(data.id, { videoCount: count });
+                                                    setShowImageCountDropdown(false);
+                                                }}
+                                                className={`flex w-full items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] ${(data.videoCount || 1) === count ? 'text-blue-400' : 'text-neutral-300'}`}
+                                            >
+                                                <span>{count}个</span>
+                                                {(data.videoCount || 1) === count && <Check size={12} />}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {isVideoNode && (
+                            <button
+                                type="button"
+                                disabled={!currentVideoModeCapability?.supportsAudio}
+                                onClick={() => {
+                                    if (!currentVideoModeCapability?.supportsAudio) return;
+                                    onUpdate(data.id, { generateAudio: !Boolean(data.generateAudio) });
+                                }}
+                                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border ${
+                                    currentVideoModeCapability?.supportsAudio
+                                        ? Boolean(data.generateAudio)
+                                            ? 'border-cyan-400/40 bg-cyan-400/12 text-cyan-200'
+                                            : selectBtn
+                                        : 'cursor-not-allowed border-neutral-800 bg-neutral-900/40 text-neutral-600'
+                                }`}
+                                title={currentVideoModeCapability?.supportsAudio ? '切换原生音频' : '当前模型/模式暂不支持音频'}
+                            >
+                                音频
+                            </button>
+                        )}
+
+                        {isVideoNode && (
+                            <button
+                                type="button"
+                                onClick={() => setShowAdvanced(!showAdvanced)}
+                                className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors border ${selectBtn}`}
+                            >
+                                高级参数
+                            </button>
+                        )}
+
                         {/* Generate Button - Active even after success to allow re-generation */}
                         {!isLoading && (() => {
                             const isFaceModeBlocked = false;
@@ -2347,6 +2671,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                             const isUnsupportedSelectedMode = isSelectedVideoModeUnsupported;
                             const isStandardVideoInputBlocked = selectedVideoMode === 'standard' && Boolean(standardVideoBlockedReason);
                             const isImageToVideoPrimary = isVideoNode && Boolean(inputUrl) && selectedVideoMode === 'standard';
+                            const isVideoPanelModeInvalid = isVideoNode && Boolean(data.videoPanelMode) && !videoPanelValidation.isValid;
                             const isHostedTokenMissing =
                                 (isVideoNode && currentVideoExecutionSupport?.mode === 'hosted-token' && !hasHostedToken) ||
                                 (isRegistryImageNode && currentImageExecutionSupport?.mode === 'hosted-token' && !hasHostedToken);
@@ -2354,7 +2679,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 (isVideoNode && !hasAvailableVideoModels) ||
                                 (isRegistryImageNode && !hasAvailableImageModels) ||
                                 (isAudioNode && !hasAvailableVoiceModels);
-                            const isGenerateBlocked = isFaceModeBlocked || isLocalVideoBlocked || isInvalidFrameMode || isInvalidMotionMode || isUnsupportedSelectedMode || isStandardVideoInputBlocked || isHostedTokenMissing || isModelUnavailable || shouldLockVideoParameterControls;
+                            const isGenerateBlocked = isFaceModeBlocked || isLocalVideoBlocked || isVideoPanelModeInvalid || isInvalidFrameMode || isInvalidMotionMode || isUnsupportedSelectedMode || isStandardVideoInputBlocked || isHostedTokenMissing || isModelUnavailable || shouldLockVideoParameterControls;
                             const generateTitle = isModelUnavailable
                                 ? isVideoNode
                                     ? '当前模式下没有可用的视频模型'
@@ -2371,6 +2696,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 ? '本地视频模型生成功能链尚未接通'
                                 : isUnsupportedSelectedMode
                                     ? `当前模型尚未接通${selectedModeUnsupportedLabel}模式，请切换到支持该模式的模型。`
+                                : isVideoPanelModeInvalid
+                                    ? videoPanelValidation.reason ?? '当前视频模式缺少必要素材'
                                 : isInvalidFrameMode
                                     ? '请先连接两张图片后再使用首尾帧模式'
                                         : isInvalidMotionMode

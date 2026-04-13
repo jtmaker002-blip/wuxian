@@ -813,6 +813,91 @@ describe('useGeneration 视频链路保护', () => {
     );
   });
 
+  it('文生视频 tab 会忽略已连接图片，只按纯文本视频请求提交', async () => {
+    const updateNode = vi.fn();
+    generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
+    extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
+
+    const nodes = [
+      createImageNode('image-a', 'data:image/png;base64:image-a'),
+      createVideoNode({
+        videoModel: 'veo3.1',
+        videoPanelMode: 'text2video',
+        parentIds: ['image-a'],
+      }),
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('video-node');
+
+    expect(generateVideoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoModel: 'veo3.1',
+        imageBase64: undefined,
+        referenceImagesBase64: undefined,
+        lastFrameBase64: undefined,
+        motionReferenceUrl: undefined,
+      })
+    );
+  });
+
+  it('图生视频 tab 没有图片素材时会前端报错，不会把视频参考误当图片提交', async () => {
+    const updateNode = vi.fn();
+    const nodes = [
+      createParentVideoNode('video-ref', 'https://example.com/ref.mp4'),
+      createVideoNode({
+        videoModel: 'veo3.1',
+        videoPanelMode: 'singleImage2video',
+        parentIds: ['video-ref'],
+      }),
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('video-node');
+
+    expect(generateVideoMock).not.toHaveBeenCalled();
+    expect(updateNode).toHaveBeenCalledWith(
+      'video-node',
+      expect.objectContaining({
+        status: NodeStatus.ERROR,
+        errorMessage: '图生视频至少需要 1 张图片素材。',
+      })
+    );
+  });
+
+  it('全能参考 tab 有图片和视频时会复用现有运动参考参数提交', async () => {
+    const updateNode = vi.fn();
+    generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
+    extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
+
+    const nodes = [
+      createImageNode('image-a', 'data:image/png;base64:character'),
+      createParentVideoNode('video-ref', 'https://example.com/motion.mp4'),
+      createVideoNode({
+        videoModel: 'kling-v2-6',
+        videoPanelMode: 'mixed2video',
+        parentIds: ['image-a', 'video-ref'],
+        generateAudio: true,
+      }),
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('video-node');
+
+    expect(generateVideoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        videoModel: 'kling-v2-6',
+        imageBase64: 'data:image/png;base64:character',
+        motionReferenceUrl: 'https://example.com/motion.mp4',
+        referenceImagesBase64: undefined,
+        generateAudio: false,
+      })
+    );
+  });
+
   it('Veo 标准模式全图参考会按 referenceImages 链发送，而不是继续走单图降级', async () => {
     const updateNode = vi.fn();
     generateVideoMock.mockResolvedValue('https://example.com/result.mp4');

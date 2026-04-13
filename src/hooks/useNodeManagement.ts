@@ -15,6 +15,11 @@ const DEFAULT_NODE_Y_OFFSET = 100;
 const MIN_VISIBLE_NODE_X = 220;
 const MIN_VISIBLE_NODE_Y = 72;
 
+export function getNextVideoNodeTitle(nodes: Pick<NodeData, 'type'>[]): string {
+    const videoCount = nodes.filter((node) => node.type === NodeType.VIDEO).length;
+    return `视频节点 ${videoCount + 1}`;
+}
+
 export function resolveStandaloneNodeCanvasPosition(
     screenX: number,
     screenY: number,
@@ -78,9 +83,11 @@ export const useNodeManagement = () => {
             imageModel: type === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
             videoModel: type === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
             videoMode: type === NodeType.VIDEO ? 'standard' : undefined,
+            videoPanelMode: type === NodeType.VIDEO ? 'text2video' : undefined,
             aspectRatio: type === NodeType.VIDEO ? '16:9' : 'Auto',
             resolution: 'Auto',
-            parentIds: parentId ? [parentId] : []
+            parentIds: parentId ? [parentId] : [],
+            title: type === NodeType.VIDEO ? getNextVideoNodeTitle(nodes) : undefined,
         };
 
         setNodes(prev => [...prev, newNode]);
@@ -216,11 +223,13 @@ export const useNodeManagement = () => {
                             model: getDefaultModelForNodeType(NodeType.VIDEO),
                             videoModel: getDefaultModelForNodeType(NodeType.VIDEO),
                             videoMode: 'standard',
+                            videoPanelMode: 'singleImage2video',
                             aspectRatio: sourceNode.aspectRatio && sourceNode.aspectRatio !== 'Auto' ? sourceNode.aspectRatio : '16:9',
                             resolution: 'Auto',
                             inputUrl: sourceNode.resultUrl,
                             parentIds: [contextMenu.sourceNodeId],
                             isPromptExpanded: true,
+                            title: getNextVideoNodeTitle(nodes),
                         };
                     } else if (sourceFeedsImageFlow && type === NodeType.IMAGE) {
                         newNode = {
@@ -289,11 +298,13 @@ export const useNodeManagement = () => {
                             imageModel: type === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
                             videoModel: type === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
                             videoMode: type === NodeType.VIDEO ? 'standard' : undefined,
+                            videoPanelMode: type === NodeType.VIDEO ? 'text2video' : undefined,
                             audioModel: type === NodeType.AUDIO ? getDefaultModelForNodeType(NodeType.AUDIO) : undefined,
                             aspectRatio: type === NodeType.VIDEO ? '16:9' : 'Auto',
                             resolution: 'Auto',
                             parentIds: contextMenu.sourceNodeId ? [contextMenu.sourceNodeId] : [],
                             textMode: type === NodeType.TEXT ? 'editing' : undefined,
+                            title: type === NodeType.VIDEO ? getNextVideoNodeTitle(nodes) : undefined,
                         };
                     }
                 } else {
@@ -333,11 +344,13 @@ export const useNodeManagement = () => {
                             imageModel: type === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
                             videoModel: type === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
                             videoMode: type === NodeType.VIDEO ? 'standard' : undefined,
+                            videoPanelMode: type === NodeType.VIDEO ? 'text2video' : undefined,
                             audioModel: type === NodeType.AUDIO ? getDefaultModelForNodeType(NodeType.AUDIO) : undefined,
                             aspectRatio: type === NodeType.VIDEO ? '16:9' : 'Auto',
                             resolution: 'Auto',
                             parentIds: [],
-                            textMode: type === NodeType.TEXT ? 'editing' : undefined
+                            textMode: type === NodeType.TEXT ? 'editing' : undefined,
+                            title: type === NodeType.VIDEO ? getNextVideoNodeTitle(nodes) : undefined,
                         };
                     }
                     // Update source to add new node as parent

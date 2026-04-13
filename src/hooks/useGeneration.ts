@@ -21,6 +21,12 @@ import { getAllVoiceCapabilities, getVideoCapability, getVoiceCapability } from 
 import { getImageExecutionSupport, getVideoExecutionSupportForContext, getVoiceExecutionSupport } from '../config/modelExecutionSupport';
 import { resolveStandardVideoCapabilityState, sanitizeVideoNodeState } from '../utils/videoCapabilityState';
 import { getVideoModeAvailabilityState, resolveEffectiveVideoMode } from '../utils/videoModeResolution';
+import {
+    getLegacyVideoModeForPanelMode,
+    getVideoPanelInputCounts,
+    getVideoPanelModeValidation,
+    resolveVideoPanelModeKey,
+} from '../utils/videoPanelModes';
 
 interface UseGenerationProps {
     nodes: NodeData[];
@@ -119,9 +125,26 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 ? (node.videoModel ? canonicalizeVideoModelId(node.videoModel) : undefined)
                 : node.videoModel;
         const videoCapability = node.type === NodeType.VIDEO ? getVideoCapability(canonicalVideoModel) : undefined;
+        const hasExplicitVideoPanelMode = node.type === NodeType.VIDEO && Boolean(node.videoPanelMode);
+        const requestedVideoPanelMode =
+            node.type === NodeType.VIDEO
+                ? resolveVideoPanelModeKey(node)
+                : 'text2video';
+        const panelLegacyVideoMode =
+            node.type === NodeType.VIDEO
+                ? getLegacyVideoModeForPanelMode(requestedVideoPanelMode)
+                : node.videoMode;
         const normalizedVideoNode =
             node.type === NodeType.VIDEO && videoCapability
-                ? { ...node, videoModel: canonicalVideoModel, ...sanitizeVideoNodeState({ ...node, videoModel: canonicalVideoModel }, videoCapability) }
+                ? {
+                    ...node,
+                    videoModel: canonicalVideoModel,
+                    videoPanelMode: requestedVideoPanelMode,
+                    ...sanitizeVideoNodeState(
+                        { ...node, videoModel: canonicalVideoModel, videoMode: panelLegacyVideoMode },
+                        videoCapability
+                    ),
+                }
                 : node;
         const connectedParentNodes =
             normalizedVideoNode.type === NodeType.VIDEO
@@ -133,17 +156,6 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
             normalizedVideoNode.type === NodeType.VIDEO
                 ? connectedParentNodes.map((candidate) => ({ type: candidate?.type }))
                 : [];
-        const activeVideoMode =
-            normalizedVideoNode.type === NodeType.VIDEO
-                ? resolveEffectiveVideoMode(
-                    normalizedVideoNode,
-                    connectedParentPreviews
-                )
-                : 'standard';
-        const selectedVideoModeAvailability =
-            normalizedVideoNode.type === NodeType.VIDEO
-                ? getVideoModeAvailabilityState(normalizedVideoNode, videoCapability)
-                : undefined;
         const connectedFrameSourceNodes =
             normalizedVideoNode.type === NodeType.VIDEO
                 ? connectedParentNodes.filter(
@@ -162,11 +174,60 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                         Boolean(candidate.resultUrl)
                 )
                 : [];
-        const standardVideoSources =
+        const videoPanelInputCounts =
             normalizedVideoNode.type === NodeType.VIDEO
+                ? getVideoPanelInputCounts(
+                    connectedParentNodes
+                        .filter(Boolean)
+                        .map((candidate) => ({
+                            id: candidate!.id,
+                            type: candidate!.type,
+                            url: candidate!.resultUrl,
+                        }))
+                )
+                : { imageCount: 0, videoCount: 0, audioCount: 0 };
+        const canUseMixedMotionReference =
+            requestedVideoPanelMode === 'mixed2video' &&
+            connectedFrameSourceNodes.length > 0 &&
+            connectedVideoSourceNodes.length > 0 &&
+            Boolean(videoCapability?.modes.motionControl.enabled && videoCapability.modes.motionControl.supportsMotionReference);
+        const activeVideoMode =
+            normalizedVideoNode.type === NodeType.VIDEO
+                ? !hasExplicitVideoPanelMode && normalizedVideoNode.videoMode
+                    ? normalizedVideoNode.videoMode
+                    : canUseMixedMotionReference
+                    ? 'motion-control'
+                    : resolveEffectiveVideoMode(
+                        { ...normalizedVideoNode, videoMode: panelLegacyVideoMode },
+                        connectedParentPreviews
+                    )
+                : 'standard';
+        const executionVideoNode =
+            normalizedVideoNode.type === NodeType.VIDEO && videoCapability
+                ? {
+                    ...normalizedVideoNode,
+                    videoMode: activeVideoMode,
+                    ...sanitizeVideoNodeState({ ...normalizedVideoNode, videoMode: activeVideoMode }, videoCapability),
+                }
+                : normalizedVideoNode;
+        const selectedVideoModeAvailability =
+            executionVideoNode.type === NodeType.VIDEO
+                ? getVideoModeAvailabilityState(executionVideoNode, videoCapability)
+                : undefined;
+        const standardVideoSources =
+            executionVideoNode.type === NodeType.VIDEO
                 ? connectedParentNodes.flatMap((candidate) => {
                     if (!candidate) return [];
+                    if (hasExplicitVideoPanelMode && requestedVideoPanelMode === 'text2video') return [];
                     if (candidate.type === NodeType.IMAGE && candidate.resultUrl) {
+                        if (
+                            hasExplicitVideoPanelMode &&
+                            (requestedVideoPanelMode === 'video2video' ||
+                                requestedVideoPanelMode === 'videoEdit2video' ||
+                                requestedVideoPanelMode === 'audio2video')
+                        ) {
+                            return [];
+                        }
                         return [{
                             nodeId: candidate.id,
                             type: 'image' as const,
@@ -175,7 +236,17 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                         }];
                     }
 
-                    if (candidate.type === NodeType.VIDEO && candidate.lastFrame) {
+                    if (
+                        candidate.type === NodeType.VIDEO &&
+                        (
+                            !hasExplicitVideoPanelMode ||
+                            requestedVideoPanelMode === 'mixed2video' ||
+                            requestedVideoPanelMode === 'video2video' ||
+                            requestedVideoPanelMode === 'videoEdit2video'
+                        ) &&
+                        candidate.lastFrame &&
+                        !canUseMixedMotionReference
+                    ) {
                         return [{
                             nodeId: candidate.id,
                             type: 'image' as const,
@@ -210,10 +281,10 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
 
         // Check if prompt is required
         const isVideoFrameDriven =
-            normalizedVideoNode.type === NodeType.VIDEO &&
+            executionVideoNode.type === NodeType.VIDEO &&
             activeVideoMode === 'frame-to-frame' &&
             Boolean(
-                (normalizedVideoNode.frameInputs && normalizedVideoNode.frameInputs.length >= 2) ||
+                (executionVideoNode.frameInputs && executionVideoNode.frameInputs.length >= 2) ||
                 hasLegacyFrameFallback
             );
         const isImageToolDriven =
@@ -249,7 +320,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
         }
 
         if (
-            normalizedVideoNode.type === NodeType.VIDEO &&
+            executionVideoNode.type === NodeType.VIDEO &&
             activeVideoMode !== 'standard' &&
             !selectedVideoModeAvailability?.selectedModeEnabled
         ) {
@@ -441,6 +512,18 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 let lastFrameBase64: string | undefined;
 
                 const frameImageParentIds = connectedFrameSourceNodes.map((parent) => parent.id);
+                const panelValidation = hasExplicitVideoPanelMode
+                    ? getVideoPanelModeValidation(requestedVideoPanelMode, videoPanelInputCounts)
+                    : { isValid: true };
+                if (!panelValidation.isValid) {
+                    const panelReason = 'reason' in panelValidation ? panelValidation.reason : undefined;
+                    updateNode(id, {
+                        status: NodeStatus.ERROR,
+                        errorMessage: panelReason ?? '当前视频模式输入条件不满足。',
+                    });
+                    return;
+                }
+
                 const standardVideoCapabilityState =
                     activeVideoMode === 'standard'
                         ? resolveStandardVideoCapabilityState(videoCapability, {
@@ -474,7 +557,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     return;
                 }
 
-                const videoExecutionSupport = getVideoExecutionSupportForContext(normalizedVideoNode.videoModel, {
+                const videoExecutionSupport = getVideoExecutionSupportForContext(executionVideoNode.videoModel, {
                     videoMode: activeVideoMode,
                     usesReferenceImages: Boolean(standardVideoCapabilityState?.usesReferenceImages),
                     hasHostedToken,
@@ -514,10 +597,10 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 }
 
                 // Generate video
-                const mappedVideoModel = mapRegistryVideoIdToServerVideoId(normalizedVideoNode.videoModel);
+                const mappedVideoModel = mapRegistryVideoIdToServerVideoId(executionVideoNode.videoModel);
                 const requestVideoModel =
                     videoExecutionSupport?.mode === 'hosted-token'
-                        ? normalizedVideoNode.videoModel
+                        ? executionVideoNode.videoModel
                         : mappedVideoModel;
                 if (!requestVideoModel) {
                     updateNode(id, {
@@ -532,12 +615,12 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     imageBase64,
                     referenceImagesBase64,
                     lastFrameBase64,
-                    aspectRatio: normalizedVideoNode.aspectRatio,
-                    resolution: normalizedVideoNode.resolution,
-                    duration: normalizedVideoNode.videoDuration,
+                    aspectRatio: executionVideoNode.aspectRatio,
+                    resolution: executionVideoNode.resolution,
+                    duration: executionVideoNode.videoDuration,
                     videoModel: requestVideoModel,
                     motionReferenceUrl,
-                    generateAudio: normalizedVideoNode.generateAudio === true,
+                    generateAudio: executionVideoNode.generateAudio === true,
                     nodeId: id
                 });
                 const rawResultUrl = videoGenerationResult.resultUrl;

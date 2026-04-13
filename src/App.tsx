@@ -294,6 +294,7 @@ export default function App() {
       imageModel: nextType === NodeType.IMAGE ? getDefaultModelForNodeType(NodeType.IMAGE) : undefined,
       videoModel: nextType === NodeType.VIDEO ? getDefaultModelForNodeType(NodeType.VIDEO) : undefined,
       videoMode: nextType === NodeType.VIDEO ? 'standard' : undefined,
+      videoPanelMode: nextType === NodeType.VIDEO ? 'text2video' : undefined,
       aspectRatio: nextType === NodeType.VIDEO ? '16:9' : 'Auto',
       resolution: 'Auto',
       parentIds: [],
@@ -1664,7 +1665,7 @@ export default function App() {
                   .map(parent => ({
                     id: parent!.id,
                     url: (parent!.type === NodeType.VIDEO ? parent!.lastFrame : parent!.resultUrl) || parent!.resultUrl!,
-                    type: parent!.lastFrame ? NodeType.IMAGE : parent!.type
+                    type: parent!.type
                   }));
               })();
               const connectionSourceNode = connectionStart

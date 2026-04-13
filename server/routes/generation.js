@@ -47,10 +47,9 @@ const router = express.Router();
 function getHostedFallbackMessage({
     hostedProviderApiKey,
     featureLabel,
-    localKeyName,
 }) {
     if (!hostedProviderApiKey) return null;
-    return `${featureLabel} 当前后端尚未接通 OpenAiTeach Token 托管执行链；如要继续使用当前路线，请先配置本地 ${localKeyName}。`;
+    return `${featureLabel} 的专用执行链尚未接入；当前只保留前端参数与面板交互。`;
 }
 
 function hasLocalVideoExecutionKey({
@@ -329,9 +328,8 @@ router.post('/generate-image', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: 'Kling 图片模型',
-                            localKeyName: 'KLING_ACCESS_KEY / KLING_SECRET_KEY',
                         }) ||
-                        "Kling API credentials not configured. Add KLING_ACCESS_KEY and KLING_SECRET_KEY to .env"
+                        'Kling 图片模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
@@ -445,9 +443,8 @@ router.post('/generate-image', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: 'OpenAI 图片模型',
-                            localKeyName: 'OPENAI_API_KEY',
                         }) ||
-                        "OpenAI API key not configured. Add OPENAI_API_KEY to .env"
+                        'OpenAI 图片模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
@@ -695,9 +692,8 @@ router.post('/generate-video', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: 'Fal 托管视频模型',
-                            localKeyName: 'FAL_API_KEY',
                         }) ||
-                        "FAL_API_KEY not configured. Add FAL_API_KEY to .env for Fal-backed video models."
+                        'Fal 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
@@ -789,9 +785,8 @@ router.post('/generate-video', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: 'Kling 视频模型',
-                            localKeyName: 'KLING_ACCESS_KEY / KLING_SECRET_KEY',
                         }) ||
-                        "Kling API credentials not configured. Add KLING_ACCESS_KEY and KLING_SECRET_KEY to .env"
+                        'Kling 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
@@ -856,9 +851,8 @@ router.post('/generate-video', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: 'Hailuo 视频模型',
-                            localKeyName: 'HAILUO_API_KEY',
                         }) ||
-                        "Hailuo API key not configured. Add HAILUO_API_KEY to .env"
+                        'Hailuo 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
@@ -910,9 +904,8 @@ router.post('/generate-video', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: 'OpenAI 视频模型',
-                            localKeyName: 'OPENAI_API_KEY',
                         }) ||
-                        "OpenAI API key not configured. Add OPENAI_API_KEY to .env"
+                        'OpenAI 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
@@ -933,9 +926,8 @@ router.post('/generate-video', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: 'Grok 视频模型',
-                            localKeyName: 'XAI_API_KEY',
                         }) ||
-                        "XAI_API_KEY not configured. Add XAI_API_KEY to .env"
+                        'Grok 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
@@ -961,9 +953,8 @@ router.post('/generate-video', async (req, res) => {
                         getHostedFallbackMessage({
                             hostedProviderApiKey,
                             featureLabel: '即梦 / Seedance 视频模型',
-                            localKeyName: 'SEEDANCE_API_KEY',
                         }) ||
-                        "SEEDANCE_API_KEY not configured. Add SEEDANCE_API_KEY to .env"
+                        '即梦 / Seedance 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 

@@ -94,6 +94,49 @@ describe('resolveStandaloneNodeCanvasPosition', () => {
 });
 
 describe('useNodeManagement connector menu creation', () => {
+  it('creates standalone video nodes using 视频节点 N naming', async () => {
+    vi.resetModules();
+    const reactMock = createReactHookMock();
+    vi.doMock('react', () => reactMock.reactModule);
+
+    const randomUuidSpy = vi.spyOn(globalThis.crypto, 'randomUUID')
+      .mockReturnValueOnce('video-2' as `${string}-${string}-${string}-${string}-${string}`)
+      .mockReturnValueOnce('video-3' as `${string}-${string}-${string}-${string}-${string}`);
+    const { useNodeManagement } = await import('./useNodeManagement');
+    const viewport: Viewport = { x: 0, y: 0, zoom: 1 };
+
+    let hook = reactMock.render(() => useNodeManagement());
+    hook.setNodes([
+      {
+        id: 'video-1',
+        type: NodeType.VIDEO,
+        title: '视频节点 1',
+        x: 0,
+        y: 0,
+        prompt: '',
+        status: NodeStatus.IDLE,
+        model: 'veo3.1',
+        videoModel: 'veo3.1',
+        videoMode: 'standard',
+        aspectRatio: '16:9',
+        resolution: 'Auto',
+      },
+    ]);
+    hook = reactMock.render(() => useNodeManagement());
+
+    hook.addNode(NodeType.VIDEO, 640, 420, undefined, viewport);
+
+    hook = reactMock.render(() => useNodeManagement());
+    const createdNode = hook.nodes.find((node) => node.id === 'video-2');
+
+    expect(createdNode).toMatchObject({
+      type: NodeType.VIDEO,
+      title: '视频节点 2',
+      videoPanelMode: 'text2video',
+    });
+    expect(randomUuidSpy).toHaveBeenCalledOnce();
+  });
+
   it('creates image-to-video state when choosing Video from an image blank connector menu', async () => {
     vi.resetModules();
     const reactMock = createReactHookMock();
@@ -136,6 +179,8 @@ describe('useNodeManagement connector menu creation', () => {
       prompt: sourceNode.prompt,
       status: NodeStatus.IDLE,
       videoMode: 'standard',
+      videoPanelMode: 'singleImage2video',
+      title: '视频节点 1',
       aspectRatio: sourceNode.aspectRatio,
       inputUrl: sourceNode.resultUrl,
       parentIds: [sourceNode.id],

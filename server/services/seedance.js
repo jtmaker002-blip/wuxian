@@ -224,7 +224,7 @@ export async function generateSeedanceVideo({
   apiKey,
 }) {
   if (!apiKey) {
-    throw new Error('SEEDANCE_API_KEY is required');
+    throw new Error('Seedance 视频模型执行链尚未接入；当前只保留前端参数与面板交互。');
   }
 
   const executionMode = resolveSeedanceExecutionMode({ imageBase64, lastFrameBase64 });

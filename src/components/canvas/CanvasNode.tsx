@@ -14,6 +14,7 @@ import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
 import { GridSplitMenu, type GridSplitSelection } from '../menus/GridSplitMenu';
+import { getControlPanelWidthClassName } from './controlPanelLayout';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
@@ -1521,7 +1522,11 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           !data.scene &&
           !(data.prompt && data.prompt.startsWith('Extract panel #')) &&
           !(data.type === NodeType.IMAGE && data.resultUrl && (data.angleMode || imageToolMode === 'lighting')) && (
-          <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${isLiblibImageNode ? 'w-[620px]' : isImageToVideoNode ? 'w-[520px]' : 'w-[600px]'} flex justify-center z-[100]`}>
+          <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${getControlPanelWidthClassName({
+            isLiblibImageNode,
+            isVideoNode: data.type === NodeType.VIDEO,
+            isImageToVideoNode,
+          })} flex justify-center z-[100]`}>
             <NodeControls
               data={data}
               inputUrl={inputUrl}

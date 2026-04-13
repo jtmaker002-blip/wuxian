@@ -183,7 +183,7 @@ describe('generation /generate-image hosted token routing', () => {
     }
   });
 
-  it('returns a truthful fallback message for local-key-only image chains when a hosted token is bound', async () => {
+  it('returns a frontend-only fallback message for image chains whose executor is not connected', async () => {
     const router = await importFreshGenerationRouter();
     const serverHandle = await createServer(router, {
       IMAGES_DIR: imagesDir,
@@ -204,8 +204,8 @@ describe('generation /generate-image hosted token routing', () => {
 
       expect(response.status).toBe(500);
       const body = await response.json();
-      expect(body.error).toContain('OpenAiTeach Token 托管执行链');
-      expect(body.error).toContain('KLING_ACCESS_KEY');
+      expect(body.error).toContain('执行链尚未接入');
+      expect(body.error).toContain('只保留前端参数与面板交互');
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }

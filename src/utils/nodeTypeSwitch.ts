@@ -12,6 +12,8 @@ function omitClearedFields(node: NodeData): Partial<NodeData> {
     linkedVideoNodeId: undefined,
     frameInputs: undefined,
     videoDuration: undefined,
+    videoPanelMode: undefined,
+    videoCount: undefined,
     generateAudio: undefined,
     angleMode: undefined,
     angleSettings: undefined,
@@ -55,6 +57,7 @@ export function switchNodeTypeData(node: NodeData, nextType: SwitchableNodeType)
   return {
     ...base,
     videoMode: 'standard',
+    videoPanelMode: 'text2video',
     videoModel: getDefaultModelForNodeType(NodeType.VIDEO),
   };
 }

@@ -85,19 +85,19 @@ const VIDEO_SUPPORT: Record<string, ModelExecutionSupport> = {
   },
   'kling-v3': {
     mode: 'hosted-token',
-    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧/运动参考等高级模式仍需本地 Kling/FAL key。',
+    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧/运动参考等高级模式先保留前端参数。',
   },
   'kling-v2-6': {
     mode: 'hosted-token',
-    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧/运动参考等高级模式仍需本地 Kling/FAL key。',
+    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧/运动参考等高级模式先保留前端参数。',
   },
   'kling-v2-5-turbo': {
     mode: 'hosted-token',
-    note: '标准文生/图生视频已接 OpenAiTeach token 托管；高级模式仍需本地 Kling key。',
+    note: '标准文生/图生视频已接 OpenAiTeach token 托管；高级模式先保留前端参数。',
   },
   'minimax-hailuo': {
     mode: 'hosted-token',
-    note: '标准文生/图生视频已接 OpenAiTeach token 托管；参考图/首尾帧等高级模式仍需本地 HAILUO_API_KEY。',
+    note: '标准文生/图生视频已接 OpenAiTeach token 托管；参考图/首尾帧等高级模式先保留前端参数。',
   },
   'wan2.6-i2v': {
     mode: 'hosted-token',
@@ -109,11 +109,11 @@ const VIDEO_SUPPORT: Record<string, ModelExecutionSupport> = {
   },
   'jimeng-seedance-2': {
     mode: 'hosted-token',
-    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧等高级模式仍需本地 SEEDANCE_API_KEY。',
+    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧等高级模式先保留前端参数。',
   },
   'jimeng-4.5': {
     mode: 'hosted-token',
-    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧等高级模式仍需本地 SEEDANCE_API_KEY。',
+    note: '标准文生/图生视频已接 OpenAiTeach token 托管；首尾帧等高级模式先保留前端参数。',
   },
   'jimeng-4.1': {
     mode: 'hosted-token',
@@ -177,7 +177,7 @@ export function getVideoExecutionSupportForContext(
 
   const buildHostedAdvancedFallbackSupport = (label: string): ModelExecutionSupport => ({
     mode: 'hosted-token',
-    note: `当前${label}在仅绑定 OpenAiTeach token 时会自动降级为标准托管视频链；若要保留原始高级效果，仍需配置本地 provider key。`,
+    note: `当前${label}会先保留前端参数并按现有托管视频链提交，后续可替换为专用前端接入。`,
   });
 
   if (videoMode === 'frame-to-frame') {
@@ -186,7 +186,7 @@ export function getVideoExecutionSupportForContext(
     }
     return {
       mode: 'local-key',
-      note: '当前首尾帧模式仍需本地 provider key；OpenAiTeach token 托管暂未接通这一高级模式。',
+      note: '当前首尾帧模式先保留前端参数；专用执行链后续接入。',
     };
   }
 
@@ -196,7 +196,7 @@ export function getVideoExecutionSupportForContext(
     }
     return {
       mode: 'local-key',
-      note: '当前运动参考模式仍需本地 provider key；OpenAiTeach token 托管暂未接通这一高级模式。',
+      note: '当前运动参考模式先保留前端参数；专用执行链后续接入。',
     };
   }
 
@@ -206,7 +206,7 @@ export function getVideoExecutionSupportForContext(
     }
     return {
       mode: 'local-key',
-      note: '当前标准参考图/多图参考仍需本地 provider key；OpenAiTeach token 托管暂未接通这一标准高级输入模式。',
+      note: '当前标准参考图/多图参考先保留前端参数；专用执行链后续接入。',
     };
   }
 

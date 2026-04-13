@@ -21,6 +21,16 @@ export enum NodeStatus {
   ERROR = 'error'
 }
 
+export type VideoPanelModeKey =
+  | 'text2video'
+  | 'singleImage2video'
+  | 'frames2video'
+  | 'image2video'
+  | 'video2video'
+  | 'videoEdit2video'
+  | 'audio2video'
+  | 'mixed2video';
+
 export type ImageToolMode =
   | 'style'
   | 'mark'
@@ -88,6 +98,7 @@ export interface NodeData {
 
   // Video node specific
   videoMode?: 'standard' | 'frame-to-frame' | 'motion-control'; // Video generation mode
+  videoPanelMode?: VideoPanelModeKey; // Liblib-style video generation tab/mode
   frameInputs?: { nodeId: string; order: 'start' | 'end' }[]; // For frame-to-frame: connected image nodes
   videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1')
   requestedVideoModel?: string; // The model the user selected before backend routing
@@ -95,6 +106,7 @@ export interface NodeData {
   executedVideoMode?: string; // The effective execution mode/tier the backend used
   executionProvider?: string; // The runtime provider actually used by the backend
   videoDuration?: number; // Video duration in seconds (e.g., 5, 6, 8, 10)
+  videoCount?: number; // Requested number of videos in the node panel
   generateAudio?: boolean; // Whether to generate native audio (Kling 2.6, Veo 3.1)
   inputUrl?: string; // Input URL for video generation (image-to-video)
 
