@@ -39,6 +39,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const progress = data.taskInfo?.progressPercent ?? 0;
   const isStoryboard25 = data.scene === SCENES.COHERENT_STORYBOARD_25;
   const isGridSplit = data.scene === SCENES.GRID_SPLIT;
+  const isThreeView = data.scene === SCENES.CHARACTER_THREE_VIEW_GENERATE;
   const isLightCorrection = data.scene === SCENES.CINEMATIC_LIGHT_CORRECTION;
   const isUpscale = data.scene === SCENES.UPSCALE;
   const selectedShot = storyboard[selectedIndex];
@@ -222,6 +223,29 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
     URL.revokeObjectURL(url);
   };
 
+  const downloadThreeViewContactSheet = () => {
+    const viewImages = images.slice(0, 3);
+    if (viewImages.length === 0) return;
+    const width = 360 * viewImages.length;
+    const height = 280;
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <rect width="${width}" height="${height}" fill="#111111"/>
+        ${viewImages.map((image, index) => `
+          <g transform="translate(${index * 360},0)">
+            <rect x="12" y="12" width="336" height="220" rx="18" fill="#1d1d1d" stroke="#444"/>
+            <image href="${image.url}" x="24" y="24" width="312" height="196" preserveAspectRatio="xMidYMid meet"/>
+            <text x="180" y="258" fill="#ffffff" font-size="18" font-family="Arial, sans-serif" text-anchor="middle">${image.label || ['front', 'side', 'back'][index] || `view ${index + 1}`}</text>
+          </g>
+        `).join('')}
+      </svg>
+    `;
+    const anchor = document.createElement('a');
+    anchor.href = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+    anchor.download = `${definition?.scene || 'character-three-view'}-contact-sheet.svg`;
+    anchor.click();
+  };
+
   return (
     <div className="relative w-full overflow-hidden rounded-[28px] border border-white/12 bg-[#151515] text-white shadow-[0_24px_70px_rgba(0,0,0,0.34)]">
       <div className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.12),transparent_34%),linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.02))] p-4">
@@ -258,6 +282,19 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
             >
               <Download size={13} />
               导出 JSON
+            </button>
+          )}
+          {isThreeView && images.length >= 3 && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                downloadThreeViewContactSheet();
+              }}
+              className="flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs text-white"
+            >
+              <Download size={13} />
+              下载三视图拼图
             </button>
           )}
           {selected && (
