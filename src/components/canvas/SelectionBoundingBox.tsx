@@ -19,6 +19,7 @@ interface SelectionBoundingBoxProps {
     onSortNodes?: (direction: 'horizontal' | 'vertical' | 'grid') => void;
     onCreateVideo?: () => void;
     onEditStoryboard?: (groupId: string) => void;
+    onCancelSceneTasks?: () => void;
 }
 
 // ============================================================================
@@ -147,7 +148,8 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
     onRenameGroup,
     onSortNodes,
     onCreateVideo,
-    onEditStoryboard
+    onEditStoryboard,
+    onCancelSceneTasks
 }) => {
     // ============================================================================
     // STATE
@@ -309,6 +311,17 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                         </svg>
                         Group
                     </button>
+                    {selectedNodes.some((node) => node.scene && node.taskInfo?.loading && node.taskInfo.taskId) && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onCancelSceneTasks?.();
+                            }}
+                            className="bg-rose-600 hover:bg-rose-500 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors"
+                        >
+                            取消任务
+                        </button>
+                    )}
                 </div>
             )}
 
@@ -401,6 +414,18 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                         </svg>
                         Ungroup
                     </button>
+
+                    {selectedNodes.some((node) => node.scene && node.taskInfo?.loading && node.taskInfo.taskId) && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onCancelSceneTasks?.();
+                            }}
+                            className="bg-rose-600 hover:bg-rose-500 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors"
+                        >
+                            取消任务
+                        </button>
+                    )}
 
                     {/* Edit Storyboard Button (only for storyboards) */}
                     {group.storyContext && (

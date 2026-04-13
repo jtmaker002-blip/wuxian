@@ -82,6 +82,7 @@ import { getSceneDefinition } from './services/scenes/registry';
 import { SCENES, type SceneId } from './types/scene';
 import type { GridSplitSelection } from './components/menus/GridSplitMenu';
 import { createSceneGridImageNode, createSceneGridUpscaleNode } from './utils/sceneGridActions';
+import { cancelTasks } from './services/tasks/taskClient';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
@@ -519,6 +520,30 @@ export default function App() {
     setNodes((prev) => [...prev, newNode]);
     setSelectedNodeIds([nodeId]);
   }, [nodes, setNodes, setSelectedNodeIds]);
+
+  const handleCancelSelectedSceneTasks = React.useCallback(async (nodeIds: string[]) => {
+    const taskIds = nodes
+      .filter((node) => nodeIds.includes(node.id) && node.scene && node.taskInfo?.loading && node.taskInfo.taskId)
+      .map((node) => node.taskInfo!.taskId!)
+      .filter(Boolean);
+    if (taskIds.length === 0) return;
+    await cancelTasks(taskIds).catch(() => []);
+    setNodes((prev) => prev.map((node) => (
+      nodeIds.includes(node.id) && node.scene && node.taskInfo?.loading
+        ? {
+          ...node,
+          status: NodeStatus.ERROR,
+          taskInfo: {
+            ...node.taskInfo,
+            loading: false,
+            status: 'cancelled',
+            failedReason: '任务已取消',
+          },
+          errorMessage: '任务已取消',
+        }
+        : node
+    )));
+  }, [nodes, setNodes]);
 
   // Create new canvas
   const handleNewCanvas = () => {
@@ -1736,6 +1761,7 @@ export default function App() {
                 if (group) sortGroupNodes(group.id, direction, nodes, setNodes);
               }}
               onEditStoryboard={handleEditStoryboard}
+              onCancelSceneTasks={() => handleCancelSelectedSceneTasks(selectedNodeIds)}
             />
           )}
 
@@ -1776,6 +1802,10 @@ export default function App() {
                   handleCreateStoryboardVideo(groupNodeIds);
                 }}
                 onEditStoryboard={handleEditStoryboard}
+                onCancelSceneTasks={() => {
+                  const groupNodeIds = nodes.filter(n => n.groupId === group.id).map(n => n.id);
+                  handleCancelSelectedSceneTasks(groupNodeIds);
+                }}
               />
             );
           })}
