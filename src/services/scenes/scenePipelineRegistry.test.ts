@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SCENE_DEFINITIONS, getSceneDefinition } from './registry';
+import { DEFAULT_SCENE_IMAGE_MODEL, FALLBACK_SCENE_IMAGE_MODEL, SCENE_DEFINITIONS, getSceneDefinition } from './registry';
 import { getScenePipeline, pipelineRegistry } from '../pipelines/registry';
 import { createMockTask, getMockTaskStatus } from '../mock/tasks';
 import { SCENES } from '../../types/scene';
@@ -22,6 +22,13 @@ describe('scene registry and mock task pipelines', () => {
     for (const scene of sceneIds) {
       expect(getSceneDefinition(scene)).toBeTruthy();
       expect(getScenePipeline(scene)).toBe(pipelineRegistry[scene]);
+    }
+  });
+
+  it('defaults every image scene to Nano Banana Pro with Nano Banana 2 as fallback', () => {
+    for (const definition of SCENE_DEFINITIONS) {
+      expect(definition.defaultParams.imageModel).toBe(DEFAULT_SCENE_IMAGE_MODEL);
+      expect(definition.defaultParams.fallbackImageModel).toBe(FALLBACK_SCENE_IMAGE_MODEL);
     }
   });
 

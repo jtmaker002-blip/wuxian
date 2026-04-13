@@ -1,5 +1,8 @@
 import { SCENES, type SceneDefinition, type SceneId } from '../../types/scene';
 
+export const DEFAULT_SCENE_IMAGE_MODEL = 'gemini-3-pro-image-preview';
+export const FALLBACK_SCENE_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
+
 export const SCENE_DEFINITIONS: SceneDefinition[] = [
   {
     scene: SCENES.MULTI_VIEW_NINE_GRID,
@@ -11,6 +14,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
     defaultParams: {
       prompt: '同一场景的九个电影机位变化',
       ratio: '16:9',
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
     },
   },
   {
@@ -24,6 +29,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
       storyText: '一个角色发现隐藏线索并做出关键选择',
       visualStyle: 'cinematic realistic',
       ratio: '16:9',
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
       referenceImages: [],
       consistencyLevel: 'high',
     },
@@ -40,6 +47,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
       visualStyle: 'cinematic realistic',
       durationSeconds: 100,
       ratio: '16:9',
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
       referenceImages: [],
     },
   },
@@ -58,6 +67,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
       lightColor: 'neutral',
       brightness: 55,
       prompt: '保持主体，增强电影级层次光影',
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
       referenceImage: '',
     },
   },
@@ -73,6 +84,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
       style: 'realistic',
       background: 'plain',
       keepCostumeConsistency: true,
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
       outputLayout: 'grid',
     },
   },
@@ -86,6 +99,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
     defaultParams: {
       imageUrl: '',
       prompt: '推演 3 秒后的关键帧',
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
     },
   },
   {
@@ -98,6 +113,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
     defaultParams: {
       imageUrl: '',
       prompt: '推演 5 秒前的关键帧',
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
     },
   },
   {
@@ -111,6 +128,8 @@ export const SCENE_DEFINITIONS: SceneDefinition[] = [
       imageUrl: '',
       targetResolution: '2x',
       detailMode: 'cinematic',
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
     },
   },
 ];
