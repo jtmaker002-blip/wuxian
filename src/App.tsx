@@ -79,14 +79,14 @@ import {
 import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
 import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
 import { getSceneDefinition } from './services/scenes/registry';
-import type { SceneId } from './types/scene';
+import { SCENES, type SceneId } from './types/scene';
+import type { GridSplitSelection } from './components/menus/GridSplitMenu';
 import { createSceneGridImageNode, createSceneGridUpscaleNode } from './utils/sceneGridActions';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
   eraseImageSelection,
   repaintImageSelection,
-  splitImageIntoGrid,
   createNineGridTiles,
 } from './utils/imageNodeActions';
 
@@ -781,49 +781,55 @@ export default function App() {
     }
   }, [groups, storyboardGenerator]);
 
-  const handleSplitImageGrid = React.useCallback(async (nodeId: string, rows: number, cols: number) => {
+  const handleSplitImageGrid = React.useCallback((nodeId: string, selection: GridSplitSelection) => {
     const sourceNode = nodes.find((node) => node.id === nodeId);
     if (!sourceNode?.resultUrl) return;
 
-    try {
-      const tiles = await splitImageIntoGrid(sourceNode.resultUrl, rows, cols);
-      const tileWidth = 150;
-      const tileGap = 20;
-      const startX = sourceNode.x + 420;
-      const startY = sourceNode.y;
-      const splitNodes: NodeData[] = tiles.map((tile, index) => ({
-        id: crypto.randomUUID(),
-        type: NodeType.IMAGE,
-        x: startX + tile.col * (tileWidth + tileGap),
-        y: startY + tile.row * (tileWidth + tileGap),
-        prompt: `宫格切分 ${rows}x${cols} · 第 ${index + 1} 块`,
-        status: NodeStatus.SUCCESS,
-        model: sourceNode.model,
-        imageModel: sourceNode.imageModel,
-        aspectRatio: 'Auto',
-        resolution: sourceNode.resolution || 'Auto',
-        resultUrl: tile.dataUrl,
-        resultAspectRatio: tile.resultAspectRatio,
-        title: `切分 ${tile.row + 1}-${tile.col + 1}`,
-        parentIds: [sourceNode.id],
-      }));
+    const definition = getSceneDefinition(SCENES.GRID_SPLIT);
+    if (!definition) return;
 
-      setNodes((prev) => [
-        ...prev.map((node) =>
-          node.id === sourceNode.id
-            ? { ...node, imageToolMode: null, imageToolAction: `${cols}x${rows} 切分` }
-            : node
-        ),
-        ...splitNodes,
-      ]);
-      setSelectedNodeIds(splitNodes.map((node) => node.id));
-    } catch (error) {
-      updateNode(sourceNode.id, {
-        status: NodeStatus.ERROR,
-        errorMessage: error instanceof Error ? error.message : '宫格切分失败',
-      });
-    }
-  }, [nodes, setNodes, setSelectedNodeIds, updateNode]);
+    const nodeIdForSplit = crypto.randomUUID();
+    const newNode: NodeData = {
+      id: nodeIdForSplit,
+      type: NodeType.TOOL,
+      x: sourceNode.x + 460,
+      y: sourceNode.y,
+      prompt: `宫格切分 ${selection.rows}x${selection.cols}`,
+      status: NodeStatus.IDLE,
+      model: 'mock-scene-pipeline',
+      imageModel: sourceNode.imageModel,
+      aspectRatio: sourceNode.resultAspectRatio || sourceNode.aspectRatio || 'Auto',
+      resolution: 'Auto',
+      title: definition.label,
+      name: definition.label,
+      scene: SCENES.GRID_SPLIT,
+      params: {
+        ...definition.defaultParams,
+        imageUrl: sourceNode.resultUrl,
+        mode: selection.mode,
+        rows: selection.rows,
+        cols: selection.cols,
+        ...(selection.gridType ? { gridType: selection.gridType } : {}),
+      },
+      outputs: undefined,
+      taskInfo: undefined,
+      parentIds: [sourceNode.id],
+      isPromptExpanded: true,
+    };
+
+    setNodes((prev) => [
+      ...prev.map((node) =>
+        node.id === sourceNode.id
+          ? { ...node, imageToolMode: null, imageToolAction: `宫格切分 · ${selection.rows}x${selection.cols}` }
+          : node
+      ),
+      newNode,
+    ]);
+    setSelectedNodeIds([nodeIdForSplit]);
+    setTimeout(() => {
+      handleGenerateRef.current(nodeIdForSplit);
+    }, 80);
+  }, [nodes, setNodes, setSelectedNodeIds]);
 
   const handleCreateNineGridTiles = React.useCallback(async (nodeId: string, actionLabel: string) => {
     const sourceNode = nodes.find((node) => node.id === nodeId);

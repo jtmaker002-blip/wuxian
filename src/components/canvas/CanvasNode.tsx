@@ -13,6 +13,7 @@ import { NodeControls } from './NodeControls';
 import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
+import { GridSplitMenu, type GridSplitSelection } from '../menus/GridSplitMenu';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
@@ -20,7 +21,6 @@ import {
   expandImageCanvas,
   applyLightingEffect,
   createNineGridVariant,
-  parseGridSize,
   repaintImageSelection,
   upscaleImage2x,
 } from '../../utils/imageNodeActions';
@@ -83,7 +83,7 @@ interface CanvasNodeProps {
   onImageToVideo?: (nodeId: string) => void;
   onChangeAngleGenerate?: (nodeId: string) => void;
   onQuickAddInputNode?: (nodeId: string, inputType: 'image' | 'video') => void;
-  onSplitImageGrid?: (nodeId: string, rows: number, cols: number) => void;
+  onSplitImageGrid?: (nodeId: string, selection: GridSplitSelection) => void;
   onCreateNineGridTiles?: (nodeId: string, actionLabel: string) => void;
   zoom: number;
   // Mouse event callbacks for chat panel drag functionality
@@ -275,18 +275,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       }
     }
 
-    if (mode === 'split' && data.resultUrl && onSplitImageGrid) {
-      const gridSize = parseGridSize(item);
-      if (gridSize) {
-        onSplitImageGrid(data.id, gridSize.rows, gridSize.cols);
-        onUpdate(data.id, {
-          imageToolMode: null,
-          imageToolAction: item,
-        });
-        return;
-      }
-    }
-
     if (mode === 'enhance' && item === '裁剪' && data.resultUrl && data.focusSelection) {
       try {
         const cropResult = await cropImageBySelection(data.resultUrl, data.focusSelection);
@@ -330,7 +318,19 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       imageToolMode: mode,
       imageToolAction: item,
     });
-  }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onCreateNineGridTiles, onSplitImageGrid, onUpdate]);
+  }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onCreateNineGridTiles, onUpdate]);
+
+  const applyGridSplitSelection = React.useCallback((selection: GridSplitSelection) => {
+    if (!data.resultUrl || !onSplitImageGrid) return;
+    const actionLabel = selection.mode === 'custom'
+      ? `自定义 ${selection.rows}x${selection.cols}`
+      : `${selection.rows}x${selection.cols}`;
+    onSplitImageGrid(data.id, selection);
+    onUpdate(data.id, {
+      imageToolMode: null,
+      imageToolAction: `宫格切分 · ${actionLabel}`,
+    });
+  }, [data.id, data.resultUrl, onSplitImageGrid, onUpdate]);
 
   const startImageAnnotation = React.useCallback((label: string) => {
     const typeByLabel: Record<string, 'reference' | 'note' | 'preserve' | 'ignore'> = {
@@ -500,24 +500,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       label: '画面推演 - 5秒前',
       description: '回推前序画面',
       icon: <svg viewBox="0 0 24 24" className="h-4 w-4 scale-x-[-1]" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 4v8l5 3" /><circle cx="12" cy="12" r="8" /></svg>,
-    },
-  ];
-  const splitMenuItems = [
-    {
-      label: '2x2 切分',
-      description: '四宫格切片',
-      icon: <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M12 4v16M4 12h16" /></svg>,
-    },
-    {
-      label: '3x3 切分',
-      description: '九宫格切片',
-      icon: <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><rect x="4" y="4" width="16" height="16" rx="2" /><path d="M9.33 4v16M14.66 4v16M4 9.33h16M4 14.66h16" /></svg>,
-    },
-    {
-      label: '自动切分引用素材',
-      description: '按内容自动分片',
-      icon: <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4z" /><path d="m14 14 6 6" /><path d="m20 14-6 6" /></svg>,
-      badge: 'Auto',
     },
   ];
   const styleMenuItems = [
@@ -1674,16 +1656,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                 transition: 'transform 0.1s ease-out'
               }}
             >
-              <ImageToolMenuPanel
-                title="宫格切分"
-                items={splitMenuItems}
-                onClose={() => onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined })}
-                onSelect={(item) => applyImageToolAction('split', item, '宫格切分')}
-                variant="dropdown"
-                showCloseButton={false}
-                showTitle={false}
-                widthClassName="w-[220px]"
-              />
+              <GridSplitMenu onSelect={applyGridSplitSelection} />
             </div>
           </div>
         )}

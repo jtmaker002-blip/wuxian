@@ -69,7 +69,7 @@ describe('registry canvas models', () => {
     const seedance = getRegistryVideoModels().find((model) => model.id === 'jimeng-seedance-2');
 
     expect(kling?.supportsMultiImage).toBe(false);
-    expect(veo?.supportsMultiImage).toBe(false);
+    expect(veo?.supportsMultiImage).toBe(true);
     expect(grok?.provider).toBe('xai');
     expect(grok?.supportsMultiImage).toBe(false);
     expect(wan?.provider).toBe('wan');

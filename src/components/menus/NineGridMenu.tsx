@@ -12,6 +12,7 @@ const iconMap = {
   future: TimerReset,
   past: TimerReset,
   upscale: Maximize2,
+  gridSplit: SplitSquareHorizontal,
 };
 
 type NineGridMenuProps = {

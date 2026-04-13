@@ -5,6 +5,23 @@ export const FALLBACK_SCENE_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
 
 export const SCENE_DEFINITIONS: SceneDefinition[] = [
   {
+    scene: SCENES.GRID_SPLIT,
+    label: '宫格切分',
+    description: '把已有图片真实裁切为多张 tile',
+    icon: 'gridSplit',
+    taskType: 'image',
+    nodeType: 'tool',
+    defaultParams: {
+      imageUrl: '',
+      mode: 'preset',
+      gridType: 4,
+      rows: 2,
+      cols: 2,
+      imageModel: DEFAULT_SCENE_IMAGE_MODEL,
+      fallbackImageModel: FALLBACK_SCENE_IMAGE_MODEL,
+    },
+  },
+  {
     scene: SCENES.MULTI_VIEW_NINE_GRID,
     label: '多机位九宫格',
     description: '围绕同一画面生成九个机位角度',

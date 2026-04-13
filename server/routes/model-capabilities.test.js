@@ -1,9 +1,10 @@
 import express from 'express';
 import http from 'http';
+import path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pathToFileURL } from 'url';
 
-const modulePath = 'E:\\自己的无限画布\\TwitCanva-Video-Workflow\\server\\routes\\model-capabilities.js';
+const modulePath = path.join(process.cwd(), 'server', 'routes', 'model-capabilities.js');
 
 async function importFreshRouteModule() {
   const href = pathToFileURL(modulePath).href;

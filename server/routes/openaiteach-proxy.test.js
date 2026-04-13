@@ -5,7 +5,7 @@ import express from 'express';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pathToFileURL } from 'url';
 
-const modulePath = 'E:\\自己的无限画布\\TwitCanva-Video-Workflow\\server\\routes\\openaiteach-proxy.js';
+const modulePath = path.join(process.cwd(), 'server', 'routes', 'openaiteach-proxy.js');
 
 async function importFreshProxyModule() {
   const href = pathToFileURL(modulePath).href;

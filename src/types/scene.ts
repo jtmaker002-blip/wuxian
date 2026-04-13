@@ -1,4 +1,5 @@
 export const SCENES = {
+  GRID_SPLIT: 'grid_split',
   MULTI_VIEW_NINE_GRID: 'multi_view_nine_grid',
   PLOT_DEDUCTION_FOUR_GRID: 'plot_deduction_four_grid',
   COHERENT_STORYBOARD_25: 'coherent_storyboard_25',
@@ -33,6 +34,39 @@ export type SceneDefinition = {
   taskType: SceneTaskType;
   nodeType: SceneNodeType;
   defaultParams: Record<string, any>;
+};
+
+export type GridSplitParams = {
+  imageUrl: string;
+  mode: 'preset' | 'custom';
+  gridType?: 4 | 9 | 16 | 25;
+  rows?: number;
+  cols?: number;
+};
+
+export type PipelineImage = {
+  url: string;
+  width?: number;
+  height?: number;
+  label?: string;
+  status?: string;
+};
+
+export type GridTile = PipelineImage & {
+  id: string;
+  index: number;
+  row: number;
+  col: number;
+  imageUrl: string;
+  crop: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  sourceImageUrl: string;
+  width: number;
+  height: number;
 };
 
 export type StoryboardShot = {
@@ -83,7 +117,7 @@ export type FrameDeductionResult = {
 
 export type PipelineOutput = {
   textList?: string[];
-  imageList?: Array<{ url: string; width?: number; height?: number; label?: string; status?: string }>;
+  imageList?: PipelineImage[];
   videoList?: Array<{ url: string; duration?: number }>;
   audioList?: Array<{ url: string; duration?: number }>;
   structuredData?: any;

@@ -9,6 +9,7 @@ type SceneParameterFormProps = {
 
 export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, onUpdate }) => {
   const isStoryboard25 = data.scene === SCENES.COHERENT_STORYBOARD_25;
+  const isGridSplit = data.scene === SCENES.GRID_SPLIT;
   const isLightCorrection = data.scene === SCENES.CINEMATIC_LIGHT_CORRECTION;
   const isUpscale = data.scene === SCENES.UPSCALE;
   const isFourGrid = data.scene === SCENES.PLOT_DEDUCTION_FOUR_GRID;
@@ -55,34 +56,38 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
         </label>
       )}
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <label className="text-xs text-neutral-400">
-          执行模式
-          <select
-            value={(data.params?.executionMode as string) || 'mock'}
-            onPointerDown={(event) => event.stopPropagation()}
-            onChange={(event) => updateParam('executionMode', event.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
-          >
-            <option value="mock">Mock 全流程</option>
-            <option value="real">真实服务优先</option>
-          </select>
-        </label>
-        <label className="text-xs text-neutral-400">
-          图片模型
-          <select
-            value={(data.params?.imageModel as string) || 'gemini-3-pro-image-preview'}
-            onPointerDown={(event) => event.stopPropagation()}
-            onChange={(event) => updateParam('imageModel', event.target.value)}
-            className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
-          >
-            <option value="gemini-3-pro-image-preview">Nano Banana Pro</option>
-            <option value="gemini-3.1-flash-image-preview">Nano Banana 2</option>
-            <option value="gemini-2.5-flash-image-preview">Nano Banana 1</option>
-            <option value="gpt-image-1.5">gpt-image-1.5</option>
-            <option value="gpt-image-1">gpt-image-1</option>
-          </select>
-        </label>
-        {(isLightCorrection || isUpscale || isFrameDeduction || isThreeView) && (
+        {!isGridSplit && (
+          <>
+            <label className="text-xs text-neutral-400">
+              执行模式
+              <select
+                value={(data.params?.executionMode as string) || 'mock'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('executionMode', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="mock">Mock 全流程</option>
+                <option value="real">真实服务优先</option>
+              </select>
+            </label>
+            <label className="text-xs text-neutral-400">
+              图片模型
+              <select
+                value={(data.params?.imageModel as string) || 'gemini-3-pro-image-preview'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam('imageModel', event.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none"
+              >
+                <option value="gemini-3-pro-image-preview">Nano Banana Pro</option>
+                <option value="gemini-3.1-flash-image-preview">Nano Banana 2</option>
+                <option value="gemini-2.5-flash-image-preview">Nano Banana 1</option>
+                <option value="gpt-image-1.5">gpt-image-1.5</option>
+                <option value="gpt-image-1">gpt-image-1</option>
+              </select>
+            </label>
+          </>
+        )}
+        {(isGridSplit || isLightCorrection || isUpscale || isFrameDeduction || isThreeView) && (
           <label className="col-span-2 text-xs text-neutral-400">
             输入图片 URL
             <input
@@ -100,6 +105,11 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
               className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none focus:border-blue-400/70"
             />
           </label>
+        )}
+        {isGridSplit && (
+          <div className="col-span-2 rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-xs text-neutral-300">
+            当前规格：{data.params?.mode === 'custom' ? '自定义 ' : ''}{Number(data.params?.rows || 2)} × {Number(data.params?.cols || 2)}
+          </div>
         )}
         {(isFourGrid || isStoryboard25 || isLightCorrection) && (
           <label className="col-span-2 text-xs text-neutral-400">

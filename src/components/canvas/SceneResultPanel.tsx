@@ -7,6 +7,7 @@ import { makeMockImageDataUrl } from '../../services/mock/sceneAssets';
 import { calculateTaskCost, cancelTask, pollTasks, retryTask } from '../../services/tasks/taskClient';
 import type { GenerationRequest } from '../../types/scene';
 import { SceneParameterForm } from './scene-node/SceneParameterForm';
+import { GridSplitNode } from './GridSplitNode';
 
 type SceneResultPanelProps = {
   data: NodeData;
@@ -37,6 +38,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const providerFallback = structuredData?.providerFallback;
   const progress = data.taskInfo?.progressPercent ?? 0;
   const isStoryboard25 = data.scene === SCENES.COHERENT_STORYBOARD_25;
+  const isGridSplit = data.scene === SCENES.GRID_SPLIT;
   const isLightCorrection = data.scene === SCENES.CINEMATIC_LIGHT_CORRECTION;
   const isUpscale = data.scene === SCENES.UPSCALE;
   const selectedShot = storyboard[selectedIndex];
@@ -45,7 +47,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const maxConcurrency = data.taskInfo && 'maxConcurrency' in data.taskInfo ? (data.taskInfo as any).maxConcurrency || 4 : 4;
 
   React.useEffect(() => {
-    if (!selected || !data.scene) return;
+    if (!selected || !data.scene || isGridSplit) return;
     let cancelled = false;
     const request: GenerationRequest = {
       params: {
@@ -74,7 +76,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
     return () => {
       cancelled = true;
     };
-  }, [data.id, data.params, data.prompt, data.scene, selected]);
+  }, [data.id, data.params, data.prompt, data.scene, selected, isGridSplit]);
 
   const retryGridItem = async (index: number) => {
     const currentImage = images[index];
@@ -329,7 +331,9 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
           </div>
         )}
 
-        {images.length > 0 ? (
+        {isGridSplit && images.length > 0 ? (
+          <GridSplitNode data={data} onSendImageToNode={onSendImageToNode} />
+        ) : images.length > 0 ? (
           <div className={`grid ${getGridClass(images.length)} gap-2`}>
             {images.map((image, index) => {
               const shot = storyboard[index];

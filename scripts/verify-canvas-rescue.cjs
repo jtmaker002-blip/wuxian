@@ -11,6 +11,7 @@ const checks = [
   ['src/types/project.ts', 'export type GridImageItem'],
   ['src/services/scenes/registry.ts', 'SCENE_DEFINITIONS'],
   ['src/services/pipelines/registry.ts', 'pipelineRegistry'],
+  ['src/services/pipelines/scenes/gridSplitPipeline.ts', 'gridSplitPipeline'],
   ['src/services/pipelines/scenes/plotDeductionFourGridPipeline.ts', 'plotDeductionFourGridPipeline'],
   ['src/services/pipelines/scenes/coherentStoryboard25Pipeline.ts', 'coherentStoryboard25Pipeline'],
   ['src/services/pipelines/scenes/cinematicLightCorrectionPipeline.ts', 'runLocal'],

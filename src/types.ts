@@ -175,7 +175,24 @@ export interface NodeData {
   params?: Record<string, any>;
   outputs?: {
     textList?: string[];
-    imageList?: Array<{ url: string; width?: number; height?: number; label?: string; status?: string }>;
+    imageList?: Array<{
+      url: string;
+      width?: number;
+      height?: number;
+      label?: string;
+      status?: string;
+      imageUrl?: string;
+      index?: number;
+      row?: number;
+      col?: number;
+      crop?: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+      };
+      sourceImageUrl?: string;
+    }>;
     videoList?: Array<{ url: string; duration?: number }>;
     audioList?: Array<{ url: string; duration?: number }>;
     structuredData?: any;
