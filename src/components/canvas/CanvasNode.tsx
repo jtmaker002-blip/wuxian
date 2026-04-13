@@ -14,7 +14,7 @@ import { ChangeAnglePanel } from './ChangeAnglePanel';
 import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
 import { GridSplitMenu, type GridSplitSelection } from '../menus/GridSplitMenu';
-import { getControlPanelWidthClassName } from './controlPanelLayout';
+import { getControlPanelScale, getControlPanelWidthClassName } from './controlPanelLayout';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
@@ -580,6 +580,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   const minEffectiveScale = 0.8;
   const effectiveScale = Math.max(zoom, minEffectiveScale);
   const localScale = effectiveScale / zoom;
+  const controlPanelScale = getControlPanelScale(zoom);
 
   // ============================================================================
   // EFFECTS
@@ -1522,12 +1523,19 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           !data.scene &&
           !(data.prompt && data.prompt.startsWith('Extract panel #')) &&
           !(data.type === NodeType.IMAGE && data.resultUrl && (data.angleMode || imageToolMode === 'lighting')) && (
-          <div className={`absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 ${getControlPanelWidthClassName({
+          <div className="absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 flex justify-center z-[100]">
+            <div
+              className={`${getControlPanelWidthClassName({
             isLiblibImageNode,
             isVideoNode: data.type === NodeType.VIDEO,
             isImageToVideoNode,
-          })} flex justify-center z-[100]`}>
-            <NodeControls
+          })} flex justify-center`}
+              style={{
+                transform: `scale(${controlPanelScale})`,
+                transformOrigin: 'top center',
+              }}
+            >
+              <NodeControls
               data={data}
               inputUrl={inputUrl}
               isLoading={isLoading}
@@ -1542,7 +1550,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               onSelect={onSelect}
               zoom={zoom}
               canvasTheme={canvasTheme}
-            />
+              />
+            </div>
           </div>
         )}
 
