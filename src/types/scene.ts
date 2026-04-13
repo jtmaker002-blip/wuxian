@@ -103,6 +103,7 @@ export type PipelineHandleResult = {
 
 export type ScenePipeline = {
   validate(input: Record<string, any>): Promise<void> | void;
+  runLocal?(ctx: PipelineContext): Promise<PipelineHandleResult | undefined> | PipelineHandleResult | undefined;
   buildRequest(ctx: PipelineContext): Promise<GenerationRequest | GenerationRequest[]> | GenerationRequest | GenerationRequest[];
   handleResult(ctx: PipelineContext, result: PipelineOutput): Promise<PipelineHandleResult> | PipelineHandleResult;
 };

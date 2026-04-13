@@ -6,8 +6,6 @@ import { getSceneDefinition } from '../services/scenes/registry';
 import { getScenePipeline } from '../services/pipelines/registry';
 import { createMockTask, getMockTaskStatus } from '../services/mock/tasks';
 import { createTask as createRemoteTask, pollTasks } from '../services/tasks/taskClient';
-import { SCENES } from '../types/scene';
-import { applyLightingEffect, upscaleImage2x } from '../utils/imageNodeActions';
 
 type UseSceneTaskRunnerOptions = {
   nodes: NodeData[];
@@ -164,85 +162,19 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
     try {
       await pipeline.validate(params);
 
-      if (scene === SCENES.UPSCALE && params.imageUrl) {
-        const result = await upscaleImage2x(params.imageUrl);
-        const taskId = `local_upscale_${Date.now()}`;
+      const localResult = await pipeline.runLocal?.({
+        nodeId,
+        projectId,
+        scene,
+        params,
+      });
+      if (localResult) {
+        const taskId = `local_${scene}_${Date.now()}`;
         patchNode(nodeId, {
           status: NodeStatus.SUCCESS,
-          resultUrl: result.dataUrl,
-          resultAspectRatio: result.resultAspectRatio,
-          outputs: {
-            imageList: [{
-              url: result.dataUrl,
-              label: params.targetResolution || '2x',
-              status: 'succeeded',
-            }],
-            structuredData: {
-              upscale: {
-                targetResolution: params.targetResolution || '2x',
-                detailMode: params.detailMode || 'cinematic',
-                localAction: 'upscaleImage2x',
-              },
-            },
-          },
-          structuredData: {
-            upscale: {
-              targetResolution: params.targetResolution || '2x',
-              detailMode: params.detailMode || 'cinematic',
-              localAction: 'upscaleImage2x',
-            },
-          },
-          taskInfo: {
-            taskId,
-            loading: false,
-            status: 'succeeded',
-            progressPercent: 100,
-          },
-        });
-        return true;
-      }
-
-      if (scene === SCENES.CINEMATIC_LIGHT_CORRECTION && params.originImage) {
-        const brightness = Number(params.brightness ?? 55);
-        const result = await applyLightingEffect(params.originImage, {
-          mode: 'global',
-          smartMode: true,
-          brightness,
-          color:
-            params.lightColor === 'warm' ? '#ffd2a1' :
-            params.lightColor === 'cold' ? '#b9d7ff' :
-            params.lightColor === 'sunset' ? '#ff9c5a' :
-            params.lightColor === 'neon' ? '#68f7ff' :
-            '#ffffff',
-          keyLight: params.keyLight || 'front',
-          rimLight: Boolean(params.rimLightEnabled),
-        });
-        const taskId = `local_lighting_${Date.now()}`;
-        const structuredData = {
-          lightingRequest: {
-            originImage: params.originImage,
-            UI_KeyLight: params.keyLight || 'front',
-            UI_RimLight: Boolean(params.rimLightEnabled),
-            UI_LightColor: params.lightColor || 'neutral',
-            UI_LightBrightness: brightness,
-            prompt: params.prompt || '',
-            Reference_Image_Intent: params.referenceImage || '',
-            localAction: 'applyLightingEffect',
-          },
-        };
-        patchNode(nodeId, {
-          status: NodeStatus.SUCCESS,
-          resultUrl: result.dataUrl,
-          resultAspectRatio: result.resultAspectRatio,
-          outputs: {
-            imageList: [{
-              url: result.dataUrl,
-              label: 'Relit',
-              status: 'succeeded',
-            }],
-            structuredData,
-          },
-          structuredData,
+          resultUrl: localResult.outputs.imageList?.[0]?.url,
+          outputs: localResult.outputs,
+          structuredData: localResult.structuredData,
           taskInfo: {
             taskId,
             loading: false,

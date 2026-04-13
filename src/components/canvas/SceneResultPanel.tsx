@@ -4,7 +4,7 @@ import { getSceneDefinition } from '../../services/scenes/registry';
 import { SCENES } from '../../types/scene';
 import { NodeStatus, type NodeData } from '../../types';
 import { makeMockImageDataUrl } from '../../services/mock/sceneAssets';
-import { cancelTask, pollTasks, retryTask } from '../../services/tasks/taskClient';
+import { calculateTaskCost, cancelTask, pollTasks, retryTask } from '../../services/tasks/taskClient';
 import type { GenerationRequest } from '../../types/scene';
 
 type SceneResultPanelProps = {
@@ -26,6 +26,7 @@ function getGridClass(count: number) {
 
 export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoading, selected, onGenerate, onUpdate, onSendImageToNode }) => {
   const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const [estimatedCost, setEstimatedCost] = React.useState<{ value: number; unit: string } | null>(null);
   const definition = getSceneDefinition(data.scene);
   const images = data.outputs?.imageList || [];
   const structuredData = data.structuredData || data.outputs?.structuredData;
@@ -55,6 +56,38 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
       prompt: key === 'storyText' || key === 'prompt' ? String(value) : data.prompt,
     });
   };
+
+  React.useEffect(() => {
+    if (!selected || !data.scene) return;
+    let cancelled = false;
+    const request: GenerationRequest = {
+      params: {
+        ...(data.params || {}),
+        scene: data.scene,
+        prompt: data.prompt,
+      },
+      metadata: {
+        node_id: data.id,
+        project_id: 'scene-cost-preview',
+      },
+      provider: 'mock',
+      model: 'mock-scene-pipeline',
+      taskType: 'image',
+      requestId: `cost-${data.id}`,
+    };
+    void calculateTaskCost(request)
+      .then((cost) => {
+        if (!cancelled) {
+          setEstimatedCost({ value: cost.estimatedCost, unit: cost.unit });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setEstimatedCost(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [data.id, data.params, data.prompt, data.scene, selected]);
 
   const retryGridItem = async (index: number) => {
     const currentImage = images[index];
@@ -268,6 +301,11 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
             >
               取消任务
             </button>
+          )}
+          {estimatedCost && !isLoading && (
+            <div className="rounded-full border border-white/10 bg-black/35 px-3 py-1.5 text-xs text-neutral-300">
+              预计消耗 · {estimatedCost.value} {estimatedCost.unit}
+            </div>
           )}
         </div>
 

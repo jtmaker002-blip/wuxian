@@ -13,8 +13,11 @@
 - Cinematic lighting request mapping with `UI_KeyLight`, `UI_RimLight`, `UI_LightColor`, and `UI_LightBrightness`.
 - Upscale structured output and local real canvas upscale path.
 - Grid item retry, upscale, download, and send-to-node operations.
+- Grid item retry uses the unified task retry API.
 - Project save/load API and template publish/create-copy API.
+- Workflow panel template library can publish projects as templates and create copies from templates.
 - Template graph remapping for nodes, parentIds, edges, and groups.
+- Project-level TypeScript diagnostics are clean.
 - Liblib image-node smoke verification remains green.
 
 ## Not Fully Production-External
@@ -26,7 +29,7 @@
 ## Risk Items
 
 - Full `npm test` still includes known out-of-scope legacy OpenAiTeach/Windows-path failures on this branch.
-- Scene result UI is implemented directly in React without a full component interaction test suite.
+- Scene result UI has helper/route coverage, but not a full DOM interaction test suite.
 - Large Vite bundle warning remains.
 
 ## Next Suggested Step

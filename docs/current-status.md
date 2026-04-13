@@ -3,9 +3,10 @@
 ## Completed Pages / Surfaces
 
 - Main canvas app in `src/App.tsx`.
-- Existing workflow/project panel via `/api/workflows`.
+- Workflow/project panel now uses `/api/projects` first and keeps `/api/workflows` as compatibility fallback.
 - New project persistence API via `/api/projects`.
 - New template API via `/api/templates`.
+- Template library tab in the workflow panel can publish the current project and create project copies.
 - Unified task API via `/api/tasks/*`.
 
 ## Completed Node Types
@@ -36,6 +37,7 @@
 ## Completed Grid Item Operations
 
 - Single-cell retry.
+- Single-cell retry goes through `/api/tasks/retry` before falling back locally.
 - Single-cell download.
 - Send cell to a new image node.
 - Send cell to a new upscale scene node and auto-run the upscale pipeline.
@@ -44,4 +46,4 @@
 
 - External real provider execution requires configured provider keys; without keys the system intentionally falls back to mock and shows a warning.
 - Task storage is JSON-file backed, not Redis/BullMQ/PostgreSQL.
-- Real relighting/upscale provider adapters are not connected; local canvas implementations are used when an input image exists.
+- Real relighting/upscale third-party provider adapters are not configured; local canvas implementations are used when an input image exists.
