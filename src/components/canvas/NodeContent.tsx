@@ -60,6 +60,7 @@ interface NodeContentProps {
     // Social sharing
     onPostToX?: (nodeId: string, mediaUrl: string, mediaType: 'image' | 'video') => void;
     onGenerate?: (nodeId: string) => void;
+    onSendSceneImageToNode?: (sourceNodeId: string, image: { url: string; label?: string }, action: 'image-node' | 'upscale-node') => void;
     canvasTheme?: 'dark' | 'light';
 }
 
@@ -84,6 +85,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     onUpdate,
     onPostToX,
     onGenerate,
+    onSendSceneImageToNode,
     canvasTheme = 'dark'
 }) => {
     const { t } = useTranslation();
@@ -230,6 +232,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     isLoading={isLoading}
                     onGenerate={onGenerate}
                     onUpdate={onUpdate}
+                    onSendImageToNode={onSendSceneImageToNode}
                 />
             ) : (isSuccess || isLoading) && data.resultUrl ? (
                 <div

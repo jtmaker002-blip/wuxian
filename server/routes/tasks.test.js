@@ -281,4 +281,48 @@ describe('tasks routes', () => {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }
   });
+
+  it.each([
+    ['multi_view_nine_grid', 9, 'multiView'],
+    ['plot_deduction_four_grid', 4, 'storyboard'],
+    ['coherent_storyboard_25', 25, 'characterBible'],
+    ['cinematic_light_correction', 1, 'lightingRequest'],
+    ['character_three_view_generate', 3, 'characterProfile'],
+    ['frame_deduction_plus_3s', 1, 'frameDeduction'],
+    ['frame_deduction_minus_5s', 1, 'frameDeduction'],
+    ['upscale', 1, 'upscale'],
+  ])('returns structured output contract for %s', async (scene, expectedCount, expectedStructuredKey) => {
+    const serverHandle = await createServer();
+
+    try {
+      const createResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          params: { scene, storyText: '结构化契约测试' },
+          metadata: { node_id: `node-${scene}`, project_id: 'project-1' },
+          provider: 'mock',
+          model: 'mock-model',
+          taskType: 'image',
+          requestId: `request-${scene}`,
+        }),
+      });
+      const created = await createResponse.json();
+      const waitMs = expectedCount > 9 ? 620 : 260;
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
+
+      const statusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: [created.taskId] }),
+      });
+      const status = await statusResponse.json();
+
+      expect(status.tasks[0].status).toBe('succeeded');
+      expect(status.tasks[0].result.imageList).toHaveLength(expectedCount);
+      expect(status.tasks[0].result.structuredData[expectedStructuredKey]).toBeTruthy();
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
 });

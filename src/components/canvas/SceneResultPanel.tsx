@@ -11,6 +11,7 @@ type SceneResultPanelProps = {
   selected: boolean;
   onGenerate?: (nodeId: string) => void;
   onUpdate?: (nodeId: string, updates: Partial<NodeData>) => void;
+  onSendImageToNode?: (sourceNodeId: string, image: { url: string; label?: string }, action: 'image-node' | 'upscale-node') => void;
 };
 
 function getGridClass(count: number) {
@@ -21,7 +22,7 @@ function getGridClass(count: number) {
   return 'grid-cols-1';
 }
 
-export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoading, selected, onGenerate, onUpdate }) => {
+export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoading, selected, onGenerate, onUpdate, onSendImageToNode }) => {
   const [selectedIndex, setSelectedIndex] = React.useState(0);
   const definition = getSceneDefinition(data.scene);
   const images = data.outputs?.imageList || [];
@@ -81,6 +82,13 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
         }
         : data.taskInfo,
     });
+  };
+
+  const downloadGridItem = (image: { url: string; label?: string }, index: number) => {
+    const anchor = document.createElement('a');
+    anchor.href = image.url;
+    anchor.download = `${definition?.scene || 'scene'}-${index + 1}.png`;
+    anchor.click();
   };
 
   const exportStoryboard = () => {
@@ -363,6 +371,38 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
                   >
                     单格重试
                   </button>
+                  <div className="absolute left-2 right-2 top-8 flex flex-wrap gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSendImageToNode?.(data.id, image, 'upscale-node');
+                      }}
+                      className="rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white"
+                    >
+                      单格放大
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSendImageToNode?.(data.id, image, 'image-node');
+                      }}
+                      className="rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white"
+                    >
+                      新节点
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        downloadGridItem(image, index);
+                      }}
+                      className="rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white"
+                    >
+                      下载
+                    </button>
+                  </div>
                   <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/88 to-transparent p-2">
                     <div className="text-[10px] font-semibold">{image.label || `#${index + 1}`}</div>
                     {shot?.plotDescription && !isStoryboard25 && (
@@ -403,6 +443,30 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
               >
                 只重试这一格
               </button>
+              {selectedImage && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSendImageToNode?.(data.id, selectedImage, 'upscale-node');
+                    }}
+                    className="rounded-full border border-white/14 px-2 py-1 text-[10px] text-white"
+                  >
+                    创建高清节点
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSendImageToNode?.(data.id, selectedImage, 'image-node');
+                    }}
+                    className="rounded-full border border-white/14 px-2 py-1 text-[10px] text-white"
+                  >
+                    发送到新节点
+                  </button>
+                </>
+              )}
             </div>
             {selectedShot ? (
               <div className="grid gap-1.5">

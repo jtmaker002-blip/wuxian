@@ -88,6 +88,132 @@ function makeMockImageDataUrl(label, accent = '#3b82f6', index = 1) {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
+function buildStoryboard(count, scene, storyText = '电影级画布创作') {
+  return Array.from({ length: count }).map((_, index) => ({
+    shotNumber: index + 1,
+    durationSeconds: count > 4 ? 4 : 6,
+    plotDescription: `${storyText} · ${scene} shot ${index + 1}`,
+    shotSize: index % 3 === 0 ? 'wide shot' : index % 3 === 1 ? 'medium shot' : 'close-up',
+    characterAction: index % 2 === 0 ? '角色向前推进' : '角色停下观察环境',
+    emotion: index % 2 === 0 ? '克制坚定' : '紧张期待',
+    sceneTags: index % 2 === 0 ? 'cinematic, exterior, depth' : 'cinematic, interior, low key',
+    lightingAndAtmosphere: index % 2 === 0 ? '暖色主光，空气透视' : '冷色边缘光，暗部保留',
+    imageGenerationPrompt: `Generate ${scene} shot ${index + 1}: ${storyText}`,
+    videoMotionPrompt: `Camera motion for ${scene} shot ${index + 1}`,
+  }));
+}
+
+function buildFrameDeduction(scene) {
+  const isFuture = scene === 'frame_deduction_plus_3s';
+  return {
+    motionDelta: isFuture ? '主体向画面右前方推进约 3 秒' : '主体回到 5 秒前的起始姿态',
+    cameraDelta: isFuture ? '镜头轻微推近并降低机位' : '镜头回拉，恢复更宽的环境视野',
+    environmentDelta: isFuture ? '背景光源增强，空气尘埃更明显' : '环境动态更安静，运动模糊减少',
+    targetFramePrompt: isFuture
+      ? 'future keyframe, 3 seconds later, cinematic continuity'
+      : 'previous keyframe, 5 seconds earlier, cinematic continuity',
+  };
+}
+
+function buildStructuredSceneData(scene, request, count) {
+  const params = request?.params || {};
+  const storyText = params.storyText || params.prompt || '电影级画布创作';
+  const base = {
+    scene,
+    requestId: request?.requestId,
+  };
+
+  if (scene === 'plot_deduction_four_grid') {
+    return {
+      ...base,
+      storyboard: buildStoryboard(4, scene, storyText),
+    };
+  }
+
+  if (scene === 'coherent_storyboard_25') {
+    return {
+      ...base,
+      storyboard: buildStoryboard(25, scene, storyText),
+      characterBible: {
+        mainCharacters: [
+          {
+            id: 'hero',
+            name: '主角',
+            appearance: '清晰轮廓、稳定发型、可跨镜头保持一致',
+            outfit: '深色电影感外套',
+            temperament: '克制、坚定',
+            referenceImages: params.referenceImages || [],
+          },
+        ],
+      },
+      worldBible: {
+        worldName: '连贯分镜世界',
+        era: 'near future',
+        environmentStyle: params.visualStyle || 'cinematic realistic',
+        colorPalette: ['deep blue', 'warm amber', 'soft gray'],
+        recurringLocations: ['主场景', '转场空间', '结尾场景'],
+      },
+    };
+  }
+
+  if (scene === 'character_three_view_generate') {
+    return {
+      ...base,
+      characterProfile: {
+        style: params.style || 'realistic',
+        background: params.background || 'plain',
+        keepCostumeConsistency: params.keepCostumeConsistency !== false,
+        sourceImageUrl: params.characterImageUrl || '',
+      },
+      views: ['front', 'side', 'back'],
+    };
+  }
+
+  if (scene === 'frame_deduction_plus_3s' || scene === 'frame_deduction_minus_5s') {
+    return {
+      ...base,
+      frameDeduction: buildFrameDeduction(scene),
+    };
+  }
+
+  if (scene === 'cinematic_light_correction') {
+    return {
+      ...base,
+      lightingRequest: {
+        originImage: params.originImage || '',
+        width: params.width,
+        height: params.height,
+        UI_KeyLight: params.keyLight || 'front',
+        UI_RimLight: params.rimLightEnabled ?? true,
+        UI_LightColor: params.lightColor || 'neutral',
+        UI_LightBrightness: params.brightness ?? 55,
+        prompt: params.prompt || '',
+        Reference_Image_Intent: params.referenceImage || '',
+      },
+    };
+  }
+
+  if (scene === 'upscale') {
+    return {
+      ...base,
+      upscale: {
+        imageUrl: params.imageUrl || '',
+        targetResolution: params.targetResolution || '2x',
+        detailMode: params.detailMode || 'cinematic',
+      },
+    };
+  }
+
+  return {
+    ...base,
+    multiView: {
+      cameraAngles: ['wide', 'medium', 'close', 'low', 'high', 'over-shoulder', 'macro', 'dutch', 'hero'],
+      ratio: params.ratio || '16:9',
+    },
+    storyboard: count > 1 ? buildStoryboard(count, scene, storyText) : undefined,
+  };
+}
+
 function shouldUseRealProvider(request, runtime = {}) {
   void runtime;
   return (
@@ -199,19 +325,8 @@ function buildMockResult(request, extraStructuredData = {}) {
       status: 'succeeded',
     })),
     structuredData: {
-      scene,
-      requestId: request?.requestId,
+      ...buildStructuredSceneData(scene, request, count),
       ...extraStructuredData,
-      storyboard: count > 1
-        ? Array.from({ length: count }).map((_, index) => ({
-          shotNumber: index + 1,
-          plotDescription: `${scene} shot ${index + 1}`,
-          emotion: index % 2 === 0 ? 'calm' : 'tense',
-          sceneTags: 'cinematic, coherent',
-          lightingAndAtmosphere: 'film lighting',
-          imageGenerationPrompt: `Generate ${scene} shot ${index + 1}`,
-        }))
-        : undefined,
     },
   };
 }

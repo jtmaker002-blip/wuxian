@@ -94,6 +94,7 @@ interface CanvasNodeProps {
   // Social sharing
   onPostToX?: (nodeId: string, mediaUrl: string, mediaType: 'image' | 'video') => void;
   onPostToTikTok?: (nodeId: string, mediaUrl: string) => void;
+  onSendSceneImageToNode?: (sourceNodeId: string, image: { url: string; label?: string }, action: 'image-node' | 'upscale-node') => void;
 }
 
 export const CanvasNode: React.FC<CanvasNodeProps> = ({
@@ -132,7 +133,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onMouseLeave,
   canvasTheme = 'dark',
   onPostToX,
-  onPostToTikTok
+  onPostToTikTok,
+  onSendSceneImageToNode
 }) => {
   // ============================================================================
   // STATE
@@ -1524,6 +1526,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             onUpdate={onUpdate}
             onPostToX={onPostToX}
             onGenerate={onGenerate}
+            onSendSceneImageToNode={onSendSceneImageToNode}
             canvasTheme={canvasTheme}
           />
         </div>
