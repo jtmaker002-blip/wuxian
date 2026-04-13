@@ -113,6 +113,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const effectiveInputUrl = inputUrl || data.inputUrl;
     const effectiveInputMediaType = inputMediaType || (data.inputUrl ? NodeType.IMAGE : undefined);
     const isVideoFromImageFlow = isVideoType && Boolean(effectiveInputUrl);
+    const activeGridSplit = data.imageToolMode === 'grid-split-select' ? data.gridSplit : undefined;
     const requestedVideoModelLabel = isVideoType ? (data.requestedVideoModel || data.videoModel) : undefined;
     const actualVideoModelLabel = isVideoType ? data.executedVideoModel : undefined;
     const executedVideoModeLabel = isVideoType ? data.executedVideoMode : undefined;
@@ -251,6 +252,63 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     ) : (
                         <>
                             <img src={data.resultUrl} alt="Generated" className="w-full h-full object-cover pointer-events-none" />
+                            {selected && isImageType && activeGridSplit && onUpdate && (
+                                <div
+                                    className="absolute inset-0 z-20 grid overflow-hidden rounded-[inherit] border border-blue-300/80 bg-black/10"
+                                    style={{
+                                        gridTemplateColumns: `repeat(${activeGridSplit.cols}, minmax(0, 1fr))`,
+                                        gridTemplateRows: `repeat(${activeGridSplit.rows}, minmax(0, 1fr))`,
+                                    }}
+                                >
+                                    {Array.from({ length: activeGridSplit.rows * activeGridSplit.cols }, (_, index) => {
+                                        const row = Math.floor(index / activeGridSplit.cols);
+                                        const col = index % activeGridSplit.cols;
+                                        const isChosen = activeGridSplit.selectedIndexes.includes(index);
+                                        return (
+                                            <button
+                                                key={index}
+                                                type="button"
+                                                onPointerDown={(event) => event.stopPropagation()}
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    const batchIndexes = Array.from(
+                                                        { length: activeGridSplit.rows * activeGridSplit.cols },
+                                                        (_, cellIndex) => cellIndex
+                                                    ).filter((cellIndex) => {
+                                                        const cellRow = Math.floor(cellIndex / activeGridSplit.cols);
+                                                        const cellCol = cellIndex % activeGridSplit.cols;
+                                                        return cellRow <= row && cellCol <= col;
+                                                    });
+                                                    const selectedIndexes = event.shiftKey
+                                                        ? Array.from(new Set([...activeGridSplit.selectedIndexes, ...batchIndexes])).sort((a, b) => a - b)
+                                                        : isChosen
+                                                        ? activeGridSplit.selectedIndexes.filter((item) => item !== index)
+                                                        : [...activeGridSplit.selectedIndexes, index].sort((a, b) => a - b);
+                                                    onUpdate(data.id, {
+                                                        gridSplit: {
+                                                            ...activeGridSplit,
+                                                            selectedIndexes,
+                                                        },
+                                                    });
+                                                }}
+                                                className={`relative border border-blue-300/70 transition-colors ${
+                                                    isChosen ? 'bg-blue-500/18 ring-2 ring-inset ring-blue-300' : 'bg-transparent hover:bg-blue-300/10'
+                                                }`}
+                                                title={`${row + 1}-${col + 1}`}
+                                            >
+                                                {isChosen && (
+                                                    <span className="absolute left-1/2 top-1/2 flex h-7 min-w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-black/58 px-1.5 text-[11px] font-semibold text-white shadow-[0_10px_22px_rgba(0,0,0,0.35)]">
+                                                        {row + 1}-{col + 1}
+                                                    </span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                    <div className="pointer-events-none absolute bottom-3 right-3 rounded bg-black/62 px-2.5 py-1 text-[10px] font-medium text-white shadow-[0_10px_24px_rgba(0,0,0,0.35)]">
+                                        按住 Shift 键可批量选择
+                                    </div>
+                                </div>
+                            )}
                             {data.imageAnnotations?.map((annotation, annotationIndex) => {
                                 const colorClass =
                                     annotation.type === 'preserve'
@@ -297,13 +355,13 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                                     </div>
                                 );
                             })}
-                            {selected && isImageType && !isLocalModel && (
+                            {selected && isImageType && !isLocalModel && !activeGridSplit && (
                                 <div className="absolute bottom-3 left-3 z-20 flex items-center gap-2 rounded-[14px] border border-white/14 bg-black/58 px-3 py-2 text-[11px] font-medium text-white/92 shadow-[0_14px_34px_rgba(0,0,0,0.34)] backdrop-blur-md">
                                     <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-white text-[10px] font-semibold text-black">1</span>
                                     <span>素材 · 当前节点</span>
                                 </div>
                             )}
-                            {selected && onUpload && (
+                            {selected && onUpload && !activeGridSplit && (
                                 <button
                                     type="button"
                                     onClick={(event) => {
@@ -399,7 +457,8 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                 </div>
             ) : (
                 /* Placeholder / Empty State for Image/Video */
-                <div className={`relative w-full ${isAudioType ? 'aspect-[16/7]' : 'aspect-[4/3]'} flex flex-col items-center justify-center gap-3 overflow-hidden
+                <div
+                    className={`relative w-full flex flex-col items-center justify-center gap-3 overflow-hidden
             ${isLoading ? 'animate-pulse' : ''} 
             ${!selected
                 ? 'rounded-[28px]'
@@ -407,7 +466,9 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     ? (isDark ? 'rounded-[28px] border border-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'rounded-[28px] border border-neutral-300')
                     : `rounded-xl border border-dashed ${isDark ? 'border-white/10' : 'border-neutral-300'}`}
             ${isDark ? (isImageType && !isLocalModel && selected ? 'bg-[#1b1b1b]' : 'bg-[#141414]') : 'bg-neutral-50'}`
-                }>
+                    }
+                    style={getAspectRatioStyle()}
+                >
                     {blankImageUiState.showSelectedBlankFrame && (
                         <div className="pointer-events-none absolute inset-3 rounded-[24px] border border-dashed border-white/16 bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.06),transparent_56%),linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.01))]" />
                     )}

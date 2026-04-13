@@ -7,6 +7,7 @@
 
 import React, { useState, useRef } from 'react';
 import { NodeData, NodeStatus, NodeType, Viewport } from '../types';
+import { getCanvasNodeDimensions } from '../utils/canvasNodeLayout';
 
 interface ConnectionStart {
     nodeId: string;
@@ -28,24 +29,7 @@ export const useConnectionDragging = () => {
     const CONNECTOR_SNAP_RADIUS = 104;
 
     const getNodeDimensions = (node: NodeData) => {
-        const width = node.type === NodeType.VIDEO ? 385 : node.type === NodeType.IMAGE ? 620 : 365;
-
-        if (node.type === NodeType.AUDIO) {
-            return { width, height: width / (16 / 7) };
-        }
-
-        if (node.type === NodeType.VIDEO || node.type === NodeType.LOCAL_VIDEO_MODEL) {
-            return { width, height: width / (16 / 9) };
-        }
-
-        if (node.resultAspectRatio && node.status === NodeStatus.SUCCESS) {
-            const [w, h] = node.resultAspectRatio.split('/').map(Number);
-            if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-                return { width, height: width / (w / h) };
-            }
-        }
-
-        return { width, height: width / (4 / 3) };
+        return getCanvasNodeDimensions(node);
     };
 
     const getConnectionChildUpdates = (

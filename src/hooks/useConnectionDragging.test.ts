@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { NodeStatus, NodeType, type NodeData, type Viewport } from '../types';
+import { getCanvasNodeDimensions } from '../utils/canvasNodeLayout';
 
 function createReactHookMock() {
   const stateSlots: unknown[] = [];
@@ -140,7 +141,7 @@ describe('useConnectionDragging', () => {
     const targetNode = createVideoNode();
     const nodes = [sourceNode, targetNode];
     const viewport: Viewport = { x: 0, y: 0, zoom: 1 };
-    const leftConnectorCenterY = targetNode.y + 385 / (16 / 9) / 2;
+    const leftConnectorCenterY = targetNode.y + getCanvasNodeDimensions(targetNode).height / 2;
 
     let hook = reactMock.render(() => useConnectionDragging());
     hook.handleConnectorPointerDown(
@@ -193,7 +194,7 @@ describe('useConnectionDragging', () => {
     const targetNode = createVideoNode();
     const nodes = [sourceNode, targetNode];
     const viewport: Viewport = { x: 0, y: 0, zoom: 1 };
-    const leftConnectorCenterY = targetNode.y + 385 / (16 / 9) / 2;
+    const leftConnectorCenterY = targetNode.y + getCanvasNodeDimensions(targetNode).height / 2;
 
     let hook = reactMock.render(() => useConnectionDragging());
     hook.handleConnectorPointerDown(

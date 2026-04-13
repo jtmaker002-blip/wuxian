@@ -1,6 +1,7 @@
 import React from 'react';
 import { Film, Grid3X3, Lamp, Maximize2, Sparkles, SplitSquareHorizontal, TimerReset, UserRound } from 'lucide-react';
 import { SCENE_DEFINITIONS } from '../../services/scenes/registry';
+import { SCENES } from '../../types/scene';
 import type { SceneId } from '../../types/scene';
 
 const iconMap = {
@@ -30,7 +31,7 @@ export const NineGridMenu: React.FC<NineGridMenuProps> = ({ isDark, onSelectScen
       }`}>
         Liblib Scene Pipelines
       </div>
-      {SCENE_DEFINITIONS.map((definition) => {
+      {SCENE_DEFINITIONS.filter((definition) => definition.scene !== SCENES.GRID_SPLIT).map((definition) => {
         const Icon = iconMap[definition.icon as keyof typeof iconMap] || Sparkles;
         return (
           <button

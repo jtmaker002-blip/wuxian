@@ -40,6 +40,7 @@ export type ImageToolMode =
   | 'grid'
   | 'enhance'
   | 'split'
+  | 'grid-split-select'
   | null;
 
 export interface ImageLightingSettings {
@@ -171,6 +172,13 @@ export interface NodeData {
   focusSelection?: FocusSelection;
   activeImageAnnotationType?: ImageAnnotationType;
   imageAnnotations?: ImageAnnotation[];
+  gridSplit?: {
+    mode: 'preset' | 'custom';
+    rows: number;
+    cols: number;
+    gridType?: 4 | 9 | 16 | 25;
+    selectedIndexes: number[];
+  };
 
   // Local Model node specific
   localModelId?: string;        // ID of the selected local model

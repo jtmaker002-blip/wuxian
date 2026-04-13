@@ -6,7 +6,8 @@
  */
 
 import React, { useState } from 'react';
-import { NodeData, NodeGroup, NodeType } from '../../types';
+import { NodeData, NodeGroup } from '../../types';
+import { getCanvasNodeDimensions } from '../../utils/canvasNodeLayout';
 
 interface SelectionBoundingBoxProps {
     selectedNodes: NodeData[];
@@ -32,42 +33,9 @@ interface SelectionBoundingBoxProps {
  * @param allNodes - All nodes in the selection (to find parent for Editor nodes)
  */
 const getNodeWidth = (node: NodeData, allNodes?: NodeData[]): number => {
-    // Image Editor with input from parent: width depends on parent's aspect ratio
-    if (node.type === NodeType.IMAGE_EDITOR) {
-        // Find parent node in the selection
-        const parentId = node.parentIds?.[0];
-        const parentNode = parentId && allNodes?.find(n => n.id === parentId);
-        if (parentNode?.resultUrl && parentNode?.resultAspectRatio) {
-            const parts = parentNode.resultAspectRatio.split('/');
-            if (parts.length === 2) {
-                const aspectRatio = parseFloat(parts[0]) / parseFloat(parts[1]);
-                // For portrait images: height=500px, width=500*aspectRatio
-                // For landscape images: width is capped at 500px
-                if (aspectRatio < 1) {
-                    return 500 * aspectRatio;
-                } else {
-                    return 500;
-                }
-            }
-        }
-        // Empty: width 340px
-        return 340;
-    }
-
-    // Video Editor with input: uses 16:9 aspect ratio with maxWidth 500px
-    if (node.type === NodeType.VIDEO_EDITOR) {
-        // Find parent node in the selection
-        const parentId = node.parentIds?.[0];
-        const parentNode = parentId && allNodes?.find(n => n.id === parentId);
-        if (parentNode?.resultUrl) {
-            return 500;
-        }
-        // Empty: width 340px
-        return 340;
-    }
-
-    if (node.type === NodeType.VIDEO) return 385;
-    return 365;
+    const parentId = node.parentIds?.[0];
+    const parentNode = parentId ? allNodes?.find(n => n.id === parentId) : undefined;
+    return getCanvasNodeDimensions(node, parentNode).width;
 };
 
 /**
@@ -77,65 +45,9 @@ const getNodeWidth = (node: NodeData, allNodes?: NodeData[]): number => {
  * @param allNodes - All nodes in the selection (to find parent for Editor nodes)
  */
 const getNodeHeight = (node: NodeData, allNodes?: NodeData[]): number => {
-    const baseWidth = getNodeWidth(node, allNodes);
-
-    // Handle Image Editor nodes
-    if (node.type === NodeType.IMAGE_EDITOR) {
-        // Find parent node in the selection
-        const parentId = node.parentIds?.[0];
-        const parentNode = parentId && allNodes?.find(n => n.id === parentId);
-        if (parentNode?.resultUrl && parentNode?.resultAspectRatio) {
-            const parts = parentNode.resultAspectRatio.split('/');
-            if (parts.length === 2) {
-                const aspectRatio = parseFloat(parts[0]) / parseFloat(parts[1]);
-                // For portrait: height = 500px
-                // For landscape: height = 500 / aspectRatio
-                if (aspectRatio < 1) {
-                    return 500;
-                } else {
-                    return 500 / aspectRatio;
-                }
-            }
-        }
-        // Empty: minHeight 380px
-        return 380;
-    }
-
-    // Handle Video Editor nodes
-    if (node.type === NodeType.VIDEO_EDITOR) {
-        // Find parent node in the selection
-        const parentId = node.parentIds?.[0];
-        const parentNode = parentId && allNodes?.find(n => n.id === parentId);
-        if (parentNode?.resultUrl) {
-            // Video editor shows 16:9 when has content
-            return 500 / (16 / 9);
-        }
-        // Empty: minHeight 380px
-        return 380;
-    }
-
-    // Parse aspect ratio to calculate content height for Image/Video nodes
-    let aspectRatio = 16 / 9; // Default
-
-    // First priority: use resultAspectRatio if available (actual generated content dimensions)
-    if (node.resultAspectRatio) {
-        const parts = node.resultAspectRatio.split('/');
-        if (parts.length === 2) {
-            aspectRatio = parseFloat(parts[0]) / parseFloat(parts[1]);
-        }
-    } else if (node.aspectRatio && node.aspectRatio !== 'Auto') {
-        // Use selected aspect ratio
-        const parts = node.aspectRatio.split(':');
-        if (parts.length === 2) {
-            aspectRatio = parseFloat(parts[0]) / parseFloat(parts[1]);
-        }
-    } else {
-        // Empty/placeholder state: Both Image and Video use 4/3
-        aspectRatio = 4 / 3;
-    }
-
-    // Calculate content height from aspect ratio
-    return baseWidth / aspectRatio;
+    const parentId = node.parentIds?.[0];
+    const parentNode = parentId ? allNodes?.find(n => n.id === parentId) : undefined;
+    return getCanvasNodeDimensions(node, parentNode).height;
 };
 
 export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({

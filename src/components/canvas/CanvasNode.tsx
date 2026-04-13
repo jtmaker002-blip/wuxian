@@ -15,6 +15,7 @@ import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
 import { GridSplitMenu, type GridSplitSelection } from '../menus/GridSplitMenu';
 import { getControlPanelScale, getControlPanelWidthClassName } from './controlPanelLayout';
+import { getCanvasNodeAspectRatioStyle, getCanvasNodeDimensions } from '../../utils/canvasNodeLayout';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
@@ -84,7 +85,7 @@ interface CanvasNodeProps {
   onImageToVideo?: (nodeId: string) => void;
   onChangeAngleGenerate?: (nodeId: string) => void;
   onQuickAddInputNode?: (nodeId: string, inputType: 'image' | 'video') => void;
-  onSplitImageGrid?: (nodeId: string, selection: GridSplitSelection) => void;
+  onSplitImageGrid?: (nodeId: string) => void;
   onCreateNineGridTiles?: (nodeId: string, actionLabel: string) => void;
   zoom: number;
   // Mouse event callbacks for chat panel drag functionality
@@ -322,16 +323,23 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onCreateNineGridTiles, onUpdate]);
 
   const applyGridSplitSelection = React.useCallback((selection: GridSplitSelection) => {
-    if (!data.resultUrl || !onSplitImageGrid) return;
+    if (!data.resultUrl) return;
     const actionLabel = selection.mode === 'custom'
       ? `自定义 ${selection.rows}x${selection.cols}`
       : `${selection.rows}x${selection.cols}`;
-    onSplitImageGrid(data.id, selection);
     onUpdate(data.id, {
-      imageToolMode: null,
+      imageToolMode: 'grid-split-select',
       imageToolAction: `宫格切分 · ${actionLabel}`,
+      angleMode: false,
+      gridSplit: {
+        mode: selection.mode,
+        rows: selection.rows,
+        cols: selection.cols,
+        gridType: selection.gridType,
+        selectedIndexes: [],
+      },
     });
-  }, [data.id, data.resultUrl, onSplitImageGrid, onUpdate]);
+  }, [data.id, data.resultUrl, onUpdate]);
 
   const startImageAnnotation = React.useCallback((label: string) => {
     const typeByLabel: Record<string, 'reference' | 'note' | 'preserve' | 'ignore'> = {
@@ -659,37 +667,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   // ============================================================================
 
   const getAspectRatioStyle = () => {
-    // When there's a successful result, ALWAYS use the result's aspect ratio (lock the node size)
-    // This prevents the node from resizing when user selects a different ratio for regeneration
-    if (isSuccess && data.resultUrl) {
-      // Use stored result aspect ratio if available
-      if (data.resultAspectRatio) {
-        return { aspectRatio: data.resultAspectRatio };
-      }
-      // If no stored ratio, use default (shouldn't happen for new content, but handles legacy)
-      if (data.type === NodeType.VIDEO) {
-        return { aspectRatio: '16/9' };
-      }
-      // Keep current shape for images without stored ratio (legacy)
-      return { aspectRatio: '1/1' };
-    }
-
-    // Video nodes without result - use default 16:9
-    if (data.type === NodeType.VIDEO) {
-      return { aspectRatio: '16/9' };
-    }
-
-    if (data.type === NodeType.AUDIO) {
-      return { aspectRatio: '16/7' };
-    }
-
-    // Image nodes without result - use the selected aspect ratio for preview
-    const ratio = data.aspectRatio || 'Auto';
-    // Auto defaults to 16:9 for video-ready format
-    if (ratio === 'Auto') return { aspectRatio: '16/9' };
-
-    const [w, h] = ratio.split(':');
-    return { aspectRatio: `${w}/${h}` };
+    return getCanvasNodeAspectRatioStyle(data);
   };
 
   const handleTitleSave = () => {
@@ -701,6 +679,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       setEditedTitle(data.title || data.type);
     }
   };
+
+  const nodeDimensions = getCanvasNodeDimensions(data);
 
   // ============================================================================
   // RENDER
@@ -1383,9 +1363,9 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {/* Main Node Card - Video nodes are wider to fit more controls */}
+        {/* Main Node Card */}
         <div
-          className={`relative ${isImageToVideoNode ? 'w-[520px]' : data.type === NodeType.VIDEO ? 'w-[385px]' : data.type === NodeType.IMAGE ? 'w-[620px]' : 'w-[365px]'} rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${
+          className={`relative rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${
             isLiblibImageNode
               ? selected
                 ? 'border-white/60 ring-0 shadow-[0_30px_90px_rgba(0,0,0,0.48)]'
@@ -1398,6 +1378,9 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   ? 'border-neutral-800'
                   : 'border-neutral-200'
           }`}
+          style={{
+            width: nodeDimensions.width,
+          }}
         >
           {isImageToVideoDropTarget && (
             <div className="pointer-events-none absolute inset-0 z-[90] flex items-center justify-center rounded-2xl border-2 border-cyan-300/80 bg-cyan-500/10 shadow-[0_0_0_8px_rgba(34,211,238,0.12),0_24px_70px_rgba(8,145,178,0.38)] backdrop-blur-[1px]">
@@ -1515,6 +1498,53 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           />
         </div>
 
+        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'grid-split-select' && data.gridSplit && (
+          <div className="absolute -top-14 left-1/2 z-[145] -translate-x-1/2">
+            <div
+              className="flex h-11 items-center gap-3 rounded-[10px] border border-white/10 bg-[#242424]/96 px-3 text-white shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onUpdate(data.id, { imageToolMode: null, imageToolAction: undefined, gridSplit: undefined });
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-300 transition-colors hover:bg-white/8 hover:text-white"
+                title="退出宫格切分"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="m15 18-6-6 6-6" />
+                </svg>
+              </button>
+              <div className="h-5 w-px bg-white/10" />
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-white/8 text-neutral-200">
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 4h16v16H4z" />
+                  <path d="M4 12h16M12 4v16" />
+                </svg>
+              </div>
+              <div className="whitespace-nowrap text-[13px] font-semibold text-neutral-100">
+                {data.gridSplit.rows * data.gridSplit.cols} 宫格切分
+              </div>
+              <div className="whitespace-nowrap rounded-md bg-black/30 px-2 py-1 text-[12px] text-neutral-300">
+                已选 {data.gridSplit.selectedIndexes.length} 个宫格
+              </div>
+              <button
+                type="button"
+                disabled={data.gridSplit.selectedIndexes.length === 0}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onSplitImageGrid?.(data.id);
+                }}
+                className="h-8 whitespace-nowrap rounded-md bg-white px-3 text-[12px] font-semibold text-black transition-opacity disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                创建生图节点
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Control Panel - Only show when single node is selected (not in group selection) */}
         {/* Hide controls for storyboard-generated scenes */}
         {selected &&
@@ -1522,6 +1552,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           data.type !== NodeType.TEXT &&
           !data.scene &&
           !(data.prompt && data.prompt.startsWith('Extract panel #')) &&
+          imageToolMode !== 'grid-split-select' &&
           !(data.type === NodeType.IMAGE && data.resultUrl && (data.angleMode || imageToolMode === 'lighting')) && (
           <div className="absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 flex justify-center z-[100]">
             <div

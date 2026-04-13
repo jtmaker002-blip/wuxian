@@ -8,6 +8,13 @@
 import React, { useState, useRef } from 'react';
 import { Viewport, NodeData, NodeType } from '../types';
 
+const MIN_ZOOM = 0.1;
+const MAX_ZOOM = 2;
+
+function clampZoom(value: number) {
+    return Math.min(Math.max(value, MIN_ZOOM), MAX_ZOOM);
+}
+
 export const useCanvasNavigation = () => {
     // ============================================================================
     // STATE
@@ -44,7 +51,7 @@ export const useCanvasNavigation = () => {
                 targetZoom = Math.min(targetZoom, maxNodeZoom);
             }
 
-            const newZoom = Math.min(Math.max(0.1, targetZoom), 2.0);
+            const newZoom = clampZoom(targetZoom);
 
             const rect = canvasRef.current?.getBoundingClientRect();
             if (rect) {
@@ -100,7 +107,11 @@ export const useCanvasNavigation = () => {
      * Zooms from center of viewport
      */
     const handleSliderZoom = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const newZoom = parseFloat(e.target.value);
+        const newZoom = clampZoom(parseFloat(e.target.value));
+        zoomFromCenter(newZoom);
+    };
+
+    const zoomFromCenter = (newZoom: number) => {
         const cx = window.innerWidth / 2;
         const cy = window.innerHeight / 2;
 
@@ -114,6 +125,10 @@ export const useCanvasNavigation = () => {
         });
     };
 
+    const zoomBy = (delta: number) => {
+        zoomFromCenter(clampZoom(Number((viewport.zoom + delta).toFixed(2))));
+    };
+
     // ============================================================================
     // RETURN
     // ============================================================================
@@ -123,6 +138,7 @@ export const useCanvasNavigation = () => {
         setViewport,
         canvasRef,
         handleWheel,
-        handleSliderZoom
+        handleSliderZoom,
+        zoomBy
     };
 };

@@ -79,16 +79,17 @@ import {
 import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
 import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
 import { getSceneDefinition } from './services/scenes/registry';
-import { SCENES, type SceneId } from './types/scene';
-import type { GridSplitSelection } from './components/menus/GridSplitMenu';
+import type { SceneId } from './types/scene';
 import { createSceneGridImageNode, createSceneGridUpscaleNode } from './utils/sceneGridActions';
 import { getCanvasPointerAction } from './utils/canvasPointerAction';
+import { getCanvasNodeDimensions } from './utils/canvasNodeLayout';
 import { cancelTasks } from './services/tasks/taskClient';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
   eraseImageSelection,
   repaintImageSelection,
+  splitImageIntoGrid,
   createNineGridTiles,
 } from './utils/imageNodeActions';
 
@@ -233,7 +234,7 @@ export default function App() {
     setViewport,
     canvasRef,
     handleWheel: baseHandleWheel,
-    handleSliderZoom
+    zoomBy
   } = useCanvasNavigation();
 
   // Wrap handleWheel to pass hovered node for zoom-to-center
@@ -241,6 +242,60 @@ export default function App() {
     const hoveredNode = canvasHoveredNodeId ? nodes.find(n => n.id === canvasHoveredNodeId) : undefined;
     baseHandleWheel(e, hoveredNode);
   };
+
+  const getNodeLayoutParent = React.useCallback((node: NodeData) => {
+    const parentId = node.parentIds?.[0];
+    return parentId ? nodes.find(candidate => candidate.id === parentId) : undefined;
+  }, [nodes]);
+
+  const isViewportCoveringAnyNode = React.useMemo(() => {
+    if (nodes.length === 0) return true;
+
+    return nodes.some((node) => {
+      const dimensions = getCanvasNodeDimensions(node, getNodeLayoutParent(node));
+      const left = node.x * viewport.zoom + viewport.x;
+      const top = node.y * viewport.zoom + viewport.y;
+      const right = (node.x + dimensions.width) * viewport.zoom + viewport.x;
+      const bottom = (node.y + dimensions.height) * viewport.zoom + viewport.y;
+
+      return right >= 0 && bottom >= 0 && left <= window.innerWidth && top <= window.innerHeight;
+    });
+  }, [getNodeLayoutParent, nodes, viewport.x, viewport.y, viewport.zoom]);
+
+  const returnToNodeContent = React.useCallback(() => {
+    if (nodes.length === 0) return;
+
+    const bounds = nodes.reduce(
+      (acc, node) => {
+        const dimensions = getCanvasNodeDimensions(node, getNodeLayoutParent(node));
+        return {
+          left: Math.min(acc.left, node.x),
+          top: Math.min(acc.top, node.y),
+          right: Math.max(acc.right, node.x + dimensions.width),
+          bottom: Math.max(acc.bottom, node.y + dimensions.height),
+        };
+      },
+      { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }
+    );
+
+    const contentWidth = Math.max(bounds.right - bounds.left, 1);
+    const contentHeight = Math.max(bounds.bottom - bounds.top, 1);
+    const nextZoom = Math.min(
+      1,
+      Math.max(
+        0.1,
+        Math.min((window.innerWidth - 160) / contentWidth, (window.innerHeight - 180) / contentHeight)
+      )
+    );
+    const centerX = bounds.left + contentWidth / 2;
+    const centerY = bounds.top + contentHeight / 2;
+
+    setViewport({
+      zoom: nextZoom,
+      x: window.innerWidth / 2 - centerX * nextZoom,
+      y: window.innerHeight / 2 - centerY * nextZoom,
+    });
+  }, [getNodeLayoutParent, nodes, setViewport]);
 
   const {
     nodes,
@@ -808,55 +863,70 @@ export default function App() {
     }
   }, [groups, storyboardGenerator]);
 
-  const handleSplitImageGrid = React.useCallback((nodeId: string, selection: GridSplitSelection) => {
+  const handleSplitImageGrid = React.useCallback(async (nodeId: string) => {
     const sourceNode = nodes.find((node) => node.id === nodeId);
-    if (!sourceNode?.resultUrl) return;
+    if (!sourceNode?.resultUrl || !sourceNode.gridSplit) return;
 
-    const definition = getSceneDefinition(SCENES.GRID_SPLIT);
-    if (!definition) return;
+    const selectedIndexes = sourceNode.gridSplit.selectedIndexes;
+    if (selectedIndexes.length === 0) return;
 
-    const nodeIdForSplit = crypto.randomUUID();
-    const newNode: NodeData = {
-      id: nodeIdForSplit,
-      type: NodeType.TOOL,
-      x: sourceNode.x + 460,
-      y: sourceNode.y,
-      prompt: `宫格切分 ${selection.rows}x${selection.cols}`,
-      status: NodeStatus.IDLE,
-      model: 'mock-scene-pipeline',
-      imageModel: sourceNode.imageModel,
-      aspectRatio: sourceNode.resultAspectRatio || sourceNode.aspectRatio || 'Auto',
-      resolution: 'Auto',
-      title: definition.label,
-      name: definition.label,
-      scene: SCENES.GRID_SPLIT,
-      params: {
-        ...definition.defaultParams,
-        imageUrl: sourceNode.resultUrl,
-        mode: selection.mode,
-        rows: selection.rows,
-        cols: selection.cols,
-        ...(selection.gridType ? { gridType: selection.gridType } : {}),
-      },
-      outputs: undefined,
-      taskInfo: undefined,
-      parentIds: [sourceNode.id],
-      isPromptExpanded: true,
-    };
+    try {
+      const tiles = await splitImageIntoGrid(sourceNode.resultUrl, sourceNode.gridSplit.rows, sourceNode.gridSplit.cols);
+      const selectedTiles = tiles
+        .map((tile, index) => ({ ...tile, index }))
+        .filter((tile) => selectedIndexes.includes(tile.index));
+      const groupId = selectedTiles.length > 1 ? crypto.randomUUID() : undefined;
+      const nodeWidth = 260;
+      const nodeGapX = 34;
+      const nodeGapY = 26;
+      const gridCols = Math.min(sourceNode.gridSplit.cols, 3);
+      const startX = sourceNode.x + 420;
+      const startY = sourceNode.y;
+      const splitNodes: NodeData[] = selectedTiles.map((tile, selectedIndex) => {
+        const displayCol = selectedIndex % gridCols;
+        const displayRow = Math.floor(selectedIndex / gridCols);
+        return {
+          id: crypto.randomUUID(),
+          type: NodeType.IMAGE,
+          x: startX + displayCol * (nodeWidth + nodeGapX),
+          y: startY + displayRow * (nodeWidth * 0.62 + nodeGapY),
+          prompt: `宫格生图 ${tile.row + 1}-${tile.col + 1}`,
+          status: NodeStatus.SUCCESS,
+          model: sourceNode.model,
+          imageModel: sourceNode.imageModel,
+          aspectRatio: 'Auto',
+          resolution: sourceNode.resolution || 'Auto',
+          resultUrl: tile.dataUrl,
+          resultAspectRatio: tile.resultAspectRatio,
+          title: `宫格生图 ${tile.row + 1}-${tile.col + 1}`,
+          parentIds: [sourceNode.id],
+          groupId,
+        };
+      });
 
-    setNodes((prev) => [
-      ...prev.map((node) =>
-        node.id === sourceNode.id
-          ? { ...node, imageToolMode: null, imageToolAction: `宫格切分 · ${selection.rows}x${selection.cols}` }
-          : node
-      ),
-      newNode,
-    ]);
-    setSelectedNodeIds([nodeIdForSplit]);
-    setTimeout(() => {
-      handleGenerateRef.current(nodeIdForSplit);
-    }, 80);
-  }, [nodes, setNodes, setSelectedNodeIds]);
+      setNodes((prev) => [
+        ...prev.map((node) =>
+          node.id === sourceNode.id
+            ? { ...node, imageToolMode: null, imageToolAction: undefined, gridSplit: undefined }
+            : node
+        ),
+        ...splitNodes,
+      ]);
+      if (groupId) {
+        setGroups((prev) => [...prev, {
+          id: groupId,
+          nodeIds: splitNodes.map((node) => node.id),
+          label: `宫格生图组（${splitNodes.length}张）`,
+        }]);
+      }
+      setSelectedNodeIds(splitNodes.map((node) => node.id));
+    } catch (error) {
+      updateNode(sourceNode.id, {
+        status: NodeStatus.ERROR,
+        errorMessage: error instanceof Error ? error.message : '宫格切分失败',
+      });
+    }
+  }, [nodes, setNodes, setSelectedNodeIds, setGroups, updateNode]);
 
   const handleCreateNineGridTiles = React.useCallback(async (nodeId: string, actionLabel: string) => {
     const sourceNode = nodes.find((node) => node.id === nodeId);
@@ -1852,21 +1922,47 @@ export default function App() {
         canvasTheme={canvasTheme}
       />
 
-      {/* Zoom Slider */}
-      {/* Zoom Slider */}
+      <div
+        className={`fixed bottom-20 left-1/2 z-50 -translate-x-1/2 transition-all duration-200 ${
+          nodes.length > 0 && !isViewportCoveringAnyNode
+            ? 'translate-y-0 opacity-100'
+            : 'pointer-events-none translate-y-3 opacity-0'
+        }`}
+      >
+        <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl ${canvasTheme === 'dark' ? 'border-white/10 bg-[#242424] text-white' : 'border-neutral-200 bg-white text-neutral-900'}`}>
+          <span className="text-sm">当前视窗没有节点，可点击按钮快速回到内容区域</span>
+          <button
+            type="button"
+            onClick={returnToNodeContent}
+            className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${canvasTheme === 'dark' ? 'bg-white text-black hover:bg-neutral-200' : 'bg-neutral-900 text-white hover:bg-neutral-800'}`}
+          >
+            回到节点
+          </button>
+        </div>
+      </div>
+
+      {/* Zoom Controls */}
       {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
-        <div className={`fixed bottom-6 left-16 rounded-full px-4 py-2 flex items-center gap-3 z-50 transition-colors duration-300 ${canvasTheme === 'dark' ? 'bg-neutral-900 border border-neutral-700' : 'bg-white/90 backdrop-blur-sm border border-neutral-200'}`} >
-          <span className={`text-xs ${canvasTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-500'}`}>Zoom</span>
-          <input
-            type="range"
-            min="0.1"
-            max="2"
-            step="0.1"
-            value={viewport.zoom}
-            onChange={handleSliderZoom}
-            className="w-32"
-          />
-          <span className={`text-xs w-10 ${canvasTheme === 'dark' ? 'text-neutral-300' : 'text-neutral-600'}`}>{Math.round(viewport.zoom * 100)}%</span>
+        <div className={`fixed bottom-6 left-6 rounded-2xl px-3 py-2 flex items-center gap-2 z-50 shadow-2xl transition-colors duration-300 ${canvasTheme === 'dark' ? 'bg-neutral-900 border border-neutral-700 text-white' : 'bg-white/90 backdrop-blur-sm border border-neutral-200 text-neutral-900'}`} >
+          <button
+            type="button"
+            onClick={() => zoomBy(-0.1)}
+            className={`flex h-8 w-8 items-center justify-center rounded-xl text-lg transition-colors ${canvasTheme === 'dark' ? 'hover:bg-white/10' : 'hover:bg-neutral-100'}`}
+            aria-label="缩小画布"
+          >
+            -
+          </button>
+          <span className={`w-14 text-center text-sm font-medium ${canvasTheme === 'dark' ? 'text-neutral-200' : 'text-neutral-700'}`}>
+            {Math.round(viewport.zoom * 100)}%
+          </span>
+          <button
+            type="button"
+            onClick={() => zoomBy(0.1)}
+            className={`flex h-8 w-8 items-center justify-center rounded-xl text-lg transition-colors ${canvasTheme === 'dark' ? 'hover:bg-white/10' : 'hover:bg-neutral-100'}`}
+            aria-label="放大画布"
+          >
+            +
+          </button>
         </div>
       )}
 
