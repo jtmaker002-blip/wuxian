@@ -9,6 +9,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { X, Trash2, FileText, Loader2, Maximize2, Pencil, Check } from 'lucide-react';
 import { LazyImage } from './LazyImage';
 import { useTranslation } from 'react-i18next';
+import { listProjects } from '../services/projects/projectClient';
 
 interface WorkflowSummary {
     id: string;
@@ -75,13 +76,26 @@ export const WorkflowPanel: React.FC<WorkflowPanelProps> = ({
     const fetchWorkflows = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:3001/api/workflows');
-            if (response.ok) {
-                const data = await response.json();
-                setWorkflows(data);
-            }
+            const projects = await listProjects();
+            setWorkflows(projects.map((project) => ({
+                id: project.id,
+                title: project.title || project.name,
+                createdAt: project.createdAt || project.updatedAt || new Date().toISOString(),
+                updatedAt: project.updatedAt || project.createdAt || new Date().toISOString(),
+                nodeCount: project.nodeCount,
+                description: project.description,
+            })));
         } catch (error) {
-            console.error('Failed to fetch workflows:', error);
+            console.error('Failed to fetch projects:', error);
+            try {
+                const response = await fetch('http://localhost:3001/api/workflows');
+                if (response.ok) {
+                    const data = await response.json();
+                    setWorkflows(data);
+                }
+            } catch (fallbackError) {
+                console.error('Failed to fetch workflows:', fallbackError);
+            }
         } finally {
             setLoading(false);
         }

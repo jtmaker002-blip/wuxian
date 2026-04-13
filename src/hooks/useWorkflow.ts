@@ -7,11 +7,14 @@
 
 import React, { useState, useCallback, Dispatch, SetStateAction } from 'react';
 import { NodeData, NodeGroup, Viewport } from '../types';
+import { loadProject, saveProject } from '../services/projects/projectClient';
+import type { CanvasEdge, Project } from '../types/project';
 
 interface WorkflowData {
     id: string | null;
     title: string;
     nodes: NodeData[];
+    edges: CanvasEdge[];
     groups: NodeGroup[];
     viewport: Viewport;
 }
@@ -54,22 +57,35 @@ export const useWorkflow = ({
             const workflow: WorkflowData = {
                 id: workflowId,
                 title: canvasTitle,
+                edges: nodes.flatMap((node) =>
+                    (node.parentIds || []).map((parentId) => ({
+                        id: `${parentId}->${node.id}`,
+                        source_node_id: parentId,
+                        target_node_id: node.id,
+                        source: parentId,
+                        target: node.id,
+                    }))
+                ),
                 nodes,
                 groups,
                 viewport
             };
 
-            const response = await fetch('http://localhost:3001/api/workflows', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(workflow)
-            });
+            const project = await saveProject({
+                ...workflow,
+                name: canvasTitle,
+                description: '',
+            } as Project);
 
-            if (response.ok) {
-                const result = await response.json();
-                setWorkflowId(result.id);
-                console.log('Workflow saved:', result.id);
-            }
+            setWorkflowId(project.id);
+            console.log('Project saved:', project.id);
+
+            // Keep legacy workflow files in sync for the existing workflow panel until it is fully migrated.
+            void fetch('http://localhost:3001/api/workflows', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ...workflow, id: project.id })
+            });
         } catch (error) {
             console.error('Failed to save workflow:', error);
         }
@@ -87,31 +103,38 @@ export const useWorkflow = ({
             const workflowId = isPublic ? id.replace('public:', '') : id;
             const endpoint = isPublic
                 ? `http://localhost:3001/api/public-workflows/${workflowId}`
-                : `http://localhost:3001/api/workflows/${workflowId}`;
+                : null;
 
-            const response = await fetch(endpoint);
-            if (response.ok) {
-                const workflow = await response.json();
+            const workflow = isPublic
+                ? await (async () => {
+                    const response = await fetch(endpoint!);
+                    if (!response.ok) return null;
+                    return response.json();
+                })()
+                : await loadProject(workflowId);
+
+            if (workflow) {
+                const normalizedWorkflow = 'project' in workflow ? workflow.project : workflow;
 
                 // For public workflows, don't set the workflowId so it saves as a new workflow
                 if (!isPublic) {
-                    setWorkflowId(workflow.id);
+                    setWorkflowId(normalizedWorkflow.id);
                 } else {
                     setWorkflowId(null); // New copy, not linked to public workflow
                 }
 
-                setCanvasTitle(workflow.title || 'Untitled');
-                setEditingTitleValue(workflow.title || 'Untitled');
-                setNodes(workflow.nodes || []);
-                setGroups(workflow.groups || []); // Restore groups
+                setCanvasTitle(normalizedWorkflow.title || normalizedWorkflow.name || 'Untitled');
+                setEditingTitleValue(normalizedWorkflow.title || normalizedWorkflow.name || 'Untitled');
+                setNodes(normalizedWorkflow.nodes || []);
+                setGroups(normalizedWorkflow.groups || []); // Restore groups
                 // Reset selection
                 setSelectedNodeIds([]);
                 setIsWorkflowPanelOpen(false);
                 console.log(isPublic ? 'Public workflow loaded:' : 'Workflow loaded:', workflowId);
                 // Return info for tracking
                 return {
-                    nodeCount: (workflow.nodes || []).length,
-                    title: workflow.title || 'Untitled'
+                    nodeCount: (normalizedWorkflow.nodes || []).length,
+                    title: normalizedWorkflow.title || normalizedWorkflow.name || 'Untitled'
                 };
             }
         } catch (error) {

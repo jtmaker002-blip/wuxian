@@ -1,15 +1,22 @@
 import { SCENES, type SceneId, type ScenePipeline } from '../../types/scene';
-import { createMockScenePipeline } from './shared';
+import { characterThreeViewPipeline } from './scenes/characterThreeViewPipeline';
+import { cinematicLightCorrectionPipeline } from './scenes/cinematicLightCorrectionPipeline';
+import { coherentStoryboard25Pipeline } from './scenes/coherentStoryboard25Pipeline';
+import { frameDeductionMinus5sPipeline } from './scenes/frameDeductionMinus5sPipeline';
+import { frameDeductionPlus3sPipeline } from './scenes/frameDeductionPlus3sPipeline';
+import { multiViewNineGridPipeline } from './scenes/multiViewNineGridPipeline';
+import { plotDeductionFourGridPipeline } from './scenes/plotDeductionFourGridPipeline';
+import { upscalePipeline } from './scenes/upscalePipeline';
 
 export const pipelineRegistry: Record<SceneId, ScenePipeline> = {
-  [SCENES.MULTI_VIEW_NINE_GRID]: createMockScenePipeline('image'),
-  [SCENES.PLOT_DEDUCTION_FOUR_GRID]: createMockScenePipeline('image'),
-  [SCENES.COHERENT_STORYBOARD_25]: createMockScenePipeline('image'),
-  [SCENES.CINEMATIC_LIGHT_CORRECTION]: createMockScenePipeline('image'),
-  [SCENES.CHARACTER_THREE_VIEW_GENERATE]: createMockScenePipeline('image'),
-  [SCENES.FRAME_DEDUCTION_PLUS_3S]: createMockScenePipeline('image'),
-  [SCENES.FRAME_DEDUCTION_MINUS_5S]: createMockScenePipeline('image'),
-  [SCENES.UPSCALE]: createMockScenePipeline('image'),
+  [SCENES.MULTI_VIEW_NINE_GRID]: multiViewNineGridPipeline,
+  [SCENES.PLOT_DEDUCTION_FOUR_GRID]: plotDeductionFourGridPipeline,
+  [SCENES.COHERENT_STORYBOARD_25]: coherentStoryboard25Pipeline,
+  [SCENES.CINEMATIC_LIGHT_CORRECTION]: cinematicLightCorrectionPipeline,
+  [SCENES.CHARACTER_THREE_VIEW_GENERATE]: characterThreeViewPipeline,
+  [SCENES.FRAME_DEDUCTION_PLUS_3S]: frameDeductionPlus3sPipeline,
+  [SCENES.FRAME_DEDUCTION_MINUS_5S]: frameDeductionMinus5sPipeline,
+  [SCENES.UPSCALE]: upscalePipeline,
 };
 
 export function getScenePipeline(scene: SceneId | string | undefined) {
