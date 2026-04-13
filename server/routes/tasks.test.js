@@ -12,6 +12,10 @@ async function createServer() {
   const app = express();
   app.use(express.json());
   app.locals.TASKS_DIR = tasksDir;
+  app.locals.TASK_CHILD_WAVE_MS = 80;
+  app.locals.TASK_CHILD_DURATION_MS = 45;
+  app.locals.TASK_CHILD_STAGGER_MS = 5;
+  app.locals.TASK_SINGLE_MS = 80;
   app.use('/api/tasks', tasksRouter);
   return await new Promise((resolve) => {
     const server = app.listen(0, () => {
@@ -112,7 +116,7 @@ describe('tasks routes', () => {
         }),
       });
       const created = await createResponse.json();
-      await new Promise((resolve) => setTimeout(resolve, 2900));
+      await new Promise((resolve) => setTimeout(resolve, 180));
 
       const statusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
         method: 'POST',
@@ -199,7 +203,7 @@ describe('tasks routes', () => {
       expect(status.tasks[0].maxConcurrency).toBe(4);
       expect(status.tasks[0].childTasks.filter((task) => task.status === 'running').length).toBeLessThanOrEqual(4);
 
-      await new Promise((resolve) => setTimeout(resolve, 1350));
+      await new Promise((resolve) => setTimeout(resolve, 70));
       const secondStatusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -233,7 +237,7 @@ describe('tasks routes', () => {
         }),
       });
       const created = await createResponse.json();
-      await new Promise((resolve) => setTimeout(resolve, 2900));
+      await new Promise((resolve) => setTimeout(resolve, 180));
 
       const statusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
         method: 'POST',

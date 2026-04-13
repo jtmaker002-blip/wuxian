@@ -5,6 +5,21 @@ import path from 'path';
 
 const tasks = new Map();
 const MAX_CHILD_CONCURRENCY = 4;
+const DEFAULT_TIMING = {
+  childWaveMs: 1800,
+  childDurationMs: 1100,
+  childStaggerMs: 120,
+  singleTaskMs: 2000,
+};
+
+function getTiming(runtime = {}) {
+  return {
+    childWaveMs: Number(runtime.TASK_CHILD_WAVE_MS || process.env.TWITCANVA_TASK_CHILD_WAVE_MS) || DEFAULT_TIMING.childWaveMs,
+    childDurationMs: Number(runtime.TASK_CHILD_DURATION_MS || process.env.TWITCANVA_TASK_CHILD_DURATION_MS) || DEFAULT_TIMING.childDurationMs,
+    childStaggerMs: Number(runtime.TASK_CHILD_STAGGER_MS || process.env.TWITCANVA_TASK_CHILD_STAGGER_MS) || DEFAULT_TIMING.childStaggerMs,
+    singleTaskMs: Number(runtime.TASK_SINGLE_MS || process.env.TWITCANVA_TASK_SINGLE_MS) || DEFAULT_TIMING.singleTaskMs,
+  };
+}
 
 function makeTaskId() {
   return `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -253,11 +268,11 @@ async function buildTaskOutput(request, runtime = {}) {
   }
 }
 
-function buildChildTasks(parentTaskId, request, count, now) {
+function buildChildTasks(parentTaskId, request, count, now, timing = DEFAULT_TIMING) {
   if (count <= 1) return [];
   return Array.from({ length: count }).map((_, index) => {
     const wave = Math.floor(index / MAX_CHILD_CONCURRENCY);
-    const childStart = now + wave * 1800;
+    const childStart = now + wave * timing.childWaveMs;
     return {
       taskId: `${parentTaskId}_child_${index + 1}`,
       requestId: `${request?.requestId || parentTaskId}_child_${index + 1}`,
@@ -265,7 +280,7 @@ function buildChildTasks(parentTaskId, request, count, now) {
       status: 'pending',
       progressPercent: 0,
       createdAt: childStart,
-      completionAt: childStart + 1100 + (index % MAX_CHILD_CONCURRENCY) * 120,
+      completionAt: childStart + timing.childDurationMs + (index % MAX_CHILD_CONCURRENCY) * timing.childStaggerMs,
       result: null,
       errorMessage: null,
     };
@@ -330,13 +345,14 @@ export function createTask(request, runtime = {}) {
   const taskId = makeTaskId();
   const now = Date.now();
   const scene = request?.params?.scene || 'mock_scene';
-  const childTasks = buildChildTasks(taskId, request, getSceneResultCount(scene), now);
+  const timing = getTiming(runtime);
+  const childTasks = buildChildTasks(taskId, request, getSceneResultCount(scene), now, timing);
   const task = {
     taskId,
     requestId: request?.requestId || taskId,
     request,
     createdAt: now,
-    completionAt: now + 2000,
+    completionAt: now + timing.singleTaskMs,
     status: 'pending',
     progressPercent: 0,
     result: null,
