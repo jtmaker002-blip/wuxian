@@ -80,6 +80,7 @@ import { sanitizeVideoNodeState } from './utils/videoCapabilityState';
 import { DEFAULT_REGISTRY_VIDEO_ID, canonicalizeVideoModelId } from './config/registryModelBridge';
 import { getSceneDefinition } from './services/scenes/registry';
 import type { SceneId } from './types/scene';
+import { createSceneGridImageNode, createSceneGridUpscaleNode } from './utils/sceneGridActions';
 import {
   cropImageBySelection,
   cutoutImageBySelection,
@@ -503,32 +504,9 @@ export default function App() {
     if (!sourceNode) return;
 
     const nodeId = crypto.randomUUID();
-    const baseX = sourceNode.x + 460;
-    const baseY = sourceNode.y + (action === 'upscale-node' ? 260 : 0);
 
     if (action === 'upscale-node') {
-      const newNode: NodeData = {
-        id: nodeId,
-        type: NodeType.IMAGE,
-        x: baseX,
-        y: baseY,
-        prompt: `高清放大 · ${image.label || '单格'}`,
-        status: NodeStatus.IDLE,
-        model: 'mock-scene-pipeline',
-        imageModel: 'gpt-image-1.5',
-        aspectRatio: '16:9',
-        resolution: '2x',
-        title: `高清 · ${image.label || '单格'}`,
-        name: `高清 · ${image.label || '单格'}`,
-        scene: 'upscale',
-        params: {
-          imageUrl: image.url,
-          targetResolution: '2x',
-          detailMode: 'cinematic',
-        },
-        parentIds: [sourceNodeId],
-        isPromptExpanded: true,
-      };
+      const newNode = createSceneGridUpscaleNode({ id: nodeId, sourceNode, image });
       setNodes((prev) => [...prev, newNode]);
       setSelectedNodeIds([nodeId]);
       setTimeout(() => {
@@ -537,21 +515,7 @@ export default function App() {
       return;
     }
 
-    const newNode: NodeData = {
-      id: nodeId,
-      type: NodeType.IMAGE,
-      x: baseX,
-      y: baseY,
-      prompt: image.label || '来自宫格单格的图片素材',
-      status: NodeStatus.SUCCESS,
-      resultUrl: image.url,
-      model: getDefaultModelForNodeType(NodeType.IMAGE),
-      imageModel: getDefaultModelForNodeType(NodeType.IMAGE),
-      aspectRatio: '16:9',
-      resolution: '1K',
-      title: image.label || '宫格单格',
-      parentIds: [sourceNodeId],
-    };
+    const newNode = createSceneGridImageNode({ id: nodeId, sourceNode, image });
     setNodes((prev) => [...prev, newNode]);
     setSelectedNodeIds([nodeId]);
   }, [nodes, setNodes, setSelectedNodeIds]);

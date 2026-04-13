@@ -59,7 +59,8 @@ function loadTask(taskId, runtime = {}) {
   return task;
 }
 
-function getSceneResultCount(scene) {
+function getSceneResultCount(scene, params = {}) {
+  if (typeof params.gridItemIndex === 'number') return 1;
   return scene === 'coherent_storyboard_25' ? 25 :
     scene === 'plot_deduction_four_grid' ? 4 :
     scene === 'character_three_view_generate' ? 3 :
@@ -313,15 +314,16 @@ async function generateRealImages({ prompts, params, runtime }) {
 
 function buildMockResult(request, extraStructuredData = {}) {
   const scene = request?.params?.scene || 'mock_scene';
-  const count = getSceneResultCount(scene);
+  const count = getSceneResultCount(scene, request?.params || {});
+  const startIndex = typeof request?.params?.gridItemIndex === 'number' ? request.params.gridItemIndex : 0;
 
   return {
     textList: [`${scene} mock task completed`],
     imageList: Array.from({ length: count }).map((_, index) => ({
-      url: makeMockImageDataUrl(`${scene} · Result ${index + 1}`, scene === 'coherent_storyboard_25' ? '#7c3aed' : '#2563eb', index + 1),
+      url: makeMockImageDataUrl(`${scene} · Result ${startIndex + index + 1}`, scene === 'coherent_storyboard_25' ? '#7c3aed' : '#2563eb', startIndex + index + 1),
       width: 960,
       height: 540,
-      label: `Result ${index + 1}`,
+      label: `Result ${startIndex + index + 1}`,
       status: 'succeeded',
     })),
     structuredData: {
@@ -334,7 +336,7 @@ function buildMockResult(request, extraStructuredData = {}) {
 async function buildTaskOutput(request, runtime = {}) {
   const scene = request?.params?.scene || 'mock_scene';
   const params = request?.params || {};
-  const count = getSceneResultCount(scene);
+  const count = getSceneResultCount(scene, params);
 
   if (!shouldUseRealProvider(request, runtime)) {
     return buildMockResult(request);
@@ -461,7 +463,7 @@ export function createTask(request, runtime = {}) {
   const now = Date.now();
   const scene = request?.params?.scene || 'mock_scene';
   const timing = getTiming(runtime);
-  const childTasks = buildChildTasks(taskId, request, getSceneResultCount(scene), now, timing);
+  const childTasks = buildChildTasks(taskId, request, getSceneResultCount(scene, request?.params || {}), now, timing);
   const task = {
     taskId,
     requestId: request?.requestId || taskId,

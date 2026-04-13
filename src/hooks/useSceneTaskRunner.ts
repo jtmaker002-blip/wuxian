@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import { NodeData, NodeStatus } from '../types';
 import type { SceneId } from '../types/scene';
@@ -22,6 +22,33 @@ type ActiveSceneTask = {
   params: Record<string, any>;
   remote: boolean;
 };
+
+export function buildSceneTaskParams(node: NodeData): Record<string, any> | undefined {
+  if (!node.scene) return undefined;
+  const definition = getSceneDefinition(node.scene);
+  if (!definition) return undefined;
+  return {
+    ...definition.defaultParams,
+    ...(node.params || {}),
+    prompt: node.prompt || node.params?.prompt || definition.defaultParams.prompt,
+  };
+}
+
+export function getRestorableSceneTasks(nodes: NodeData[]): ActiveSceneTask[] {
+  return nodes.flatMap((node) => {
+    if (!node.scene || !node.taskInfo?.taskId || !node.taskInfo.loading) return [];
+    if (node.taskInfo.status !== 'pending' && node.taskInfo.status !== 'running') return [];
+    const params = buildSceneTaskParams(node);
+    if (!params) return [];
+    return [{
+      nodeId: node.id,
+      scene: node.scene as SceneId,
+      taskId: node.taskInfo.taskId,
+      params,
+      remote: !node.taskInfo.taskId.startsWith('local_'),
+    }];
+  });
+}
 
 export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskRunnerOptions) {
   const pollingRef = useRef<number | undefined>(undefined);
@@ -132,11 +159,7 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       return true;
     }
 
-    const params: Record<string, any> = {
-      ...definition.defaultParams,
-      ...(node.params || {}),
-      prompt: node.prompt || node.params?.prompt || definition.defaultParams.prompt,
-    };
+    const params = buildSceneTaskParams(node)!;
 
     try {
       await pipeline.validate(params);
@@ -284,6 +307,19 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       return true;
     }
   }, [ensureBatchPoller, nodes, patchNode, projectId]);
+
+  useEffect(() => {
+    const restorableTasks = getRestorableSceneTasks(nodes);
+    let addedTask = false;
+    for (const task of restorableTasks) {
+      if (activeTasksRef.current[task.nodeId]) continue;
+      activeTasksRef.current[task.nodeId] = task;
+      addedTask = true;
+    }
+    if (addedTask) {
+      ensureBatchPoller();
+    }
+  }, [ensureBatchPoller, nodes]);
 
   return { runSceneNode };
 }

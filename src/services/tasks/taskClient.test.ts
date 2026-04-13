@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { calculateTaskCost, cancelTask, cancelTasks, createTask, pollTasks } from './taskClient';
+import { calculateTaskCost, cancelTask, cancelTasks, createTask, pollTasks, retryTask } from './taskClient';
 import { SCENES } from '../../types/scene';
 
 vi.mock('../../shared/provider/openaiteach-config', () => ({
@@ -145,5 +145,15 @@ describe('taskClient', () => {
     await expect(cancelTask('task-1')).resolves.toBe(true);
     await expect(cancelTasks(['task-1'])).resolves.toEqual(['task-1']);
     await expect(calculateTaskCost(request)).resolves.toMatchObject({ estimatedCost: 64, unit: 'energy' });
+  });
+
+  it('retries a task through the unified retry endpoint', async () => {
+    mockFetch({ success: true, taskId: 'task-retry' });
+
+    await expect(retryTask(request)).resolves.toEqual({ success: true, taskId: 'task-retry' });
+    expect(global.fetch).toHaveBeenCalledWith('/api/tasks/retry', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ request }),
+    }));
   });
 });

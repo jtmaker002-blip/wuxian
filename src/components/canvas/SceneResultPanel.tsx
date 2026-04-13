@@ -4,6 +4,8 @@ import { getSceneDefinition } from '../../services/scenes/registry';
 import { SCENES } from '../../types/scene';
 import type { NodeData } from '../../types';
 import { makeMockImageDataUrl } from '../../services/mock/sceneAssets';
+import { pollTasks, retryTask } from '../../services/tasks/taskClient';
+import type { GenerationRequest } from '../../types/scene';
 
 type SceneResultPanelProps = {
   data: NodeData;
@@ -54,10 +56,87 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
     });
   };
 
-  const retryGridItem = (index: number) => {
+  const retryGridItem = async (index: number) => {
+    const currentImage = images[index];
+    const label = currentImage?.label || `Result ${index + 1}`;
+    const runningImages = images.map((image, imageIndex) => (
+      imageIndex === index ? { ...image, status: 'running' } : image
+    ));
+    onUpdate?.(data.id, {
+      outputs: {
+        ...(data.outputs || {}),
+        imageList: runningImages,
+        structuredData,
+      },
+      structuredData,
+    });
+
+    try {
+      const request: GenerationRequest = {
+        params: {
+          ...(data.params || {}),
+          scene: data.scene,
+          gridItemIndex: index,
+          prompt: selectedShot?.imageGenerationPrompt || data.prompt || label,
+          storyText: data.params?.storyText || data.prompt || label,
+        },
+        metadata: {
+          node_id: data.id,
+          project_id: 'scene-grid-retry',
+        },
+        provider: (data.params?.executionMode === 'real' || data.params?.providerMode === 'real') ? 'openai' : 'mock',
+        model: (data.params?.imageModel as string) || 'mock-scene-pipeline',
+        taskType: 'image',
+        requestId: crypto.randomUUID(),
+      };
+      const { taskId } = await retryTask(request);
+      let retriedImageUrl: string | undefined;
+      let retriedLabel = label;
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const [snapshot] = await pollTasks([taskId]);
+        if (snapshot?.status === 'succeeded' && snapshot.result?.imageList?.[0]) {
+          retriedImageUrl = snapshot.result.imageList[0].url;
+          retriedLabel = snapshot.result.imageList[0].label || retriedLabel;
+          break;
+        }
+        if (snapshot?.status === 'failed' || snapshot?.status === 'cancelled') {
+          throw new Error(snapshot.errorMessage || '单格重试失败');
+        }
+      }
+      if (!retriedImageUrl) {
+        throw new Error('单格重试超时');
+      }
+      const nextImages = images.map((image, imageIndex) => (
+        imageIndex === index
+          ? { ...image, url: retriedImageUrl, label: retriedLabel, status: 'succeeded' }
+          : image
+      ));
+
+      onUpdate?.(data.id, {
+        outputs: {
+          ...(data.outputs || {}),
+          imageList: nextImages,
+          structuredData,
+        },
+        resultUrl: nextImages[0]?.url,
+        structuredData,
+        taskInfo: data.taskInfo
+          ? {
+            ...data.taskInfo,
+            status: 'succeeded',
+            loading: false,
+            progressPercent: 100,
+          }
+          : data.taskInfo,
+      });
+      return;
+    } catch (error) {
+      console.warn('[SceneResultPanel] Falling back to local cell retry:', error);
+    }
+
     const nextImages = images.map((image, imageIndex) => {
       if (imageIndex !== index) return image;
-      const label = image.label || `Result ${index + 1}`;
       return {
         ...image,
         url: makeMockImageDataUrl(`${definition?.label || 'scene'} · 单格重试 · ${label}`, '#22c55e', index + 1),

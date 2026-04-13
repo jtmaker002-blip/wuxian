@@ -282,6 +282,42 @@ describe('tasks routes', () => {
     }
   });
 
+  it('retries a single grid item as a one-result task', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const retryResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/retry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request: {
+            params: { scene: 'coherent_storyboard_25', gridItemIndex: 7 },
+            metadata: { node_id: 'node-retry-cell', project_id: 'project-1' },
+            provider: 'mock',
+            model: 'mock-model',
+            taskType: 'image',
+            requestId: 'request-retry-cell',
+          },
+        }),
+      });
+      const retried = await retryResponse.json();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
+      const statusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: [retried.taskId] }),
+      });
+      const status = await statusResponse.json();
+
+      expect(status.tasks[0].status).toBe('succeeded');
+      expect(status.tasks[0].result.imageList).toHaveLength(1);
+      expect(status.tasks[0].result.imageList[0].label).toBe('Result 8');
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
   it.each([
     ['multi_view_nine_grid', 9, 'multiView'],
     ['plot_deduction_four_grid', 4, 'storyboard'],

@@ -37,17 +37,28 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function createTask(request: GenerationRequest): Promise<CreateTaskResponse> {
+function withStoredProviderConfig(request: GenerationRequest): GenerationRequest {
   const providerConfig =
-    request.params.providerApiKey || request.params.providerBaseUrl
+    request.params.providerApiKey || request.params.providerBaseUrl ||
+    (request.params.executionMode !== 'real' && request.params.providerMode !== 'real' && request.provider !== 'openai')
       ? {}
       : readStoredOpenAiTeachProviderConfig();
-  return postJson<CreateTaskResponse>('/api/tasks/create', {
+  return {
     ...request,
     params: {
       ...providerConfig,
       ...request.params,
     },
+  };
+}
+
+export async function createTask(request: GenerationRequest): Promise<CreateTaskResponse> {
+  return postJson<CreateTaskResponse>('/api/tasks/create', withStoredProviderConfig(request));
+}
+
+export async function retryTask(request: GenerationRequest): Promise<CreateTaskResponse> {
+  return postJson<CreateTaskResponse>('/api/tasks/retry', {
+    request: withStoredProviderConfig(request),
   });
 }
 
