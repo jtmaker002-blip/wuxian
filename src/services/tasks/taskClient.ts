@@ -1,4 +1,5 @@
 import type { GenerationRequest, TaskSnapshot } from '../../types/scene';
+import { readStoredOpenAiTeachProviderConfig } from '../../shared/provider/openaiteach-config';
 
 type CreateTaskResponse = {
   success: boolean;
@@ -37,7 +38,17 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
 }
 
 export async function createTask(request: GenerationRequest): Promise<CreateTaskResponse> {
-  return postJson<CreateTaskResponse>('/api/tasks/create', request);
+  const providerConfig =
+    request.params.providerApiKey || request.params.providerBaseUrl
+      ? {}
+      : readStoredOpenAiTeachProviderConfig();
+  return postJson<CreateTaskResponse>('/api/tasks/create', {
+    ...request,
+    params: {
+      ...providerConfig,
+      ...request.params,
+    },
+  });
 }
 
 export async function pollTasks(taskIds: string[]): Promise<TaskSnapshot[]> {

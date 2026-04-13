@@ -2,6 +2,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { calculateTaskCost, cancelTask, cancelTasks, createTask, pollTasks } from './taskClient';
 import { SCENES } from '../../types/scene';
 
+vi.mock('../../shared/provider/openaiteach-config', () => ({
+  readStoredOpenAiTeachProviderConfig: vi.fn(() => ({})),
+}));
+
+import { readStoredOpenAiTeachProviderConfig } from '../../shared/provider/openaiteach-config';
+
 const originalFetch = global.fetch;
 
 function mockFetch(json: unknown, ok = true) {
@@ -24,6 +30,7 @@ describe('taskClient', () => {
   afterEach(() => {
     global.fetch = originalFetch;
     vi.restoreAllMocks();
+    vi.mocked(readStoredOpenAiTeachProviderConfig).mockReturnValue({});
   });
 
   it('creates a task through the unified task endpoint', async () => {
@@ -33,6 +40,62 @@ describe('taskClient', () => {
     expect(global.fetch).toHaveBeenCalledWith('/api/tasks/create', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify(request),
+    }));
+  });
+
+  it('adds stored OpenAiTeach provider config to real scene task requests when no explicit provider is set', async () => {
+    vi.mocked(readStoredOpenAiTeachProviderConfig).mockReturnValue({
+      providerApiKey: 'sk-bound-token',
+      providerBaseUrl: 'https://openaiteach.com/v1',
+    });
+    mockFetch({ success: true, taskId: 'task-1' });
+
+    await createTask({
+      ...request,
+      params: {
+        ...request.params,
+        executionMode: 'real',
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/tasks/create', expect.objectContaining({
+      body: JSON.stringify({
+        ...request,
+        params: {
+          providerApiKey: 'sk-bound-token',
+          providerBaseUrl: 'https://openaiteach.com/v1',
+          ...request.params,
+          executionMode: 'real',
+        },
+      }),
+    }));
+  });
+
+  it('does not overwrite explicit provider credentials on a scene task request', async () => {
+    vi.mocked(readStoredOpenAiTeachProviderConfig).mockReturnValue({
+      providerApiKey: 'sk-bound-token',
+      providerBaseUrl: 'https://openaiteach.com/v1',
+    });
+    mockFetch({ success: true, taskId: 'task-1' });
+
+    await createTask({
+      ...request,
+      params: {
+        ...request.params,
+        providerApiKey: 'sk-explicit',
+        providerBaseUrl: 'https://example.test/v1',
+      },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith('/api/tasks/create', expect.objectContaining({
+      body: JSON.stringify({
+        ...request,
+        params: {
+          ...request.params,
+          providerApiKey: 'sk-explicit',
+          providerBaseUrl: 'https://example.test/v1',
+        },
+      }),
     }));
   });
 
