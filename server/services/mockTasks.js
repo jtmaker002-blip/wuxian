@@ -46,7 +46,7 @@ function taskFilePath(taskId, runtime = {}) {
 function persistTask(task, runtime = {}) {
   const filePath = taskFilePath(task.taskId, runtime);
   if (!filePath) return;
-  fs.writeFileSync(filePath, JSON.stringify(task, null, 2));
+  fs.writeFileSync(filePath, JSON.stringify(redactTaskForStorage(task), null, 2));
 }
 
 function loadTask(taskId, runtime = {}) {
@@ -57,6 +57,21 @@ function loadTask(taskId, runtime = {}) {
   const task = JSON.parse(fs.readFileSync(filePath, 'utf8'));
   tasks.set(taskId, task);
   return task;
+}
+
+function redactSecrets(value) {
+  if (Array.isArray(value)) return value.map(redactSecrets);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(Object.entries(value).map(([key, entry]) => {
+    if (/apiKey|providerApiKey|token|secret|authorization/i.test(key)) {
+      return [key, '[REDACTED]'];
+    }
+    return [key, redactSecrets(entry)];
+  }));
+}
+
+function redactTaskForStorage(task) {
+  return redactSecrets(task);
 }
 
 function getSceneResultCount(scene, params = {}) {
@@ -489,6 +504,13 @@ export function getTasks(taskIds, runtime = {}) {
   return taskIds.flatMap((taskId) => {
     const task = loadTask(taskId, runtime);
     if (!task) return [];
+    if (task.status === 'succeeded' && !task.result && !task.output) {
+      task.status = 'failed';
+      task.errorMessage = '任务快照缺少结果，请重新运行该节点。';
+      tasks.set(taskId, task);
+      persistTask(task, runtime);
+      return [task];
+    }
     if (task.status === 'cancelled' || task.status === 'failed' || task.status === 'succeeded') return [task];
 
     task.childTasks = updateChildTasks(task, now);
@@ -497,12 +519,14 @@ export function getTasks(taskIds, runtime = {}) {
       const progress = Math.round(childProgressTotal / task.childTasks.length);
       const allComplete = task.childTasks.every((child) => child.status === 'succeeded');
       task.progressPercent = progress;
-      task.status = allComplete && task.output ? 'succeeded' : progress < 8 ? 'pending' : 'running';
+      task.status = allComplete && task.output ? 'succeeded' : allComplete && !task.output ? 'failed' : progress < 8 ? 'pending' : 'running';
+      task.errorMessage = allComplete && !task.output ? '任务执行中断，结果未写入，请重试。' : task.errorMessage;
       task.result = allComplete && task.output ? task.output : null;
     } else {
       const progress = Math.min(100, Math.round(((now - task.createdAt) / (task.completionAt - task.createdAt)) * 100));
       task.progressPercent = progress;
-      task.status = progress >= 100 ? 'succeeded' : progress < 8 ? 'pending' : 'running';
+      task.status = progress >= 100 && task.output ? 'succeeded' : progress >= 100 && !task.output ? 'failed' : progress < 8 ? 'pending' : 'running';
+      task.errorMessage = progress >= 100 && !task.output ? '任务执行中断，结果未写入，请重试。' : task.errorMessage;
       task.result = task.status === 'succeeded' ? task.output : null;
     }
     tasks.set(taskId, task);

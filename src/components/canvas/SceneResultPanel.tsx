@@ -2,9 +2,9 @@ import React from 'react';
 import { Download, Loader2, Play, RotateCcw } from 'lucide-react';
 import { getSceneDefinition } from '../../services/scenes/registry';
 import { SCENES } from '../../types/scene';
-import type { NodeData } from '../../types';
+import { NodeStatus, type NodeData } from '../../types';
 import { makeMockImageDataUrl } from '../../services/mock/sceneAssets';
-import { pollTasks, retryTask } from '../../services/tasks/taskClient';
+import { cancelTask, pollTasks, retryTask } from '../../services/tasks/taskClient';
 import type { GenerationRequest } from '../../types/scene';
 
 type SceneResultPanelProps = {
@@ -170,6 +170,25 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
     anchor.click();
   };
 
+  const cancelCurrentTask = async () => {
+    const taskId = data.taskInfo?.taskId;
+    if (taskId) {
+      await cancelTask(taskId).catch(() => false);
+    }
+    onUpdate?.(data.id, {
+      status: NodeStatus.ERROR,
+      taskInfo: {
+        ...(data.taskInfo || {}),
+        taskId,
+        loading: false,
+        status: 'cancelled',
+        failedReason: '任务已取消',
+        progressPercent: data.taskInfo?.progressPercent ?? 0,
+      },
+      errorMessage: '任务已取消',
+    });
+  };
+
   const exportStoryboard = () => {
     const payload = JSON.stringify(structuredData || {}, null, 2);
     const blob = new Blob([payload], { type: 'application/json' });
@@ -228,7 +247,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
                   outputs: undefined,
                   structuredData: undefined,
                   resultUrl: undefined,
-                  status: 'idle' as NodeData['status'],
+                  status: NodeStatus.IDLE,
                   taskInfo: undefined,
                 });
               }}
@@ -236,6 +255,18 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
             >
               <RotateCcw size={13} />
               清空
+            </button>
+          )}
+          {isLoading && data.taskInfo?.taskId && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                void cancelCurrentTask();
+              }}
+              className="flex items-center gap-2 rounded-full border border-rose-300/25 bg-rose-500/12 px-3 py-1.5 text-xs text-rose-100"
+            >
+              取消任务
             </button>
           )}
         </div>

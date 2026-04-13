@@ -99,6 +99,37 @@ describe('tasks routes', () => {
     }
   });
 
+  it('redacts provider credentials from persisted task snapshots', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const createResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          params: {
+            scene: 'plot_deduction_four_grid',
+            executionMode: 'real',
+            providerApiKey: 'sk-super-secret',
+            providerBaseUrl: 'https://example.test/v1',
+          },
+          metadata: { node_id: 'node-secret', project_id: 'project-1' },
+          provider: 'openai',
+          model: 'gpt-image-1.5',
+          taskType: 'image',
+          requestId: 'request-secret',
+        }),
+      });
+      const created = await createResponse.json();
+      const raw = fs.readFileSync(path.join(tasksDir, `${created.taskId}.json`), 'utf8');
+
+      expect(raw).not.toContain('sk-super-secret');
+      expect(JSON.parse(raw).request.params.providerApiKey).toBe('[REDACTED]');
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
   it('returns renderable data URLs for completed mock image results', async () => {
     const serverHandle = await createServer();
 
@@ -169,6 +200,38 @@ describe('tasks routes', () => {
         progressPercent: 100,
       });
       expect(status.tasks[0].result.imageList[0].label).toBe('Persisted');
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
+  it('marks orphaned completed snapshots without output as failed instead of success-without-result', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      fs.writeFileSync(path.join(tasksDir, 'task_orphan.json'), JSON.stringify({
+        taskId: 'task_orphan',
+        requestId: 'request-orphan',
+        status: 'succeeded',
+        progressPercent: 100,
+        result: null,
+        output: null,
+        childTasks: [],
+        errorMessage: null,
+      }, null, 2));
+
+      const statusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: ['task_orphan'] }),
+      });
+      const status = await statusResponse.json();
+
+      expect(status.tasks[0]).toMatchObject({
+        taskId: 'task_orphan',
+        status: 'failed',
+        errorMessage: '任务快照缺少结果，请重新运行该节点。',
+      });
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }
