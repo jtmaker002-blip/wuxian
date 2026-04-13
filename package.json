@@ -17,6 +17,7 @@
     "preview:full": "concurrently \"node server/index.js\" \"vite preview\"",
     "setup:local-models": "node -e \"require('child_process').execSync(process.platform === 'win32' ? 'setup-local-models.bat' : 'bash setup-local-models.sh', {stdio: 'inherit'})\"",
     "verify:liblib-image-node": "node scripts/verify-liblib-image-node.cjs",
+    "verify:canvas-rescue": "node scripts/verify-canvas-rescue.cjs",
     "verify:liblib-image-node:full": "npm run verify:liblib-image-node && npm test -- src/components/canvas/image-node/imageNodeUiState.test.ts src/utils/imageNodeActions.test.ts src/components/canvas/image-node/FocusSelectionOverlay.test.ts src/hooks/useConnectionDragging.test.ts src/hooks/useContextMenuHandlers.test.ts src/hooks/useImageNodeHandlers.test.ts src/hooks/useNodeManagement.test.ts src/hooks/useGeneration.test.ts server/routes/generation-image.test.js && npm run build"
   },
   "dependencies": {
