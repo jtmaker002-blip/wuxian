@@ -1157,7 +1157,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
     return (
         <div
-            className={`${isLiblibImagePanel || isLiblibVideoFromImagePanel ? 'relative rounded-[28px] p-4' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
+            className={`${isVideoNode ? 'relative rounded-[20px] p-3 shadow-2xl' : isLiblibImagePanel || isLiblibVideoFromImagePanel ? 'relative rounded-[28px] p-4' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
             style={{
                 transform: `scale(${localScale})`,
                 transformOrigin: 'top center',
@@ -1168,10 +1168,10 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         >
             {/* Prompt Textarea with Expand Button - Hidden for storyboard-generated scenes */}
             {!isOfflineReadonlyVideoNode && !isStoryboardGeneratedScene && (
-                <div className="mb-3">
+                <div className={isVideoNode ? 'mb-2' : 'mb-3'}>
                     {isVideoNode && (
-                        <div className="space-y-3">
-                            <div className="flex items-center gap-1.5 overflow-x-auto rounded-[22px] border border-white/8 bg-[#1f1f1f] p-1.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                        <div className="space-y-2">
+                            <div className="flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-white/8 bg-[#1f1f1f] p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
                                 {PRIMARY_VIDEO_PANEL_MODE_KEYS.map((modeKey) => {
                                     const mode = getVideoPanelModeByKey(modeKey);
                                     const active = activeVideoPanelMode === mode.key;
@@ -1181,7 +1181,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             key={mode.key}
                                             type="button"
                                             onClick={() => handleVideoPanelModeChange(mode.key)}
-                                            className={`h-9 shrink-0 rounded-[14px] px-3 text-sm font-medium transition-all ${
+                                            className={`h-8 shrink-0 rounded-[9px] px-3 text-sm font-medium transition-all ${
                                                 active
                                                     ? 'bg-white text-black shadow-[0_10px_24px_rgba(255,255,255,0.12)]'
                                                     : 'text-neutral-300 hover:bg-white/8 hover:text-white'
@@ -1194,12 +1194,12 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 })}
                             </div>
 
-                            <div className="grid grid-cols-1 gap-3 min-[680px]:grid-cols-[auto_1fr]">
+                            <div className="grid grid-cols-1 gap-2 min-[680px]:grid-cols-[auto_1fr]">
                                 <div className="grid grid-cols-4 gap-2 min-[680px]:flex min-[680px]:flex-wrap">
                                     <button
                                         type="button"
                                         onClick={handleVideoMark}
-                                        className="flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border border-white/10 bg-[#2a2a2a] text-xs font-medium text-neutral-100 transition-colors hover:border-white/18 hover:bg-[#333] min-[680px]:w-[76px]"
+                                        className="flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border border-white/10 bg-[#2a2a2a] text-xs font-medium text-neutral-100 transition-colors hover:border-white/18 hover:bg-[#333] min-[680px]:w-[66px]"
                                     >
                                         <Settings2 size={16} />
                                         <span>标记</span>
@@ -1208,7 +1208,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         type="button"
                                         disabled={!activeVideoPanelPolicy.canUsePresetCamera}
                                         onClick={handlePresetCameraMove}
-                                        className={`flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border text-xs font-medium transition-colors min-[680px]:w-[76px] ${
+                                        className={`flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border text-xs font-medium transition-colors min-[680px]:w-[66px] ${
                                             activeVideoPanelPolicy.canUsePresetCamera
                                                 ? 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
                                                 : 'cursor-not-allowed border-white/6 bg-[#242424] text-neutral-600'
@@ -1221,7 +1221,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     <button
                                         type="button"
                                         onClick={handleCharacterReferenceSelect}
-                                        className={`relative flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border text-xs font-medium transition-colors min-[680px]:w-[76px] ${
+                                        className={`relative flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border text-xs font-medium transition-colors min-[680px]:w-[66px] ${
                                             selectedCharacterReferenceUrl
                                                 ? 'border-emerald-300/40 bg-emerald-400/12 text-emerald-100'
                                                 : 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
@@ -1237,15 +1237,15 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => onQuickAddInputNode?.(data.id, activeVideoPanelPolicy.acceptsVideo ? 'video' : 'image')}
-                                        className="flex h-[70px] min-w-0 flex-col items-center justify-center gap-1.5 rounded-[18px] border border-dashed border-white/14 bg-[#2a2a2a] text-xs font-medium text-neutral-200 transition-colors hover:border-white/22 hover:bg-[#333] min-[680px]:w-[76px]"
+                                        className="flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-white/14 bg-[#2a2a2a] text-xs font-medium text-neutral-200 transition-colors hover:border-white/22 hover:bg-[#333] min-[680px]:w-[66px]"
                                     >
                                         <ImageIcon size={16} />
                                         <span>参考素材</span>
                                     </button>
                                 </div>
 
-                                <div className="min-w-0 rounded-[20px] border border-white/8 bg-[#252525] p-3">
-                                    <div className="mb-2 flex items-center justify-between gap-3">
+                                <div className="min-w-0 rounded-[12px] border border-white/8 bg-[#252525] p-2">
+                                    <div className="mb-1.5 flex items-center justify-between gap-3">
                                         <div className="min-w-0">
                                             <div className="text-[11px] font-medium text-neutral-400">
                                                 {activeVideoPanelDefinition.label} · {activeVideoPanelDefinition.listKey ?? 'prompt'}
@@ -1263,7 +1263,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             {videoPanelReferenceItems.map((item) => (
                                                 <div
                                                     key={`${item.id}-${item.label}`}
-                                                    className="relative h-[72px] w-[104px] shrink-0 overflow-hidden rounded-[14px] border border-white/10 bg-black"
+                                                    className="relative h-[58px] w-[90px] shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-black"
                                                 >
                                                     {item.mediaType === 'video' ? (
                                                         <video src={item.url} className="h-full w-full object-cover opacity-85" muted playsInline preload="metadata" />
@@ -1282,7 +1282,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="flex h-[72px] items-center justify-center rounded-[14px] border border-dashed border-white/10 bg-black/16 px-4 text-center text-xs text-neutral-500">
+                                        <div className="flex h-[58px] items-center justify-center rounded-[10px] border border-dashed border-white/10 bg-black/16 px-4 text-center text-xs text-neutral-500">
                                             {activeVideoPanelMode === 'text2video'
                                                 ? '当前模式只读取 prompt。已连接素材不会参与提交。'
                                                 : '添加或连接素材后，这里会显示引用卡片。'}
@@ -1291,12 +1291,12 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 </div>
                             </div>
 
-                            <div className="rounded-[22px] border border-white/8 bg-[#1f1f1f] px-4 py-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                            <div className="rounded-[12px] border border-white/8 bg-[#1f1f1f] px-4 py-2.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
                                 <textarea
-                                    className="min-h-[132px] w-full resize-none bg-transparent text-[16px] font-light leading-8 text-neutral-100 outline-none placeholder:text-neutral-500"
+                                    className="min-h-[108px] w-full resize-none bg-transparent text-[15px] font-light leading-7 text-neutral-100 outline-none placeholder:text-neutral-500"
                                     placeholder="描述你想要生成的画面内容，@引用素材"
                                     rows={data.isPromptExpanded ? 12 : 4}
-                                    style={{ minHeight: data.isPromptExpanded ? 220 : 132 }}
+                                    style={{ minHeight: data.isPromptExpanded ? 190 : 108 }}
                                     value={localPrompt}
                                     onChange={(e) => handlePromptChange(e.target.value)}
                                     onWheel={(e) => e.stopPropagation()}

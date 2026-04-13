@@ -2,16 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { getCanvasPointerAction } from './canvasPointerAction';
 
 describe('getCanvasPointerAction', () => {
-  it('uses blank-canvas left drag for panning by default', () => {
-    expect(getCanvasPointerAction({ button: 0, shiftKey: false })).toBe('pan');
+  it('uses blank-canvas left drag for selecting nodes', () => {
+    expect(getCanvasPointerAction({ button: 0 })).toBe('select');
   });
 
-  it('keeps selection box available behind Shift + left drag', () => {
-    expect(getCanvasPointerAction({ button: 0, shiftKey: true })).toBe('select');
-  });
-
-  it('uses non-left pointer buttons for panning', () => {
-    expect(getCanvasPointerAction({ button: 1, shiftKey: false })).toBe('pan');
-    expect(getCanvasPointerAction({ button: 2, shiftKey: false })).toBe('pan');
+  it('ignores non-left pointer drags on blank canvas', () => {
+    expect(getCanvasPointerAction({ button: 1 })).toBe('ignore');
+    expect(getCanvasPointerAction({ button: 2 })).toBe('ignore');
   });
 });

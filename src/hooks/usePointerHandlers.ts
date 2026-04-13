@@ -148,6 +148,7 @@ export const usePointerHandlers = ({
                 closeHistoryPanel();
                 closeAssetLibrary();
             } else {
+                e.preventDefault();
                 clearSelection();
                 startPanning(e);
                 setSelectedConnection(null);

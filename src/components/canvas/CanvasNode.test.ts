@@ -9,7 +9,7 @@ describe('getControlPanelWidthClassName', () => {
         isVideoNode: true,
         isImageToVideoNode: false,
       })
-    ).toContain('min(680px,calc(100vw-32px))');
+    ).toContain('min(820px,calc(100vw-32px))');
   });
 
   it('keeps existing non-video panel target widths while adding viewport caps', () => {
@@ -33,6 +33,6 @@ describe('getControlPanelWidthClassName', () => {
   it('counter-scales the control panel against canvas zoom', () => {
     expect(getControlPanelScale(2)).toBe(0.5);
     expect(getControlPanelScale(1)).toBe(1);
-    expect(getControlPanelScale(0.25)).toBe(3.2);
+    expect(getControlPanelScale(0.25)).toBe(1.25);
   });
 });
