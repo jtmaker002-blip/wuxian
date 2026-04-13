@@ -49,7 +49,7 @@ describe('recoverGenerationStatusForNode', () => {
         executedMode: 'S2V',
         executionProvider: 'hailuo',
       }),
-    })) as typeof fetch;
+    })) as unknown as typeof fetch;
     const extractLastFrameMock = vi.fn(async () => 'data:image/png;base64,last-frame');
 
     await recoverGenerationStatusForNode({
@@ -96,7 +96,7 @@ describe('recoverGenerationStatusForNode', () => {
         executedMode: 'pro',
         executionProvider: 'fal',
       }),
-    })) as typeof fetch;
+    })) as unknown as typeof fetch;
 
     const extractLastFrameMock = vi.fn(async () => {
       currentNodes = [freshNode];

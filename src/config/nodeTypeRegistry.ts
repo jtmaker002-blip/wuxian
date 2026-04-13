@@ -17,7 +17,7 @@ export function isSwitchableNodeType(type: NodeType): type is SwitchableNodeType
   return SWITCHABLE_NODE_TYPE_OPTIONS.some((option) => option.type === type);
 }
 
-export function getDefaultModelForNodeType(type: SwitchableNodeType): string {
+export function getDefaultModelForNodeType(type: SwitchableNodeType | NodeType.AUDIO): string {
   switch (type) {
     case NodeType.TEXT:
       return 'gpt-4o';
@@ -25,5 +25,7 @@ export function getDefaultModelForNodeType(type: SwitchableNodeType): string {
       return DEFAULT_REGISTRY_IMAGE_ID;
     case NodeType.VIDEO:
       return DEFAULT_REGISTRY_VIDEO_ID;
+    case NodeType.AUDIO:
+      return 'qwen3-tts-flash';
   }
 }

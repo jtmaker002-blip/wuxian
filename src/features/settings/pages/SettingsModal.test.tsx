@@ -17,7 +17,7 @@ const { verifyTokenMock, listTokensMock, mockSession } = vi.hoisted(() => ({
 let mockTokenStoreState: Record<string, unknown>;
 let useStateCallIndex = 0;
 let mockState = {
-  tab: 'token' as const,
+  tab: 'token' as 'token' | 'models' | 'account',
   isRefreshing: false,
   isTesting: false,
   message: '',

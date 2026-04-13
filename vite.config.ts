@@ -1,7 +1,6 @@
 import path from 'path';
 import type { IncomingMessage } from 'http';
-import type { Server } from 'http-proxy';
-import { defineConfig } from 'vite';
+import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 /**
@@ -26,7 +25,7 @@ function rewriteOpenaiteachSetCookieHeaders(proxyRes: IncomingMessage, devPrefix
   });
 }
 
-function attachOatCookieRewrite(proxy: Server, devPrefix: '/oat-api' | '/oat-v1') {
+function attachOatCookieRewrite(proxy: { on: (event: 'proxyRes', callback: (proxyRes: IncomingMessage) => void) => void }, devPrefix: '/oat-api' | '/oat-v1') {
   proxy.on('proxyRes', (proxyRes) => {
     rewriteOpenaiteachSetCookieHeaders(proxyRes, devPrefix);
   });
@@ -42,7 +41,7 @@ const sharedProxy = {
     secure: true,
     rewrite: (p: string) => p.replace(/^\/oat-api/, '/api'),
     cookieDomainRewrite: 'localhost',
-    configure(proxy: Server) {
+    configure(proxy) {
       attachOatCookieRewrite(proxy, '/oat-api');
     },
   },
@@ -52,7 +51,7 @@ const sharedProxy = {
     secure: true,
     rewrite: (p: string) => p.replace(/^\/oat-v1/, '/v1'),
     cookieDomainRewrite: 'localhost',
-    configure(proxy: Server) {
+    configure(proxy) {
       attachOatCookieRewrite(proxy, '/oat-v1');
     },
   },

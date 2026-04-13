@@ -9,7 +9,7 @@ describe('generationService OpenAiTeach token passthrough', () => {
     global.fetch = vi.fn(async () => ({
       ok: true,
       json: async () => ({ resultUrl: 'https://example.com/result' }),
-    })) as typeof fetch;
+    })) as unknown as typeof fetch;
 
     const store = new Map<string, string>();
     store.set('openaiteach-token-config', JSON.stringify({

@@ -156,7 +156,7 @@ function normalizeTokenRows(items: unknown[]): ApiTokenRecord[] {
   return items
     .map((item, idx) => {
       if (!item || typeof item !== 'object') {
-        return { id: `row-${idx}`, name: `Token ${idx + 1}`, value: '' };
+        return { id: `row-${idx}`, name: `Token ${idx + 1}`, value: '', isUsable: false };
       }
       const r = item as Record<string, unknown>;
       const id = readFirstString(r, TOKEN_ID_KEYS) || `row-${idx}`;
