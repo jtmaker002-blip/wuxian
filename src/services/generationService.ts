@@ -7,7 +7,15 @@
  * - Video: Veo 3.1, Kling AI
  */
 
-import type { FocusSelection, ImageAnnotation, ImageCameraSettings, ImageLightingSettings, ImageToolMode } from '../types';
+import type {
+  CameraPreset,
+  FocusSelection,
+  ImageAnnotation,
+  ImageCameraSettings,
+  ImageLightingSettings,
+  ImageToolMode,
+  VideoCameraControlState,
+} from '../types';
 import { readStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
 
 export interface GenerateImageParams {
@@ -42,6 +50,8 @@ export interface GenerateVideoParams {
   videoModel?: string; // Video model version (e.g., 'veo-3.1', 'kling-v2-1')
   motionReferenceUrl?: string; // For Kling 2.6 motion control
   generateAudio?: boolean; // For Kling 2.6 and Veo 3.1 native audio (default: true)
+  cameraPresets?: CameraPreset[];
+  videoCameraControl?: VideoCameraControlState;
   nodeId?: string; // ID of the node initiating generation
   providerApiKey?: string;
   providerBaseUrl?: string;

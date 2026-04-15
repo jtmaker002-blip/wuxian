@@ -226,6 +226,13 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const downloadThreeViewContactSheet = () => {
     const viewImages = images.slice(0, 3);
     if (viewImages.length === 0) return;
+    if (viewImages.length === 1) {
+      const anchor = document.createElement('a');
+      anchor.href = viewImages[0].url;
+      anchor.download = `${definition?.scene || 'character-three-view'}-sheet.png`;
+      anchor.click();
+      return;
+    }
     const width = 360 * viewImages.length;
     const height = 280;
     const svg = `
@@ -284,7 +291,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
               导出 JSON
             </button>
           )}
-          {isThreeView && images.length >= 3 && (
+          {isThreeView && images.length >= 1 && (
             <button
               type="button"
               onClick={(event) => {
@@ -294,7 +301,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
               className="flex items-center gap-2 rounded-full border border-white/12 bg-white/8 px-3 py-1.5 text-xs text-white"
             >
               <Download size={13} />
-              下载三视图拼图
+              下载三视图成品
             </button>
           )}
           {selected && (

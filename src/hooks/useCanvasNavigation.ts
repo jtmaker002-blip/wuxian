@@ -129,6 +129,10 @@ export const useCanvasNavigation = () => {
         zoomFromCenter(clampZoom(Number((viewport.zoom + delta).toFixed(2))));
     };
 
+    const setZoom = (zoom: number) => {
+        zoomFromCenter(clampZoom(zoom));
+    };
+
     // ============================================================================
     // RETURN
     // ============================================================================
@@ -139,6 +143,7 @@ export const useCanvasNavigation = () => {
         canvasRef,
         handleWheel,
         handleSliderZoom,
-        zoomBy
+        zoomBy,
+        setZoom
     };
 };

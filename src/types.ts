@@ -79,6 +79,16 @@ export interface ImageCameraSettings {
   aperture: string;
 }
 
+export interface CameraPreset {
+  id: string;
+  name: string;
+  prompt: string;
+}
+
+export interface VideoCameraControlState extends ImageCameraSettings {
+  enabled: boolean;
+}
+
 export interface NodeData {
   id: string;
   type: NodeType;
@@ -110,6 +120,8 @@ export interface NodeData {
   videoCount?: number; // Requested number of videos in the node panel
   generateAudio?: boolean; // Whether to generate native audio (Kling 2.6, Veo 3.1)
   inputUrl?: string; // Input URL for video generation (image-to-video)
+  cameraPresets?: CameraPreset[];
+  videoCameraControl?: VideoCameraControlState;
 
   // Audio node specific
   audioModel?: string; // Voice model version (e.g., 'qwen3-tts-flash')

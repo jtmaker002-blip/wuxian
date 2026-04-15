@@ -1,6 +1,7 @@
 import { generateOpenAIImage, generateOpenAIText } from './openai.js';
 import { generateGeminiImage } from './gemini.js';
 import { generateOpenAiTeachGeminiImage } from './openaiteachGeminiImage.js';
+import { buildSceneImagePrompts, buildStoryboardPlannerPrompt } from './scenePromptTemplates.js';
 import { detectImageExtensionFromBuffer, resolveImageToBase64, saveBufferToFile } from '../utils/imageHelpers.js';
 import fs from 'fs';
 import path from 'path';
@@ -81,7 +82,7 @@ function getSceneResultCount(scene, params = {}) {
   if (typeof params.gridItemIndex === 'number') return 1;
   return scene === 'coherent_storyboard_25' ? 25 :
     scene === 'plot_deduction_four_grid' ? 4 :
-    scene === 'character_three_view_generate' ? 3 :
+    scene === 'character_three_view_generate' ? 1 :
     scene === 'multi_view_nine_grid' ? 9 :
     1;
 }
@@ -102,6 +103,38 @@ function makeMockImageDataUrl(label, accent = '#3b82f6', index = 1) {
       <text x="54" y="84" fill="#fff" font-size="30" font-family="Arial, sans-serif" font-weight="700">Liblib Task Result</text>
       <text x="54" y="132" fill="#e5e7eb" font-size="22" font-family="Arial, sans-serif">${safeLabel}</text>
       <text x="54" y="488" fill="#fff" font-size="72" font-family="Arial, sans-serif" font-weight="800">${String(index).padStart(2, '0')}</text>
+    </svg>
+  `;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+
+function makeThreeViewMockDataUrl(params = {}) {
+  const style = String(params.style || 'realistic').replace(/[<>&]/g, '');
+  const background = String(params.background || 'plain white').replace(/[<>&]/g, '');
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+      <rect width="1200" height="720" fill="#f8f7f3"/>
+      <rect x="58" y="54" width="1084" height="612" rx="28" fill="#ffffff" stroke="#e7e5df" stroke-width="2"/>
+      <text x="92" y="110" fill="#222" font-size="28" font-family="Arial, sans-serif" font-weight="700">角色三视图</text>
+      <text x="92" y="146" fill="#777" font-size="17" font-family="Arial, sans-serif">${style} · ${background} · front / side / back</text>
+      ${['Front', 'Side', 'Back'].map((view, index) => {
+        const x = 210 + index * 390;
+        const bodyWidth = index === 1 ? 74 : 118;
+        const headRx = index === 1 ? 34 : 42;
+        return `
+          <g transform="translate(${x},176)">
+            <ellipse cx="0" cy="468" rx="112" ry="16" fill="#111" opacity="0.08"/>
+            <ellipse cx="0" cy="72" rx="${headRx}" ry="48" fill="#ead8c5" stroke="#d7b99d" stroke-width="3"/>
+            <path d="M-${headRx + 12} 66 C-${headRx + 8} 24 -24 12 0 18 C34 20 ${headRx + 16} 42 ${headRx + 9} 92 C28 80 -20 82 -${headRx + 12} 66Z" fill="#242424"/>
+            <path d="M-${bodyWidth / 2} 142 C-${bodyWidth / 2 + 12} 248 -${bodyWidth / 2 + 22} 338 -${bodyWidth / 2 - 8} 448 L${bodyWidth / 2 + 8} 448 C${bodyWidth / 2 + 22} 338 ${bodyWidth / 2 - 12} 248 ${bodyWidth / 2} 142Z" fill="#7c9b80" stroke="#55745c" stroke-width="4"/>
+            <path d="M-${bodyWidth / 2} 160 L-${bodyWidth / 2 + 56} 362" stroke="#9ab79d" stroke-width="28" stroke-linecap="round" opacity="0.72"/>
+            <path d="M${bodyWidth / 2} 160 L${bodyWidth / 2 + 56} 362" stroke="#9ab79d" stroke-width="28" stroke-linecap="round" opacity="0.72"/>
+            <path d="M-34 448 L-48 552" stroke="#4f604f" stroke-width="28" stroke-linecap="round"/>
+            <path d="M34 448 L48 552" stroke="#4f604f" stroke-width="28" stroke-linecap="round"/>
+            <text x="0" y="606" fill="#555" font-size="22" font-family="Arial, sans-serif" text-anchor="middle">${view}</text>
+          </g>
+        `;
+      }).join('')}
     </svg>
   `;
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
@@ -263,19 +296,7 @@ async function generateStoryboardPlan({ scene, count, params, runtime }) {
   const baseUrl = params.providerBaseUrl;
   if (!apiKey) return null;
 
-  const prompt = `Return only valid JSON for a cinematic storyboard.
-Scene: ${scene}
-Story: ${params.storyText || params.prompt || 'cinematic story'}
-Count: ${count}
-Required shape:
-{
-  "styleAnchor": "string",
-  "characterBible": {"mainCharacters": [{"id":"hero","name":"主角","appearance":"string","outfit":"string","temperament":"string"}]},
-  "worldBible": {"worldName":"string","environmentStyle":"string","colorPalette":["string"],"recurringLocations":["string"]},
-  "storyboard": [
-    {"shotNumber":1,"durationSeconds":4,"plotDescription":"string","shotSize":"string","characterAction":"string","emotion":"string","sceneTags":"string","lightingAndAtmosphere":"string","imageGenerationPrompt":"string","videoMotionPrompt":"string"}
-  ]
-}`;
+  const prompt = buildStoryboardPlannerPrompt({ scene, count, params });
 
   const text = await generateOpenAIText({
     apiKey,
@@ -381,10 +402,12 @@ function buildMockResult(request, extraStructuredData = {}) {
   return {
     textList: [`${scene} mock task completed`],
     imageList: Array.from({ length: count }).map((_, index) => ({
-      url: makeMockImageDataUrl(`${scene} · Result ${startIndex + index + 1}`, scene === 'coherent_storyboard_25' ? '#7c3aed' : '#2563eb', startIndex + index + 1),
+      url: scene === 'character_three_view_generate'
+        ? makeThreeViewMockDataUrl(request?.params || {})
+        : makeMockImageDataUrl(`${scene} · Result ${startIndex + index + 1}`, scene === 'coherent_storyboard_25' ? '#7c3aed' : '#2563eb', startIndex + index + 1),
       width: 960,
       height: 540,
-      label: `Result ${startIndex + index + 1}`,
+      label: scene === 'character_three_view_generate' ? 'Front / Side / Back' : `Result ${startIndex + index + 1}`,
       status: 'succeeded',
     })),
     structuredData: {
@@ -408,9 +431,7 @@ async function buildTaskOutput(request, runtime = {}) {
       ? await generateStoryboardPlan({ scene, count, params, runtime })
       : null;
     const storyboard = plan?.storyboard;
-    const prompts = storyboard?.length
-      ? storyboard.map((shot) => shot.imageGenerationPrompt)
-      : Array.from({ length: count }).map((_, index) => params.prompt || `${scene} result ${index + 1}`);
+    const prompts = buildSceneImagePrompts({ scene, params, count, storyboard });
     const realImageUrls = await generateRealImages({ prompts, params, runtime });
     if (!realImageUrls) {
       return buildMockResult(request, {
@@ -419,24 +440,24 @@ async function buildTaskOutput(request, runtime = {}) {
       });
     }
 
+    const structuredBase = buildStructuredSceneData(scene, request, count);
     return {
       textList: [`${scene} real provider task completed`],
       imageList: realImageUrls.map((url, index) => ({
         url,
         width: 960,
         height: 540,
-        label: `Result ${index + 1}`,
+        label: scene === 'character_three_view_generate' ? 'Front / Side / Back' : `Result ${index + 1}`,
         status: 'succeeded',
       })),
       structuredData: {
-        scene,
-        requestId: request?.requestId,
+        ...structuredBase,
         executionMode: 'real',
         imageModel: params.imageModel || NANO_BANANA_PRO_MODEL,
         styleAnchor: plan?.styleAnchor,
-        characterBible: plan?.characterBible,
-        worldBible: plan?.worldBible,
-        storyboard: storyboard || undefined,
+        characterBible: plan?.characterBible || structuredBase.characterBible,
+        worldBible: plan?.worldBible || structuredBase.worldBible,
+        storyboard: storyboard || structuredBase.storyboard,
       },
     };
   } catch (error) {

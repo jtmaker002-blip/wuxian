@@ -8,7 +8,8 @@
 - Task snapshots persisted to disk under the runtime task directory.
 - Four-grid and 25-grid structured storyboard outputs.
 - Character bible and world bible output for 25-grid storyboard.
-- Character three-view structured profile and view list.
+- Slash scene prompt templates for all seven guide workflows: multi-camera nine-grid, plot four-grid, coherent 25-grid, cinematic light correction, character three-view, 3-seconds-later, and 5-seconds-earlier.
+- Character three-view now routes as one finished front/side/back contact-sheet request instead of three unrelated image requests.
 - Frame deduction structured `motionDelta`, `cameraDelta`, `environmentDelta`, and `targetFramePrompt`.
 - Cinematic lighting request mapping with `UI_KeyLight`, `UI_RimLight`, `UI_LightColor`, and `UI_LightBrightness`.
 - Upscale structured output and local real canvas upscale path.
@@ -28,7 +29,6 @@
 
 ## Risk Items
 
-- Full `npm test` still includes known out-of-scope legacy OpenAiTeach/Windows-path failures on this branch.
 - Scene result UI has helper/route coverage, but not a full DOM interaction test suite.
 - Large Vite bundle warning remains.
 

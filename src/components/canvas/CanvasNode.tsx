@@ -15,6 +15,7 @@ import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
 import { GridSplitMenu, type GridSplitSelection } from '../menus/GridSplitMenu';
 import { getControlPanelScale, getControlPanelWidthClassName } from './controlPanelLayout';
+import { shouldShowImageSuccessToolbar } from './imageToolbarVisibility';
 import { getCanvasNodeAspectRatioStyle, getCanvasNodeDimensions } from '../../utils/canvasNodeLayout';
 import {
   cropImageBySelection,
@@ -171,6 +172,9 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     Boolean(requestedVideoModelLabel) &&
     Boolean(actualVideoModelLabel) &&
     requestedVideoModelLabel !== actualVideoModelLabel;
+  const titlePositionStyle = data.type === NodeType.VIDEO
+    ? { left: 0, right: 'auto', top: '-32px' }
+    : { right: 'calc(100% + 8px)' };
   const activeImageDropdownMode =
     imageToolMode === 'style' || imageToolMode === 'mark' || imageToolMode === 'grid' || imageToolMode === 'enhance' || imageToolMode === 'split'
       ? imageToolMode
@@ -1056,7 +1060,13 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       {/* Relative wrapper for the Image Card to allow absolute positioning of controls below it */}
       <div ref={nodeCardRef} className="relative group/nodecard">
         {/* Unified Toolbar - 图片成功态仅在选中时显示，靠近 Liblib 的稳定工具条 */}
-        {data.type === NodeType.IMAGE && isSuccess && data.resultUrl && (
+        {shouldShowImageSuccessToolbar({
+          type: data.type,
+          scene: data.scene,
+          showControls,
+          isSuccess,
+          resultUrl: data.resultUrl,
+        }) && (
           <div
             className={`absolute -top-[58px] left-0 right-0 flex justify-center transition-opacity z-[120] ${
               selected ? 'opacity-100' : 'pointer-events-none opacity-0'
@@ -1410,7 +1420,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
               onClick={(e) => e.stopPropagation()}
               onPointerDown={(e) => e.stopPropagation()}
               className="absolute top-2 text-sm px-2 py-0.5 rounded font-medium bg-blue-500/20 text-blue-200 outline-none border border-blue-400 whitespace-nowrap"
-              style={{ right: 'calc(100% + 8px)', minWidth: '60px' }}
+              style={{ ...titlePositionStyle, minWidth: '60px' }}
             />
           ) : (
             <div
@@ -1423,7 +1433,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                     ? 'bg-blue-500/20 text-blue-200'
                     : 'text-neutral-600'
               }`}
-              style={{ right: 'calc(100% + 8px)' }}
+              style={titlePositionStyle}
               onDoubleClick={(e) => {
                 if (isLiblibImageNode) return;
                 e.stopPropagation();
@@ -1562,7 +1572,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             isImageToVideoNode,
           })} flex justify-center`}
               style={{
-                transform: `scale(${controlPanelScale})`,
+                transform: data.type === NodeType.VIDEO ? 'none' : `scale(${controlPanelScale})`,
                 transformOrigin: 'top center',
               }}
             >

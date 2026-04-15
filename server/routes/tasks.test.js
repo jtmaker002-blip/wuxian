@@ -453,7 +453,7 @@ describe('tasks routes', () => {
     ['plot_deduction_four_grid', 4, 'storyboard'],
     ['coherent_storyboard_25', 25, 'characterBible'],
     ['cinematic_light_correction', 1, 'lightingRequest'],
-    ['character_three_view_generate', 3, 'characterProfile'],
+    ['character_three_view_generate', 1, 'characterProfile'],
     ['frame_deduction_plus_3s', 1, 'frameDeduction'],
     ['frame_deduction_minus_5s', 1, 'frameDeduction'],
     ['upscale', 1, 'upscale'],

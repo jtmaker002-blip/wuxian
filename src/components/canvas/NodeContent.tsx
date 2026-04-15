@@ -461,11 +461,13 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     className={`relative w-full flex flex-col items-center justify-center gap-3 overflow-hidden
             ${isLoading ? 'animate-pulse' : ''} 
             ${!selected
-                ? 'rounded-[28px]'
+                ? isVideoType ? 'rounded-[18px]' : 'rounded-[28px]'
                 : isImageType && !isLocalModel
                     ? (isDark ? 'rounded-[28px] border border-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'rounded-[28px] border border-neutral-300')
-                    : `rounded-xl border border-dashed ${isDark ? 'border-white/10' : 'border-neutral-300'}`}
-            ${isDark ? (isImageType && !isLocalModel && selected ? 'bg-[#1b1b1b]' : 'bg-[#141414]') : 'bg-neutral-50'}`
+                    : isVideoType
+                        ? `rounded-[18px] border ${isDark ? 'border-white/45 bg-[#222]' : 'border-neutral-500 bg-[#242424]'}`
+                        : `rounded-xl border border-dashed ${isDark ? 'border-white/10' : 'border-neutral-300'}`}
+            ${isVideoType ? 'bg-[#242424]' : isDark ? (isImageType && !isLocalModel && selected ? 'bg-[#1b1b1b]' : 'bg-[#141414]') : 'bg-neutral-50'}`
                     }
                     style={getAspectRatioStyle()}
                 >
@@ -527,7 +529,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     ) : (
                         <div className="relative z-10 flex flex-col items-center gap-3">
                             {/* Upload Button for Image/Video Nodes */}
-                            {(isImageType || isVideoType) && onUpload && !isVideoFromImageFlow && !(selected && isImageType && !isLocalModel) && (
+                            {(isImageType || isVideoType) && onUpload && !isVideoType && !isVideoFromImageFlow && !(selected && isImageType && !isLocalModel) && (
                                 <>
                                     <input
                                         ref={fileInputRef}
@@ -561,7 +563,12 @@ export const NodeContent: React.FC<NodeContentProps> = ({
 
                             <div className={`relative ${blankImageUiState.showMutedIcon ? 'text-neutral-500/55 opacity-55' : 'text-neutral-700'}`}>
                                 {isVideoType ? (
-                                    isLocalModel ? <><Film size={selected ? 44 : 40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <Film size={selected ? 44 : 40} />
+                                    <div className="flex h-[72px] w-[96px] items-center justify-center rounded-[12px] bg-white/18 text-black/70">
+                                        <svg viewBox="0 0 24 24" className="ml-1 h-9 w-9" fill="currentColor">
+                                            <path d="M8 5v14l11-7z" />
+                                        </svg>
+                                        {isLocalModel && <HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" />}
+                                    </div>
                                 ) : (
                                     isLocalModel ? <><ImageIcon size={selected ? 48 : 40} /><HardDrive size={16} className="absolute -bottom-1 -right-1 text-purple-400" /></> : <ImageIcon size={selected ? 48 : 40} />
                                 )}
@@ -579,7 +586,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             )}
                             {selected && (
                                 <>
-                                    {(() => {
+                                    {!isVideoType && (() => {
                                         const placeholderHeadline = isVideoFromImageFlow
                                             ? '图生视频准备就绪'
                                             : isVideoType

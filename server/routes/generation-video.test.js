@@ -422,6 +422,20 @@ describe('generation /generate-video model passthrough', () => {
           aspectRatio: '16:9',
           resolution: '720p',
           duration: 4,
+          cameraPresets: [
+            {
+              id: 'follow',
+              name: '跟随拍摄',
+              prompt: '镜头跟随主体移动',
+            },
+          ],
+          videoCameraControl: {
+            enabled: true,
+            camera: 'Panavision DXL2',
+            lens: 'Panavision C-series',
+            focalLengthMm: '35',
+            aperture: 'f/4',
+          },
           providerApiKey: 'sk-hosted-token',
           providerBaseUrl: 'https://openaiteach.com/v1',
         }),
@@ -437,6 +451,7 @@ describe('generation /generate-video model passthrough', () => {
       });
       expect(mockGenerateOpenAiTeachUnifiedVideo).toHaveBeenCalledWith(
         expect.objectContaining({
+          prompt: expect.stringContaining('{{CameraPreset 1}} 跟随拍摄：镜头跟随主体移动'),
           videoModel: 'veo3.1-fast',
           apiKey: 'sk-hosted-token',
           baseUrl: 'https://openaiteach.com/v1',
@@ -447,6 +462,15 @@ describe('generation /generate-video model passthrough', () => {
         fs.readFileSync(path.join(videosDir, 'veo-hosted-node.json'), 'utf8')
       );
       expect(metadata.executionProvider).toBe('openaiteach-hosted');
+      expect(metadata.prompt).toContain('摄像机控制：camera=Panavision DXL2');
+      expect(metadata.videoPromptContext.cameraPresets[0]).toMatchObject({
+        id: 'follow',
+        name: '跟随拍摄',
+      });
+      expect(metadata.videoPromptContext.videoCameraControl).toMatchObject({
+        enabled: true,
+        camera: 'Panavision DXL2',
+      });
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }

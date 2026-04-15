@@ -701,6 +701,43 @@ describe('useGeneration 视频链路保护', () => {
     );
   });
 
+  it('视频生成会把摄像机控制和运镜预设作为结构化参数提交', async () => {
+    const updateNode = vi.fn();
+    generateVideoMock.mockResolvedValue('https://example.com/result.mp4');
+    extractVideoLastFrameMock.mockResolvedValue('data:image/png;base64,last-frame');
+    const cameraPreset = {
+      id: 'follow',
+      name: '跟随拍摄',
+      prompt: '镜头跟随主体移动',
+    };
+    const cameraControl = {
+      enabled: true,
+      camera: 'Panavision DXL2',
+      lens: 'Panavision C-series',
+      focalLengthMm: '35',
+      aperture: 'f/4',
+    };
+
+    const nodes = [
+      createVideoNode({
+        videoModel: 'veo3.1',
+        cameraPresets: [cameraPreset],
+        videoCameraControl: cameraControl,
+      }),
+    ];
+
+    const { handleGenerate } = useGeneration({ nodes, updateNode });
+
+    await handleGenerate('video-node');
+
+    expect(generateVideoMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        cameraPresets: [cameraPreset],
+        videoCameraControl: cameraControl,
+      })
+    );
+  });
+
   it('Veo 标准模式多图输入会作为全图参考发送，而不是锁到首尾帧模式', async () => {
     const updateNode = vi.fn();
     generateVideoMock.mockResolvedValue('https://example.com/result.mp4');

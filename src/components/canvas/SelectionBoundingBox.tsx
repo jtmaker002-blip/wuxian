@@ -221,7 +221,7 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                             <rect x="14" y="14" width="7" height="7" />
                             <rect x="3" y="14" width="7" height="7" />
                         </svg>
-                        Group
+                        编组
                     </button>
                     {selectedNodes.some((node) => node.scene && node.taskInfo?.loading && node.taskInfo.taskId) && (
                         <button
@@ -240,7 +240,7 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
             {/* Group Toolbar (when grouped) */}
             {isGrouped && (
                 <div
-                    className="absolute flex gap-2 pointer-events-auto"
+                    className="absolute flex overflow-visible rounded-[14px] border border-white/10 bg-[#121212] shadow-[0_18px_50px_rgba(0,0,0,0.42)] pointer-events-auto"
                     style={{
                         top: -10,
                         left: '50%',
@@ -252,53 +252,53 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                     <div className="relative">
                         <button
                             onClick={() => setShowSortDropdown(!showSortDropdown)}
-                            className="bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors"
+                            className="flex h-[78px] min-w-[210px] items-center justify-center gap-4 border-r border-white/10 bg-[#0f0f0f] px-8 text-[24px] font-semibold text-white transition-colors hover:bg-[#181818]"
                         >
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <line x1="4" y1="6" x2="20" y2="6" />
                                 <line x1="4" y1="12" x2="16" y2="12" />
                                 <line x1="4" y1="18" x2="12" y2="18" />
                             </svg>
-                            Sort
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            整理
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <polyline points="6 9 12 15 18 9" />
                             </svg>
                         </button>
                         {/* Dropdown Menu - Appears above */}
                         {showSortDropdown && (
-                            <div className="absolute bottom-full mb-1 left-0 w-36 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl overflow-hidden z-50">
+                            <div className="absolute bottom-full mb-2 left-0 w-[180px] overflow-hidden rounded-lg border border-white/10 bg-[#242424]/96 p-1.5 text-white shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl z-50">
                                 <button
                                     onClick={() => {
                                         onSortNodes?.('horizontal');
                                         setShowSortDropdown(false);
                                     }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-neutral-700 transition-colors"
+                                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-neutral-100 transition-colors hover:bg-white/8"
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                         <line x1="4" y1="12" x2="20" y2="12" />
                                         <polyline points="14 6 20 12 14 18" />
                                     </svg>
-                                    Horizontal
+                                    横向排列
                                 </button>
                                 <button
                                     onClick={() => {
                                         onSortNodes?.('vertical');
                                         setShowSortDropdown(false);
                                     }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-neutral-700 transition-colors"
+                                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-neutral-100 transition-colors hover:bg-white/8"
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                         <line x1="12" y1="4" x2="12" y2="20" />
                                         <polyline points="6 14 12 20 18 14" />
                                     </svg>
-                                    Vertical
+                                    纵向排列
                                 </button>
                                 <button
                                     onClick={() => {
                                         onSortNodes?.('grid');
                                         setShowSortDropdown(false);
                                     }}
-                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-white hover:bg-neutral-700 transition-colors"
+                                    className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-medium text-neutral-100 transition-colors hover:bg-white/8"
                                 >
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                         <rect x="3" y="3" width="7" height="7" />
@@ -306,7 +306,7 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                                         <rect x="3" y="14" width="7" height="7" />
                                         <rect x="14" y="14" width="7" height="7" />
                                     </svg>
-                                    Grid (3 cols)
+                                    网格排列
                                 </button>
                             </div>
                         )}
@@ -315,16 +315,16 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                     {/* Ungroup Button */}
                     <button
                         onClick={onUngroup}
-                        className="bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors"
+                        className="flex h-[78px] min-w-[240px] items-center justify-center gap-4 border-r border-white/10 bg-[#101010] px-8 text-[24px] font-semibold text-white transition-colors hover:bg-[#181818]"
                     >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <rect x="3" y="3" width="7" height="7" />
                             <rect x="14" y="3" width="7" height="7" />
                             <rect x="14" y="14" width="7" height="7" />
                             <rect x="3" y="14" width="7" height="7" />
                             <line x1="3" y1="3" x2="21" y2="21" />
                         </svg>
-                        Ungroup
+                        取消编组
                     </button>
 
                     {selectedNodes.some((node) => node.scene && node.taskInfo?.loading && node.taskInfo.taskId) && (
@@ -352,7 +352,7 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                                 <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
                                 <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                             </svg>
-                            Edit Storyboard
+                            编辑分镜
                         </button>
                     )}
 
@@ -362,13 +362,15 @@ export const SelectionBoundingBox: React.FC<SelectionBoundingBoxProps> = ({
                             e.stopPropagation();
                             if (onCreateVideo) onCreateVideo();
                         }}
-                        className="bg-purple-600 hover:bg-purple-500 text-white text-sm px-4 py-2.5 rounded flex items-center gap-2 transition-colors shadow-lg shadow-purple-600/20"
+                        disabled={!onCreateVideo}
+                        className="flex h-[78px] min-w-[300px] items-center justify-center gap-6 rounded-r-[14px] bg-[#8b2cf6] px-10 text-[24px] font-semibold text-white shadow-lg shadow-purple-600/20 transition-colors hover:bg-[#9a3cff] disabled:cursor-not-allowed disabled:bg-[#5b3a86] disabled:text-white/55"
+                        title={onCreateVideo ? '为当前分组生成视频' : '当前分组暂不能生成视频'}
                     >
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <path d="M15 10l5 5-5 5" />
                             <path d="M4 4v16" />
                         </svg>
-                        Create Videos
+                        生成视频
                     </button>
                 </div>
             )}

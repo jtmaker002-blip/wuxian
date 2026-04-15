@@ -621,6 +621,8 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     videoModel: requestVideoModel,
                     motionReferenceUrl,
                     generateAudio: executionVideoNode.generateAudio === true,
+                    cameraPresets: executionVideoNode.cameraPresets,
+                    videoCameraControl: executionVideoNode.videoCameraControl,
                     nodeId: id
                 });
                 const rawResultUrl = videoGenerationResult.resultUrl;

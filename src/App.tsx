@@ -82,7 +82,7 @@ import { getSceneDefinition } from './services/scenes/registry';
 import type { SceneId } from './types/scene';
 import { createSceneGridImageNode, createSceneGridUpscaleNode } from './utils/sceneGridActions';
 import { getCanvasPointerAction } from './utils/canvasPointerAction';
-import { getCanvasNodeDimensions } from './utils/canvasNodeLayout';
+import { CANVAS_NODE_GAP, getCanvasNodeDimensions } from './utils/canvasNodeLayout';
 import { cancelTasks } from './services/tasks/taskClient';
 import {
   cropImageBySelection,
@@ -134,6 +134,11 @@ export default function App() {
   });
 
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('light');
+  const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
+  const [isMiniMapOpen, setIsMiniMapOpen] = useState(true);
+  const [layoutReview, setLayoutReview] = useState<null | {
+    previousPositions: Array<{ id: string; x: number; y: number }>;
+  }>(null);
   const hasRestoredDraftRef = React.useRef(false);
 
   // ── OpenAiTeach session ──────────────────────────────────────────────────
@@ -234,7 +239,8 @@ export default function App() {
     setViewport,
     canvasRef,
     handleWheel: baseHandleWheel,
-    zoomBy
+    zoomBy,
+    setZoom
   } = useCanvasNavigation();
 
   const {
@@ -310,6 +316,96 @@ export default function App() {
       y: window.innerHeight / 2 - centerY * nextZoom,
     });
   }, [getNodeLayoutParent, nodes, setViewport]);
+
+  const miniMapData = React.useMemo(() => {
+    if (nodes.length === 0) return null;
+
+    const nodeRects = nodes.map((node) => {
+      const dimensions = getCanvasNodeDimensions(node, getNodeLayoutParent(node));
+      return {
+        id: node.id,
+        left: node.x,
+        top: node.y,
+        width: dimensions.width,
+        height: dimensions.height,
+      };
+    });
+
+    const viewportRect = {
+      left: -viewport.x / viewport.zoom,
+      top: -viewport.y / viewport.zoom,
+      width: window.innerWidth / viewport.zoom,
+      height: window.innerHeight / viewport.zoom,
+    };
+
+    const bounds = [...nodeRects, viewportRect].reduce(
+      (acc, rect) => ({
+        left: Math.min(acc.left, rect.left),
+        top: Math.min(acc.top, rect.top),
+        right: Math.max(acc.right, rect.left + rect.width),
+        bottom: Math.max(acc.bottom, rect.top + rect.height),
+      }),
+      { left: Infinity, top: Infinity, right: -Infinity, bottom: -Infinity }
+    );
+
+    const mapWidth = 160;
+    const mapHeight = 96;
+    const padding = 10;
+    const boundsWidth = Math.max(bounds.right - bounds.left, 1);
+    const boundsHeight = Math.max(bounds.bottom - bounds.top, 1);
+    const scale = Math.min((mapWidth - padding * 2) / boundsWidth, (mapHeight - padding * 2) / boundsHeight);
+    const offsetX = (mapWidth - boundsWidth * scale) / 2;
+    const offsetY = (mapHeight - boundsHeight * scale) / 2;
+    const project = (rect: { left: number; top: number; width: number; height: number }) => ({
+      left: offsetX + (rect.left - bounds.left) * scale,
+      top: offsetY + (rect.top - bounds.top) * scale,
+      width: Math.max(rect.width * scale, 3),
+      height: Math.max(rect.height * scale, 3),
+    });
+
+    return {
+      width: mapWidth,
+      height: mapHeight,
+      nodes: nodeRects.map((rect) => ({ id: rect.id, ...project(rect) })),
+      viewport: project(viewportRect),
+    };
+  }, [getNodeLayoutParent, nodes, viewport.x, viewport.y, viewport.zoom]);
+
+  const organizeCanvasLayout = React.useCallback(() => {
+    if (nodes.length === 0) return;
+
+    const previousPositions = nodes.map((node) => ({ id: node.id, x: node.x, y: node.y }));
+    const sortedNodes = [...nodes].sort((a, b) => a.y - b.y || a.x - b.x);
+    const columns = Math.max(1, Math.ceil(Math.sqrt(sortedNodes.length)));
+    const dimensions = sortedNodes.map((node) => getCanvasNodeDimensions(node, getNodeLayoutParent(node)));
+    const cellWidth = Math.max(...dimensions.map((item) => item.width)) + CANVAS_NODE_GAP;
+    const cellHeight = Math.max(...dimensions.map((item) => item.height)) + CANVAS_NODE_GAP;
+    const startX = Math.min(...nodes.map((node) => node.x));
+    const startY = Math.min(...nodes.map((node) => node.y));
+    const updates = new Map(sortedNodes.map((node, index) => [
+      node.id,
+      {
+        x: startX + (index % columns) * cellWidth,
+        y: startY + Math.floor(index / columns) * cellHeight,
+      },
+    ]));
+
+    setNodes((prev) => prev.map((node) => {
+      const update = updates.get(node.id);
+      return update ? { ...node, ...update } : node;
+    }));
+    setLayoutReview({ previousPositions });
+  }, [getNodeLayoutParent, nodes, setNodes]);
+
+  const restoreOrganizedLayout = React.useCallback(() => {
+    if (!layoutReview) return;
+    const previousById = new Map(layoutReview.previousPositions.map((item) => [item.id, item]));
+    setNodes((prev) => prev.map((node) => {
+      const previous = previousById.get(node.id);
+      return previous ? { ...node, x: previous.x, y: previous.y } : node;
+    }));
+    setLayoutReview(null);
+  }, [layoutReview, setNodes]);
 
   useEffect(() => {
     setNodes(prev =>
@@ -1835,6 +1931,13 @@ export default function App() {
                 const group = getCommonGroup(selectedNodeIds);
                 if (group) sortGroupNodes(group.id, direction, nodes, setNodes);
               }}
+              onCreateVideo={() => {
+                const group = getCommonGroup(selectedNodeIds);
+                const targetNodeIds = group
+                  ? nodes.filter(n => n.groupId === group.id).map(n => n.id)
+                  : selectedNodeIds;
+                handleCreateStoryboardVideo(targetNodeIds);
+              }}
               onEditStoryboard={handleEditStoryboard}
               onCancelSceneTasks={() => handleCancelSelectedSceneTasks(selectedNodeIds)}
             />
@@ -1924,26 +2027,181 @@ export default function App() {
 
       <div
         className={`fixed bottom-20 left-1/2 z-50 -translate-x-1/2 transition-all duration-200 ${
-          nodes.length > 0 && !isViewportCoveringAnyNode
+          (nodes.length > 0 && !isViewportCoveringAnyNode) || Boolean(layoutReview)
             ? 'translate-y-0 opacity-100'
             : 'pointer-events-none translate-y-3 opacity-0'
         }`}
       >
         <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 shadow-2xl ${canvasTheme === 'dark' ? 'border-white/10 bg-[#242424] text-white' : 'border-neutral-200 bg-white text-neutral-900'}`}>
-          <span className="text-sm">当前视窗没有节点，可点击按钮快速回到内容区域</span>
-          <button
-            type="button"
-            onClick={returnToNodeContent}
-            className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${canvasTheme === 'dark' ? 'bg-white text-black hover:bg-neutral-200' : 'bg-neutral-900 text-white hover:bg-neutral-800'}`}
-          >
-            回到节点
-          </button>
+          {layoutReview ? (
+            <>
+              <span className="text-sm">是否保留此次整理结果？</span>
+              <button
+                type="button"
+                onClick={restoreOrganizedLayout}
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${canvasTheme === 'dark' ? 'text-neutral-300 hover:bg-white/10 hover:text-white' : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'}`}
+              >
+                还原
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutReview(null)}
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${canvasTheme === 'dark' ? 'bg-white/16 text-white hover:bg-white/24' : 'bg-neutral-900 text-white hover:bg-neutral-800'}`}
+              >
+                保留
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="text-sm">当前视窗没有节点，可点击按钮快速回到内容区域</span>
+              <button
+                type="button"
+                onClick={returnToNodeContent}
+                className={`rounded-xl px-3 py-1.5 text-sm font-medium transition-colors ${canvasTheme === 'dark' ? 'bg-white text-black hover:bg-neutral-200' : 'bg-neutral-900 text-white hover:bg-neutral-800'}`}
+              >
+                回到节点
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Zoom Controls */}
       {!storyboardGenerator.isModalOpen && !isTikTokModalOpen && (
-        <div className={`fixed bottom-6 left-6 rounded-2xl px-3 py-2 flex items-center gap-2 z-50 shadow-2xl transition-colors duration-300 ${canvasTheme === 'dark' ? 'bg-neutral-900 border border-neutral-700 text-white' : 'bg-white/90 backdrop-blur-sm border border-neutral-200 text-neutral-900'}`} >
+        <div className="fixed bottom-6 left-6 z-50">
+          {isMiniMapOpen && miniMapData && (
+            <div className={`absolute bottom-[58px] left-0 rounded-2xl border p-2 shadow-2xl ${canvasTheme === 'dark' ? 'border-white/10 bg-[#242424] text-white' : 'border-neutral-200 bg-white text-neutral-900'}`}>
+              <div
+                className="relative overflow-hidden rounded-xl bg-black/18"
+                style={{ width: miniMapData.width, height: miniMapData.height }}
+              >
+                {miniMapData.nodes.map((node) => (
+                  <div
+                    key={node.id}
+                    className={canvasTheme === 'dark' ? 'absolute bg-white/22' : 'absolute bg-neutral-500/24'}
+                    style={{
+                      left: node.left,
+                      top: node.top,
+                      width: node.width,
+                      height: node.height,
+                    }}
+                  />
+                ))}
+                <div
+                  className={`absolute rounded-sm border ${canvasTheme === 'dark' ? 'border-white/52 bg-white/4' : 'border-neutral-700/55 bg-neutral-900/5'}`}
+                  style={{
+                    left: miniMapData.viewport.left,
+                    top: miniMapData.viewport.top,
+                    width: miniMapData.viewport.width,
+                    height: miniMapData.viewport.height,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {isZoomMenuOpen && (
+            <div className={`absolute bottom-[58px] left-28 w-[360px] rounded-2xl border p-5 shadow-2xl ${canvasTheme === 'dark' ? 'border-white/10 bg-[#242424] text-white' : 'border-neutral-200 bg-white text-neutral-900'}`}>
+              <div className="space-y-5 text-[24px] leading-none">
+                {[
+                  { label: '放大', shortcut: '⌘ +', onClick: () => zoomBy(0.1) },
+                  { label: '缩小', shortcut: '⌘ −', onClick: () => zoomBy(-0.1) },
+                  { label: '适合屏幕', shortcut: '⇧ 1', onClick: returnToNodeContent },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      item.onClick();
+                      setIsZoomMenuOpen(false);
+                    }}
+                    className={`flex w-full items-center justify-between rounded-xl px-2 py-1 text-left transition-colors ${canvasTheme === 'dark' ? 'hover:bg-white/8' : 'hover:bg-neutral-100'}`}
+                  >
+                    <span>{item.label}</span>
+                    <span className={canvasTheme === 'dark' ? 'text-neutral-400' : 'text-neutral-500'}>{item.shortcut}</span>
+                  </button>
+                ))}
+              </div>
+              <div className={`my-6 h-px ${canvasTheme === 'dark' ? 'bg-white/10' : 'bg-neutral-200'}`} />
+              <div className="space-y-5 text-[24px] leading-none">
+                {[
+                  { label: '缩放至50%', zoom: 0.5 },
+                  { label: '缩放至100%', zoom: 1 },
+                  { label: '缩放至200%', zoom: 2 },
+                ].map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      setZoom(item.zoom);
+                      setIsZoomMenuOpen(false);
+                    }}
+                    className={`block w-full rounded-xl px-2 py-1 text-left transition-colors ${canvasTheme === 'dark' ? 'hover:bg-white/8' : 'hover:bg-neutral-100'}`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className={`rounded-2xl px-3 py-2 flex items-center gap-2 shadow-2xl transition-colors duration-300 ${canvasTheme === 'dark' ? 'bg-neutral-900 border border-neutral-700 text-white' : 'bg-white/90 backdrop-blur-sm border border-neutral-200 text-neutral-900'}`} >
+          <div className={`flex items-center gap-1 pr-2 ${canvasTheme === 'dark' ? 'border-r border-white/10' : 'border-r border-neutral-200'}`}>
+            {[
+              {
+                label: '画布小地图',
+                active: isMiniMapOpen,
+                onClick: () => setIsMiniMapOpen((open) => !open),
+                icon: (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="4" y="4" width="6" height="6" rx="1.5" />
+                    <rect x="14" y="4" width="6" height="6" rx="1.5" />
+                    <rect x="4" y="14" width="6" height="6" rx="1.5" />
+                    <rect x="14" y="14" width="6" height="6" rx="1.5" />
+                  </svg>
+                ),
+              },
+              {
+                label: '定位节点',
+                active: false,
+                onClick: returnToNodeContent,
+                icon: (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M12 21s6-5.3 6-11a6 6 0 1 0-12 0c0 5.7 6 11 6 11Z" />
+                    <circle cx="12" cy="10" r="2" />
+                  </svg>
+                ),
+              },
+              {
+                label: '整理画布',
+                active: Boolean(layoutReview),
+                onClick: organizeCanvasLayout,
+                icon: (
+                  <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1" />
+                    <path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1" />
+                  </svg>
+                ),
+              },
+            ].map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                aria-label={item.label}
+                title={item.label}
+                onClick={item.onClick}
+                className={`flex h-8 w-8 items-center justify-center rounded-xl transition-colors ${
+                  item.active
+                    ? canvasTheme === 'dark'
+                      ? 'bg-white/16 text-white'
+                      : 'bg-neutral-900 text-white'
+                    : canvasTheme === 'dark'
+                      ? 'text-neutral-400 hover:bg-white/10 hover:text-white'
+                      : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
+                }`}
+              >
+                {item.icon}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={() => zoomBy(-0.1)}
@@ -1952,9 +2210,14 @@ export default function App() {
           >
             -
           </button>
-          <span className={`w-14 text-center text-sm font-medium ${canvasTheme === 'dark' ? 'text-neutral-200' : 'text-neutral-700'}`}>
+          <button
+            type="button"
+            onClick={() => setIsZoomMenuOpen((open) => !open)}
+            className={`w-14 rounded-xl px-1 py-1 text-center text-sm font-medium transition-colors ${canvasTheme === 'dark' ? 'text-neutral-200 hover:bg-white/10' : 'text-neutral-700 hover:bg-neutral-100'}`}
+            aria-label="打开缩放菜单"
+          >
             {Math.round(viewport.zoom * 100)}%
-          </span>
+          </button>
           <button
             type="button"
             onClick={() => zoomBy(0.1)}
@@ -1963,6 +2226,7 @@ export default function App() {
           >
             +
           </button>
+          </div>
         </div>
       )}
 

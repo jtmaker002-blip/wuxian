@@ -48,6 +48,18 @@ import {
     resolveVideoPanelModeKey,
     type VideoPanelMediaType,
 } from '../../utils/videoPanelModes';
+import {
+    buildCameraControlPrompt,
+    buildCameraPresetPrompt,
+    DEFAULT_VIDEO_CAMERA_CONTROL,
+    isCameraPresetSupported,
+    loadCameraControlStorage,
+    saveCameraControlStorage,
+    stripCameraPresetMentionTokens,
+    toCameraPresetToken,
+    VIDEO_CAMERA_PRESET_UNSUPPORTED_TOOLTIP,
+    VIDEO_CAMERA_PRESETS,
+} from '../../utils/videoCameraControls';
 import { useStoredOpenAiTeachProviderConfig } from '../../shared/provider/openaiteach-config';
 
 const CAMERA_CONTROL_OPTIONS = {
@@ -238,6 +250,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const [showImageCountDropdown, setShowImageCountDropdown] = useState(false);
     const [showModelDropdown, setShowModelDropdown] = useState(false);
     const [showCameraControl, setShowCameraControl] = useState(false);
+    const [showCameraPresetPanel, setShowCameraPresetPanel] = useState(false);
+    const [cameraPresetTab, setCameraPresetTab] = useState<'preset' | 'custom' | 'favorite'>('preset');
     const [cameraControlSelection, setCameraControlSelection] = useState<CameraControlSelection>({
         camera: 1,
         lens: 1,
@@ -323,6 +337,22 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             }
         };
     }, []);
+
+    useEffect(() => {
+        if (data.type !== NodeType.VIDEO || data.videoCameraControl) return;
+        const stored = loadCameraControlStorage();
+        const cameraIndex = CAMERA_CONTROL_OPTIONS.camera.indexOf(stored.camera);
+        const lensIndex = CAMERA_CONTROL_OPTIONS.lens.indexOf(stored.lens);
+        const focalIndex = CAMERA_CONTROL_OPTIONS.focal.indexOf(stored.focalLengthMm);
+        const apertureIndex = CAMERA_CONTROL_OPTIONS.aperture.indexOf(stored.aperture);
+        setCameraControlSelection({
+            camera: cameraIndex >= 0 ? cameraIndex : 1,
+            lens: lensIndex >= 0 ? lensIndex : 1,
+            focal: focalIndex >= 0 ? focalIndex : 1,
+            aperture: apertureIndex >= 0 ? apertureIndex : 1,
+        });
+        onUpdate(data.id, { videoCameraControl: stored });
+    }, [data.id, data.type, data.videoCameraControl, onUpdate]);
 
     // 旧节点上的 legacy id → 与设置一致的 registry id
     useEffect(() => {
@@ -808,6 +838,18 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             })
         : [];
     const selectedCharacterReferenceUrl = isVideoNode ? data.characterReferenceUrls?.[0] : undefined;
+    const cameraPresetThumbnailUrl = videoPanelReferenceItems.find((item) => item.mediaType === 'image')?.url
+        || videoPanelReferenceItems[0]?.url;
+    const cameraControlState = data.videoCameraControl || DEFAULT_VIDEO_CAMERA_CONTROL;
+    const selectedCameraPresets = data.cameraPresets || [];
+    const canUseCameraPresets = isVideoNode && isCameraPresetSupported(activeVideoPanelMode);
+    const generationProgress = Math.max(0, Math.min(100, data.taskInfo?.progressPercent ?? 0));
+    const shouldShowVideoProgress = isVideoNode && (
+        data.status === NodeStatus.LOADING ||
+        Boolean(data.taskInfo?.loading) ||
+        data.taskInfo?.status === 'failed' ||
+        data.status === NodeStatus.ERROR
+    );
 
     const handleVideoPanelModeChange = (mode: typeof activeVideoPanelMode) => {
         const nextVideoMode = getLegacyVideoModeForPanelMode(mode);
@@ -831,6 +873,18 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         onUpdate(data.id, updates);
     };
 
+    useEffect(() => {
+        if (!isVideoNode || canUseCameraPresets || selectedCameraPresets.length === 0) return;
+        const nextPrompt = stripCameraPresetMentionTokens(data.prompt || '');
+        setLocalPrompt(nextPrompt);
+        lastSentPromptRef.current = nextPrompt;
+        onUpdate(data.id, {
+            prompt: nextPrompt,
+            cameraPresets: [],
+            imageToolAction: undefined,
+        });
+    }, [canUseCameraPresets, data.id, data.prompt, isVideoNode, onUpdate, selectedCameraPresets.length]);
+
     const appendVideoPromptToken = (token: string, updates: Partial<NodeData> = {}) => {
         const currentPrompt = localPrompt || data.prompt || '';
         const nextPrompt = currentPrompt.includes(token)
@@ -848,16 +902,39 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         });
     };
 
-    const handlePresetCameraMove = () => {
-        if (!activeVideoPanelPolicy.canUsePresetCamera) return;
-        appendVideoPromptToken('运镜：平滑推进，轻微环绕主体，保持画面稳定。', {
+    const applyCameraPreset = (preset: typeof VIDEO_CAMERA_PRESETS[number]) => {
+        if (!canUseCameraPresets) return;
+        if (selectedCameraPresets.some((item) => item.id === preset.id)) {
+            setShowCameraPresetPanel(false);
+            return;
+        }
+        const nextPresets = [...selectedCameraPresets, preset];
+        const nextPrompt = [
+            stripCameraPresetMentionTokens(localPrompt || data.prompt || ''),
+            buildCameraPresetPrompt(nextPresets),
+        ].filter(Boolean).join('\n\n');
+        setLocalPrompt(nextPrompt);
+        lastSentPromptRef.current = nextPrompt;
+        onUpdate(data.id, {
+            prompt: nextPrompt,
+            cameraPresets: nextPresets,
             imageToolAction: '预设运镜',
-            imageCameraSettings: {
-                camera: 'Arri Alexa 65',
-                lens: 'Arri Signature Prime',
-                focalLengthMm: '35',
-                aperture: 'f/4',
-            },
+        });
+        setShowCameraPresetPanel(false);
+    };
+
+    const removeCameraPreset = (presetId: string) => {
+        const nextPresets = selectedCameraPresets.filter((preset) => preset.id !== presetId);
+        const nextPrompt = [
+            stripCameraPresetMentionTokens(localPrompt || data.prompt || ''),
+            buildCameraPresetPrompt(nextPresets),
+        ].filter(Boolean).join('\n\n');
+        setLocalPrompt(nextPrompt);
+        lastSentPromptRef.current = nextPrompt;
+        onUpdate(data.id, {
+            prompt: nextPrompt,
+            cameraPresets: nextPresets,
+            imageToolAction: nextPresets.length > 0 ? '预设运镜' : undefined,
         });
     };
 
@@ -1000,21 +1077,25 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         const lens = CAMERA_CONTROL_OPTIONS.lens[cameraControlSelection.lens];
         const focal = CAMERA_CONTROL_OPTIONS.focal[cameraControlSelection.focal];
         const aperture = CAMERA_CONTROL_OPTIONS.aperture[cameraControlSelection.aperture];
-        const hint = `摄像机控制：${camera} / ${lens} / ${focal}mm / ${aperture}`;
+        const controlState = {
+            enabled: true,
+            camera,
+            lens,
+            focalLengthMm: focal,
+            aperture,
+        };
+        const hint = buildCameraControlPrompt(controlState);
         const currentPrompt = data.prompt || '';
         const nextPrompt = currentPrompt.includes(hint)
             ? currentPrompt
             : `${currentPrompt}${currentPrompt ? '\n\n' : ''}${hint}`;
 
+        saveCameraControlStorage(controlState);
         onUpdate(data.id, {
             prompt: nextPrompt,
             imageToolAction: '摄像机控制',
-            imageCameraSettings: {
-                camera,
-                lens,
-                focalLengthMm: focal,
-                aperture,
-            },
+            imageCameraSettings: controlState,
+            videoCameraControl: controlState,
             imageToolMode: null,
         });
         setShowCameraControl(false);
@@ -1171,7 +1252,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                 <div className={isVideoNode ? 'mb-2' : 'mb-3'}>
                     {isVideoNode && (
                         <div className="space-y-2">
-                            <div className="flex items-center gap-1.5 overflow-x-auto rounded-[12px] border border-white/8 bg-[#1f1f1f] p-1 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                            <div className="flex items-center gap-2 overflow-x-auto rounded-[12px] bg-transparent p-0">
                                 {PRIMARY_VIDEO_PANEL_MODE_KEYS.map((modeKey) => {
                                     const mode = getVideoPanelModeByKey(modeKey);
                                     const active = activeVideoPanelMode === mode.key;
@@ -1181,10 +1262,10 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             key={mode.key}
                                             type="button"
                                             onClick={() => handleVideoPanelModeChange(mode.key)}
-                                            className={`h-8 shrink-0 rounded-[9px] px-3 text-sm font-medium transition-all ${
+                                            className={`h-9 shrink-0 rounded-[11px] border px-4 text-sm font-medium transition-all ${
                                                 active
-                                                    ? 'bg-white text-black shadow-[0_10px_24px_rgba(255,255,255,0.12)]'
-                                                    : 'text-neutral-300 hover:bg-white/8 hover:text-white'
+                                                    ? 'border-white/18 bg-white/10 text-white shadow-[0_10px_24px_rgba(255,255,255,0.05)]'
+                                                    : 'border-white/14 text-neutral-500 hover:bg-white/6 hover:text-neutral-200'
                                             }`}
                                             title={mode.description}
                                         >
@@ -1194,34 +1275,72 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 })}
                             </div>
 
+                            {shouldShowVideoProgress && (
+                                <div className={`rounded-[10px] border px-3 py-1.5 ${data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR ? 'border-rose-300/20 bg-rose-500/10' : 'border-blue-300/18 bg-blue-500/10'}`}>
+                                    <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
+                                        <span className={data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR ? 'text-rose-100' : 'text-blue-100'}>
+                                            {data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR
+                                                ? (data.taskInfo?.failedReason || data.errorMessage || '生成失败')
+                                                : data.taskInfo?.taskId
+                                                    ? `生成中 · ${data.taskInfo.taskId.slice(0, 10)}`
+                                                    : '生成中'}
+                                        </span>
+                                        {typeof data.taskInfo?.progressPercent === 'number' && (
+                                            <span className="font-medium text-white">{generationProgress}%</span>
+                                        )}
+                                    </div>
+                                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                        <div
+                                            className={`h-full rounded-full transition-all ${data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR ? 'bg-rose-300' : 'bg-blue-300'}`}
+                                            style={{ width: `${typeof data.taskInfo?.progressPercent === 'number' ? generationProgress : 38}%` }}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 gap-2 min-[680px]:grid-cols-[auto_1fr]">
-                                <div className="grid grid-cols-4 gap-2 min-[680px]:flex min-[680px]:flex-wrap">
+                                <div className="grid grid-cols-5 gap-2 min-[680px]:flex min-[680px]:flex-wrap">
                                     <button
                                         type="button"
                                         onClick={handleVideoMark}
-                                        className="flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border border-white/10 bg-[#2a2a2a] text-xs font-medium text-neutral-100 transition-colors hover:border-white/18 hover:bg-[#333] min-[680px]:w-[66px]"
+                                        className="flex h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[9px] border border-white/10 bg-[#2a2a2a] text-xs font-medium text-neutral-100 transition-colors hover:border-white/18 hover:bg-[#333] min-[680px]:w-[62px]"
                                     >
                                         <Settings2 size={16} />
                                         <span>标记</span>
                                     </button>
                                     <button
                                         type="button"
-                                        disabled={!activeVideoPanelPolicy.canUsePresetCamera}
-                                        onClick={handlePresetCameraMove}
-                                        className={`flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border text-xs font-medium transition-colors min-[680px]:w-[66px] ${
-                                            activeVideoPanelPolicy.canUsePresetCamera
+                                        disabled={!canUseCameraPresets}
+                                        onClick={() => setShowCameraPresetPanel(true)}
+                                        className={`flex h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[9px] border text-xs font-medium transition-colors min-[680px]:w-[62px] ${
+                                            canUseCameraPresets
                                                 ? 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
                                                 : 'cursor-not-allowed border-white/6 bg-[#242424] text-neutral-600'
                                         }`}
-                                        title={activeVideoPanelPolicy.canUsePresetCamera ? '写入预设运镜' : '当前模式不支持预设运镜'}
+                                        title={canUseCameraPresets ? '选择预设运镜' : VIDEO_CAMERA_PRESET_UNSUPPORTED_TOOLTIP}
                                     >
                                         <Film size={16} />
                                         <span>运镜</span>
                                     </button>
                                     <button
                                         type="button"
+                                        onClick={() => setShowCameraControl(true)}
+                                        className={`flex h-[54px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-[9px] border text-xs font-medium transition-colors min-[680px]:w-[70px] ${
+                                            cameraControlState.enabled
+                                                ? 'border-emerald-300/40 bg-emerald-400/12 text-emerald-100'
+                                                : 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
+                                        }`}
+                                    >
+                                        <Monitor size={16} />
+                                        <span>摄像机</span>
+                                        <span className={cameraControlState.enabled ? 'text-[10px] text-emerald-100/80' : 'text-[10px] text-neutral-500'}>
+                                            {cameraControlState.enabled ? '已开启' : '已关闭'}
+                                        </span>
+                                    </button>
+                                    <button
+                                        type="button"
                                         onClick={handleCharacterReferenceSelect}
-                                        className={`relative flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border text-xs font-medium transition-colors min-[680px]:w-[66px] ${
+                                        className={`relative flex h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[9px] border text-xs font-medium transition-colors min-[680px]:w-[62px] ${
                                             selectedCharacterReferenceUrl
                                                 ? 'border-emerald-300/40 bg-emerald-400/12 text-emerald-100'
                                                 : 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
@@ -1237,7 +1356,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     <button
                                         type="button"
                                         onClick={() => onQuickAddInputNode?.(data.id, activeVideoPanelPolicy.acceptsVideo ? 'video' : 'image')}
-                                        className="flex h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-[10px] border border-dashed border-white/14 bg-[#2a2a2a] text-xs font-medium text-neutral-200 transition-colors hover:border-white/22 hover:bg-[#333] min-[680px]:w-[66px]"
+                                        className="flex h-[54px] min-w-0 flex-col items-center justify-center gap-1 rounded-[9px] border border-dashed border-white/14 bg-[#2a2a2a] text-xs font-medium text-neutral-200 transition-colors hover:border-white/22 hover:bg-[#333] min-[680px]:w-[62px]"
                                     >
                                         <ImageIcon size={16} />
                                         <span>参考素材</span>
@@ -1263,7 +1382,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             {videoPanelReferenceItems.map((item) => (
                                                 <div
                                                     key={`${item.id}-${item.label}`}
-                                                    className="relative h-[58px] w-[90px] shrink-0 overflow-hidden rounded-[10px] border border-white/10 bg-black"
+                                                    className="relative h-[54px] w-[82px] shrink-0 overflow-hidden rounded-[9px] border border-white/10 bg-black"
                                                 >
                                                     {item.mediaType === 'video' ? (
                                                         <video src={item.url} className="h-full w-full object-cover opacity-85" muted playsInline preload="metadata" />
@@ -1282,7 +1401,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="flex h-[58px] items-center justify-center rounded-[10px] border border-dashed border-white/10 bg-black/16 px-4 text-center text-xs text-neutral-500">
+                                        <div className="flex h-[54px] items-center justify-center rounded-[9px] border border-dashed border-white/10 bg-black/16 px-4 text-center text-xs text-neutral-500">
                                             {activeVideoPanelMode === 'text2video'
                                                 ? '当前模式只读取 prompt。已连接素材不会参与提交。'
                                                 : '添加或连接素材后，这里会显示引用卡片。'}
@@ -1291,12 +1410,30 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 </div>
                             </div>
 
-                            <div className="rounded-[12px] border border-white/8 bg-[#1f1f1f] px-4 py-2.5 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.015)]">
+                            {selectedCameraPresets.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {selectedCameraPresets.map((preset, index) => (
+                                        <button
+                                            key={preset.id}
+                                            type="button"
+                                            onClick={() => removeCameraPreset(preset.id)}
+                                            className="flex items-center gap-1.5 rounded-full border border-blue-300/24 bg-blue-500/14 px-2.5 py-1 text-xs font-medium text-blue-100 transition-colors hover:border-blue-200/50 hover:bg-blue-500/22"
+                                            title="点击移除运镜预设"
+                                        >
+                                            <span className="rounded bg-blue-300/20 px-1 text-[10px]">{toCameraPresetToken(index)}</span>
+                                            <span>{preset.name}</span>
+                                            <span className="text-blue-100/60">×</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="rounded-[12px] bg-transparent px-1 py-1">
                                 <textarea
-                                    className="min-h-[108px] w-full resize-none bg-transparent text-[15px] font-light leading-7 text-neutral-100 outline-none placeholder:text-neutral-500"
+                                    className="min-h-[66px] w-full resize-none bg-transparent text-[18px] font-light leading-7 text-neutral-200 outline-none placeholder:text-neutral-500"
                                     placeholder="描述你想要生成的画面内容，@引用素材"
                                     rows={data.isPromptExpanded ? 12 : 4}
-                                    style={{ minHeight: data.isPromptExpanded ? 190 : 108 }}
+                                    style={{ minHeight: data.isPromptExpanded ? 96 : 66 }}
                                     value={localPrompt}
                                     onChange={(e) => handlePromptChange(e.target.value)}
                                     onWheel={(e) => e.stopPropagation()}
@@ -1926,7 +2063,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                 </div>
             )}
 
-            {!isOfflineReadonlyVideoNode && data.errorMessage && (
+            {!isOfflineReadonlyVideoNode && data.errorMessage && !isVideoNode && (
                 <div className="text-red-400 text-xs mb-2 p-1 bg-red-900/20 rounded border border-red-900/50">
                     {data.errorMessage}
                 </div>
@@ -2951,9 +3088,115 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                 />,
                 document.body
             )}
+            {showCameraPresetPanel && createPortal(
+                <CameraPresetOverlay
+                    activeTab={cameraPresetTab}
+                    onTabChange={setCameraPresetTab}
+                    onClose={() => setShowCameraPresetPanel(false)}
+                    onSelect={applyCameraPreset}
+                    selectedPresets={selectedCameraPresets}
+                    thumbnailUrl={cameraPresetThumbnailUrl}
+                />,
+                document.body
+            )}
         </div >
     );
 };
+
+function CameraPresetOverlay({
+    activeTab,
+    onTabChange,
+    onClose,
+    onSelect,
+    selectedPresets,
+    thumbnailUrl,
+}: {
+    activeTab: 'preset' | 'custom' | 'favorite';
+    onTabChange: (tab: 'preset' | 'custom' | 'favorite') => void;
+    onClose: () => void;
+    onSelect: (preset: typeof VIDEO_CAMERA_PRESETS[number]) => void;
+    selectedPresets: NonNullable<NodeData['cameraPresets']>;
+    thumbnailUrl?: string;
+}) {
+    const favoriteIds = new Set(['crane-down']);
+    const visiblePresets =
+        activeTab === 'favorite'
+            ? VIDEO_CAMERA_PRESETS.filter((preset) => favoriteIds.has(preset.id))
+            : VIDEO_CAMERA_PRESETS;
+
+    return (
+        <div className="fixed inset-0 z-[2350] flex items-start justify-center bg-black/20 pt-10">
+            <div
+                className="w-[920px] overflow-hidden rounded-[12px] border border-white/10 bg-[#202020] text-white shadow-[0_28px_90px_rgba(0,0,0,0.62)]"
+                onPointerDown={(event) => event.stopPropagation()}
+            >
+                <div className="flex h-14 items-center justify-between border-b border-white/8 px-5">
+                    <div className="flex items-center gap-6 text-[15px] font-medium">
+                        {[
+                            { id: 'preset' as const, label: '预设' },
+                            { id: 'custom' as const, label: '自定义' },
+                            { id: 'favorite' as const, label: '我的收藏' },
+                        ].map((tab) => (
+                            <button
+                                key={tab.id}
+                                type="button"
+                                onClick={() => onTabChange(tab.id)}
+                                className={activeTab === tab.id ? 'text-white' : 'text-neutral-500 hover:text-neutral-200'}
+                            >
+                                {tab.label}
+                            </button>
+                        ))}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-white/8 hover:text-white"
+                        aria-label="关闭运镜预设"
+                    >
+                        ×
+                    </button>
+                </div>
+                {activeTab === 'custom' ? (
+                    <div className="flex h-[420px] items-center justify-center text-sm text-neutral-400">
+                        自定义运镜可直接写入 prompt；预设库可先选择常用镜头运动。
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-4 gap-x-3 gap-y-4 p-5">
+                        {visiblePresets.map((preset) => {
+                            const selected = selectedPresets.some((item) => item.id === preset.id);
+                            return (
+                                <button
+                                    key={preset.id}
+                                    type="button"
+                                    onClick={() => onSelect(preset)}
+                                    className="group relative text-left"
+                                >
+                                    <div className={`relative h-[90px] overflow-hidden rounded-[4px] border ${selected ? 'border-blue-300' : 'border-transparent'}`}>
+                                        {thumbnailUrl ? (
+                                            <img src={thumbnailUrl} alt={preset.name} className="h-full w-full object-cover brightness-[0.82] saturate-[1.05]" />
+                                        ) : (
+                                            <div className="h-full w-full bg-[linear-gradient(135deg,#1d2938,#0f172a_42%,#312e81)]" />
+                                        )}
+                                        <div className="absolute inset-0 bg-black/10 transition-colors group-hover:bg-black/0" />
+                                        {favoriteIds.has(preset.id) && (
+                                            <div className="absolute right-2 top-2 text-white drop-shadow">☆</div>
+                                        )}
+                                        {selected && (
+                                            <div className="absolute bottom-1 right-1 rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                                已添加
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="mt-1.5 text-center text-sm text-neutral-200">{preset.name}</div>
+                                </button>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 function CameraControlOverlay({
     selection,
@@ -2986,65 +3229,72 @@ function CameraControlOverlay({
     ];
 
     return (
-        <div className="fixed inset-0 z-[2400] flex items-center justify-center bg-black/44 backdrop-blur-[1px]">
-            <div className="w-[1080px] overflow-hidden rounded-[18px] border border-white/16 bg-[#171717] text-white shadow-[0_34px_120px_rgba(0,0,0,0.64)]">
-                <div className="flex h-[82px] items-center justify-between border-b border-white/12 px-8">
-                    <div className="text-[24px] font-semibold tracking-[0.02em] text-white">摄像机控制</div>
+        <div className="pointer-events-none fixed inset-0 z-[2400] flex items-start justify-center pt-[11vh]">
+            <div className="pointer-events-auto w-[720px] overflow-hidden rounded-[14px] border border-white/16 bg-[#171717] text-white shadow-[0_24px_80px_rgba(0,0,0,0.56)]">
+                <div className="flex h-[54px] items-center justify-between border-b border-white/12 px-5">
+                    <div className="text-[18px] font-semibold tracking-[0.02em] text-white">摄像机控制</div>
                     <button
                         type="button"
                         onClick={onClose}
-                        className="flex h-12 w-12 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-neutral-300 transition-colors hover:bg-white/10 hover:text-white"
                         aria-label="关闭摄像机控制"
                     >
-                        <span className="text-[42px] leading-none">×</span>
+                        <span className="text-[30px] leading-none">×</span>
                     </button>
                 </div>
 
-                <div className="px-16 py-12">
-                    <div className="grid grid-cols-4 gap-12">
+                <div className="px-6 py-5">
+                    <div className="grid grid-cols-4 gap-4">
                         {columns.map((column) => (
-                            <div key={column.key} className="flex flex-col items-center">
+                            <div
+                                key={column.key}
+                                className="flex flex-col items-center"
+                                onWheel={(event) => {
+                                    event.stopPropagation();
+                                    update(column.key, event.deltaY > 0 ? 1 : -1);
+                                }}
+                            >
                                 <button
                                     type="button"
                                     onClick={() => update(column.key, -1)}
-                                    className="mb-4 text-neutral-300 transition-colors hover:text-white"
+                                    className="mb-2 text-neutral-300 transition-colors hover:text-white"
                                     aria-label={`${column.label}上一个`}
                                 >
                                     ˄
                                 </button>
-                                <div className="flex h-[160px] w-[156px] flex-col items-center justify-center rounded-[22px] border border-white/18 bg-[#252525] shadow-[inset_0_0_42px_rgba(255,255,255,0.045),0_14px_34px_rgba(0,0,0,0.34)]">
-                                    <div className="mb-5 text-[20px] font-semibold text-neutral-100">{column.label}</div>
+                                <div className="flex h-[104px] w-[132px] flex-col items-center justify-center rounded-[12px] border border-white/18 bg-[#252525] shadow-[inset_0_0_32px_rgba(255,255,255,0.045),0_10px_24px_rgba(0,0,0,0.28)]">
+                                    <div className="mb-3 text-[15px] font-semibold text-neutral-100">{column.label}</div>
                                     {column.imageSrc ? (
                                         <img
                                             src={column.imageSrc}
                                             alt={column.label}
-                                            className="max-h-[86px] max-w-[126px] object-contain opacity-100 brightness-[1.55] contrast-[1.18]"
+                                            className="max-h-[58px] max-w-[104px] object-contain opacity-100 brightness-[1.55] contrast-[1.18]"
                                             draggable={false}
                                         />
                                     ) : (
-                                        <div className="text-[44px] font-semibold text-neutral-50">{column.value}</div>
+                                        <div className="text-[34px] font-semibold text-neutral-50">{column.value}</div>
                                     )}
                                 </div>
                                 <button
                                     type="button"
                                     onClick={() => update(column.key, 1)}
-                                    className="mt-8 text-neutral-300 transition-colors hover:text-white"
+                                    className="mt-3 text-neutral-300 transition-colors hover:text-white"
                                     aria-label={`${column.label}下一个`}
                                 >
                                     ˅
                                 </button>
-                                <div className="mt-9 min-h-8 text-center text-[20px] font-semibold text-neutral-200">
+                                <div className="mt-3 min-h-6 text-center text-[15px] font-semibold text-neutral-200">
                                     {column.suffix ? `${column.value} ${column.suffix}` : column.value}
                                 </div>
                             </div>
                         ))}
                     </div>
 
-                    <div className="mt-10 flex justify-end">
+                    <div className="mt-5 flex justify-end">
                         <button
                             type="button"
                             onClick={onUse}
-                            className="rounded-[16px] bg-[#2f80ed] px-8 py-4 text-[22px] font-medium text-white shadow-[0_16px_34px_rgba(47,128,237,0.22)] transition-colors hover:bg-[#4f93f2] active:scale-[0.98]"
+                            className="rounded-[12px] bg-[#2f80ed] px-7 py-2.5 text-[16px] font-medium text-white shadow-[0_12px_26px_rgba(47,128,237,0.22)] transition-colors hover:bg-[#4f93f2] active:scale-[0.98]"
                         >
                             使用
                         </button>

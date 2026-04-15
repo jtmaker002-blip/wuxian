@@ -107,16 +107,14 @@ describe('SceneResultPanel', () => {
     expect(markup.match(/导出 JSON/g)).toHaveLength(1);
   });
 
-  it('renders a contact-sheet download action for character three-view results', () => {
+  it('renders a finished-sheet download action for character three-view results', () => {
     const markup = renderToStaticMarkup(
       <SceneResultPanel
         data={createSceneNode({
           scene: SCENES.CHARACTER_THREE_VIEW_GENERATE,
           outputs: {
             imageList: [
-              { url: 'data:image/svg+xml;base64,a', label: 'front', status: 'succeeded' },
-              { url: 'data:image/svg+xml;base64,b', label: 'side', status: 'succeeded' },
-              { url: 'data:image/svg+xml;base64,c', label: 'back', status: 'succeeded' },
+              { url: 'data:image/svg+xml;base64,a', label: 'Front / Side / Back', status: 'succeeded' },
             ],
           },
         })}
@@ -125,6 +123,6 @@ describe('SceneResultPanel', () => {
       />
     );
 
-    expect(markup).toContain('下载三视图拼图');
+    expect(markup).toContain('下载三视图成品');
   });
 });

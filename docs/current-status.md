@@ -33,6 +33,8 @@
 - `frame_deduction_plus_3s`
 - `frame_deduction_minus_5s`
 - `upscale`
+- Server prompt templates now encode the guide-document behavior for the seven Slash workflows instead of using generic `scene result` prompts.
+- `character_three_view_generate` returns one front/side/back production sheet and sends one real-provider Nano Banana request with the reference image attached.
 
 ## Completed Grid Item Operations
 

@@ -267,6 +267,35 @@ function buildImagePromptWithToolContext({
     return [basePrompt, ...instructions].filter(Boolean).join('\n\n');
 }
 
+function buildVideoPromptContext({ cameraPresets, videoCameraControl }) {
+    const instructions = [];
+
+    if (videoCameraControl?.enabled) {
+        instructions.push(
+            `摄像机控制：camera=${videoCameraControl.camera}, lens=${videoCameraControl.lens}, focalLength=${videoCameraControl.focalLengthMm}mm, aperture=${videoCameraControl.aperture}。生成视频时按该相机、镜头、焦距和光圈控制透视、景深和镜头质感。`
+        );
+    }
+
+    if (Array.isArray(cameraPresets) && cameraPresets.length > 0) {
+        cameraPresets.forEach((preset, index) => {
+            if (!preset?.name || !preset?.prompt) return;
+            instructions.push(`{{CameraPreset ${index + 1}}} ${preset.name}：${preset.prompt}`);
+        });
+    }
+
+    return {
+        cameraPresets: Array.isArray(cameraPresets) ? cameraPresets : [],
+        videoCameraControl: videoCameraControl || null,
+        promptInstructions: instructions,
+    };
+}
+
+function buildVideoPromptWithContext({ prompt, videoPromptContext }) {
+    const basePrompt = typeof prompt === 'string' ? prompt.trim() : '';
+    const instructions = videoPromptContext.promptInstructions || [];
+    return [basePrompt, ...instructions].filter(Boolean).join('\n\n');
+}
+
 // ============================================================================
 // IMAGE GENERATION
 // ============================================================================
@@ -555,6 +584,8 @@ router.post('/generate-video', async (req, res) => {
             resolution,
             duration,
             videoModel,
+            cameraPresets,
+            videoCameraControl,
             providerApiKey,
             providerBaseUrl,
         } = req.body;
@@ -565,13 +596,14 @@ router.post('/generate-video', async (req, res) => {
                 ? providerBaseUrl.trim()
                 : 'https://openaiteach.com/v1';
 
-        // Resolve file URLs to base64
         const imageBase64 = resolveImageToBase64(rawImageBase64);
         const referenceImagesBase64 = Array.isArray(rawReferenceImagesBase64)
             ? rawReferenceImagesBase64.map((item) => resolveImageToBase64(item)).filter(Boolean)
             : undefined;
         const lastFrameBase64 = resolveImageToBase64(rawLastFrameBase64);
         const motionReferenceUrl = resolveImageToBase64(rawMotionReferenceUrl);
+        const videoPromptContext = buildVideoPromptContext({ cameraPresets, videoCameraControl });
+        const executionPrompt = buildVideoPromptWithContext({ prompt, videoPromptContext });
 
         validateVideoRequest({
             videoModel,
@@ -585,7 +617,6 @@ router.post('/generate-video', async (req, res) => {
             generateAudio: req.body.generateAudio === true,
         });
 
-        // Determine provider
         const { provider: videoProvider, normalizedModel, executionMode, executionProvider } = resolveVideoExecutionPlan({
             modelId: videoModel,
             imageBase64,
@@ -593,17 +624,14 @@ router.post('/generate-video', async (req, res) => {
             lastFrameBase64,
             motionReferenceUrl,
         });
-        assertVideoExecutionSupported({
-            provider: videoProvider,
-            normalizedModel,
-            executionMode,
-        });
+        assertVideoExecutionSupported({ provider: videoProvider, normalizedModel, executionMode });
 
         console.log(
             `[Route] Video plan -> provider: ${videoProvider}, runtime: ${executionProvider}, mode: ${executionMode}, model: ${normalizedModel}`
         );
 
         let videoBuffer;
+        let resultVideoUrl;
         const requestedVideoModel = videoModel || normalizedModel || DEFAULT_VEO_VIDEO_MODEL;
         let executedVideoModel = normalizedModel || DEFAULT_VEO_VIDEO_MODEL;
         let executedMode = executionMode;
@@ -626,15 +654,9 @@ router.post('/generate-video', async (req, res) => {
                 SEEDANCE_API_KEY,
             });
 
-        let resultVideoUrl;
-
         if (canUseHostedStandardVideo || canUseHostedAdvancedFallback) {
             const hostedFallbackImageBase64 = canUseHostedAdvancedFallback
-                ? resolveHostedFallbackVideoInput({
-                    executionMode,
-                    imageBase64,
-                    referenceImagesBase64,
-                })
+                ? resolveHostedFallbackVideoInput({ executionMode, imageBase64, referenceImagesBase64 })
                 : imageBase64;
             const hostedVideoModel = resolveOpenAiTeachHostedVideoModel(requestedVideoModel, {
                 hasImageInput: Boolean(hostedFallbackImageBase64),
@@ -642,13 +664,11 @@ router.post('/generate-video', async (req, res) => {
             executedVideoModel = hostedVideoModel;
             runtimeExecutionProvider = 'openaiteach-hosted';
             if (canUseHostedAdvancedFallback) {
-                executedMode = hostedFallbackImageBase64
-                    ? 'standard-image-to-video'
-                    : 'standard-text-to-video';
+                executedMode = hostedFallbackImageBase64 ? 'standard-image-to-video' : 'standard-text-to-video';
             }
             if (hostedProviderBaseUrl.includes('openaiteach.com')) {
                 videoBuffer = await generateOpenAiTeachUnifiedVideo({
-                    prompt,
+                    prompt: executionPrompt,
                     imageBase64: hostedFallbackImageBase64,
                     aspectRatio,
                     resolution: resolution || '720p',
@@ -658,7 +678,7 @@ router.post('/generate-video', async (req, res) => {
                 });
             } else {
                 videoBuffer = await generateOpenAIVideo({
-                    prompt,
+                    prompt: executionPrompt,
                     imageBase64: hostedFallbackImageBase64,
                     aspectRatio,
                     duration: duration || (executionProvider === 'openai-video' ? 4 : 8),
@@ -670,14 +690,13 @@ router.post('/generate-video', async (req, res) => {
                 });
             }
         } else if (executionProvider === 'fal' || executionProvider === 'fal-wan') {
-            // --- FAL.AI BACKED VIDEO GENERATION ---
             if (executionProvider === 'fal') {
                 const klingExecution = resolveKlingVideoExecutionDetails({
                     modelId: normalizedModel,
                     executionProvider,
                     executionMode,
                     lastFrameBase64,
-                    motionReferenceUrl
+                    motionReferenceUrl,
                 });
                 executedVideoModel = klingExecution.executedModel;
                 executedMode = klingExecution.executedMode;
@@ -689,103 +708,69 @@ router.post('/generate-video', async (req, res) => {
             if (!FAL_API_KEY) {
                 return res.status(500).json({
                     error:
-                        getHostedFallbackMessage({
-                            hostedProviderApiKey,
-                            featureLabel: 'Fal 托管视频模型',
-                        }) ||
+                        getHostedFallbackMessage({ hostedProviderApiKey, featureLabel: 'Fal 托管视频模型' }) ||
                         'Fal 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
             if (executionProvider === 'fal-wan') {
-                console.log(`\n[Route] WAN image-to-video detected - routing to fal.ai`);
-                console.log(`[Route] Model: ${normalizedModel}`);
-                console.log(`[Route] Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
-                console.log(`[Route] Duration: ${duration || 5}s`);
-                console.log(`[Route] Resolution: ${resolution || '1080p'}`);
-
                 const {
                     generateFalWanImageToVideo,
                     generateFalWanImageToVideoFlash,
                 } = await import('../services/fal.js');
-
                 const wanHandler =
                     normalizedModel === 'wan2.6-i2v-flash'
                         ? generateFalWanImageToVideoFlash
                         : generateFalWanImageToVideo;
 
                 resultVideoUrl = await wanHandler({
-                    prompt,
+                    prompt: executionPrompt,
                     imageBase64,
                     duration: String(duration || 5),
                     resolution: resolution || '1080p',
                     apiKey: FAL_API_KEY,
                 });
             } else if (executionMode === 'motion-control') {
-                console.log(`\n[Route] Kling 2.6 Motion Control detected - routing to fal.ai`);
-                console.log(`[Route] Motion Reference: ${motionReferenceUrl ? 'YES (' + Math.round(motionReferenceUrl.length / 1024) + ' KB)' : 'NO'}`);
-                console.log(`[Route] Character Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
-                console.log(`[Route] Prompt: ${prompt ? prompt.substring(0, 50) + '...' : '(none)'}`);
-
                 const { generateFalMotionControl } = await import('../services/fal.js');
-
                 resultVideoUrl = await generateFalMotionControl({
-                    prompt,
+                    prompt: executionPrompt,
                     characterImageBase64: imageBase64,
                     motionVideoBase64: motionReferenceUrl,
                     characterOrientation: 'video',
-                    apiKey: FAL_API_KEY
+                    apiKey: FAL_API_KEY,
                 });
             } else if (executionMode === 'standard-image-to-video' || executionMode === 'standard-text-to-video') {
-                console.log(
-                    `\n[Route] Kling 2.6 ${
-                        executionMode === 'standard-text-to-video' ? 'Text-to-Video' : 'Image-to-Video'
-                    } - routing to fal.ai`
-                );
-                console.log(`[Route] Image: ${imageBase64 ? 'YES (' + Math.round(imageBase64.length / 1024) + ' KB)' : 'NO'}`);
-                console.log(`[Route] Duration: ${duration || 5}s`);
-                console.log(`[Route] Generate Audio: ${req.body.generateAudio === true}`);
-
                 const { generateFalImageToVideo, generateFalTextToVideo } = await import('../services/fal.js');
-
                 if (imageBase64) {
                     resultVideoUrl = await generateFalImageToVideo({
-                        prompt,
+                        prompt: executionPrompt,
                         imageBase64,
                         duration: String(duration || 5),
                         aspectRatio: aspectRatio || '16:9',
                         generateAudio: req.body.generateAudio === true,
-                        apiKey: FAL_API_KEY
+                        apiKey: FAL_API_KEY,
                     });
                 } else {
                     resultVideoUrl = await generateFalTextToVideo({
-                        prompt,
+                        prompt: executionPrompt,
                         duration: String(duration || 5),
                         aspectRatio: aspectRatio || '16:9',
                         generateAudio: req.body.generateAudio === true,
-                        apiKey: FAL_API_KEY
+                        apiKey: FAL_API_KEY,
                     });
                 }
             } else {
                 throw new Error(`Kling 2.6 当前后端尚未接通模式：${executionMode}`);
             }
 
-            // Download from the result URL
             const videoResponse = await fetch(resultVideoUrl);
-            if (!videoResponse.ok) {
-                throw new Error('Failed to download generated video');
-            }
+            if (!videoResponse.ok) throw new Error('Failed to download generated video');
             videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-
         } else if (executionProvider === 'kling') {
-            // --- STANDARD KLING VIDEO GENERATION ---
             if (!KLING_ACCESS_KEY || !KLING_SECRET_KEY) {
                 return res.status(500).json({
                     error:
-                        getHostedFallbackMessage({
-                            hostedProviderApiKey,
-                            featureLabel: 'Kling 视频模型',
-                        }) ||
+                        getHostedFallbackMessage({ hostedProviderApiKey, featureLabel: 'Kling 视频模型' }) ||
                         'Kling 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
@@ -795,148 +780,112 @@ router.post('/generate-video', async (req, res) => {
                 executionProvider,
                 executionMode,
                 lastFrameBase64,
-                motionReferenceUrl
+                motionReferenceUrl,
             });
             executedVideoModel = klingExecution.executedModel;
             executedMode = klingExecution.executedMode;
 
-            console.log(`Using Kling AI model: ${normalizedModel}, duration: ${duration || 5}s, mode: ${executionMode}`);
-
             if (executionMode === 'standard-text-to-video') {
                 resultVideoUrl = await generateKlingTextToVideo({
-                    prompt,
+                    prompt: executionPrompt,
                     modelId: normalizedModel,
                     aspectRatio,
                     duration: duration || 5,
                     accessKey: KLING_ACCESS_KEY,
-                    secretKey: KLING_SECRET_KEY
-                });
-            } else if (executionMode === 'frame-to-frame') {
-                resultVideoUrl = await generateKlingVideo({
-                    prompt,
-                    imageBase64,
-                    lastFrameBase64,
-                    modelId: normalizedModel,
-                    aspectRatio,
-                    duration: duration || 5,
-                    motionReferenceUrl: undefined,
-                    accessKey: KLING_ACCESS_KEY,
-                    secretKey: KLING_SECRET_KEY
+                    secretKey: KLING_SECRET_KEY,
                 });
             } else {
                 resultVideoUrl = await generateKlingVideo({
-                    prompt,
+                    prompt: executionPrompt,
                     imageBase64,
                     lastFrameBase64,
                     modelId: normalizedModel,
                     aspectRatio,
                     duration: duration || 5,
-                    motionReferenceUrl,
+                    motionReferenceUrl: executionMode === 'frame-to-frame' ? undefined : motionReferenceUrl,
                     accessKey: KLING_ACCESS_KEY,
-                    secretKey: KLING_SECRET_KEY
+                    secretKey: KLING_SECRET_KEY,
                 });
             }
 
             const videoResponse = await fetch(resultVideoUrl);
-            if (!videoResponse.ok) {
-                throw new Error('Failed to download generated video');
-            }
+            if (!videoResponse.ok) throw new Error('Failed to download generated video');
             videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-
         } else if (executionProvider === 'hailuo') {
-            // --- HAILUO AI VIDEO GENERATION ---
             if (!HAILUO_API_KEY) {
                 return res.status(500).json({
                     error:
-                        getHostedFallbackMessage({
-                            hostedProviderApiKey,
-                            featureLabel: 'Hailuo 视频模型',
-                        }) ||
+                        getHostedFallbackMessage({ hostedProviderApiKey, featureLabel: 'Hailuo 视频模型' }) ||
                         'Hailuo 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
-            const hailuoModelId = normalizedModel;
             const hailuoExecution =
                 executionMode === 'standard-reference-images'
                     ? resolveHailuoSubjectExecutionDetails()
                     : resolveHailuoVideoExecutionDetails({
-                        modelId: hailuoModelId,
+                        modelId: normalizedModel,
                         imageBase64,
-                        lastFrameBase64
+                        lastFrameBase64,
                     });
             executedVideoModel = hailuoExecution.executedModel;
             executedMode = hailuoExecution.executedMode;
-            console.log(`Using Hailuo AI model: ${hailuoModelId}, duration: ${duration || 6}s`);
 
             const hailuoVideoUrl =
                 executionMode === 'standard-reference-images'
                     ? await generateHailuoSubjectVideo({
-                        prompt,
+                        prompt: executionPrompt,
                         subjectImagesBase64: referenceImagesBase64,
                         aspectRatio,
                         resolution,
                         duration: duration || 6,
-                        apiKey: HAILUO_API_KEY
+                        apiKey: HAILUO_API_KEY,
                     })
                     : await generateHailuoVideo({
-                        prompt,
+                        prompt: executionPrompt,
                         imageBase64,
                         lastFrameBase64,
-                        modelId: hailuoModelId,
+                        modelId: normalizedModel,
                         aspectRatio,
                         resolution,
                         duration: duration || 6,
-                        apiKey: HAILUO_API_KEY
+                        apiKey: HAILUO_API_KEY,
                     });
 
-            // Download from Hailuo's URL
             const videoResponse = await fetch(hailuoVideoUrl);
-            if (!videoResponse.ok) {
-                throw new Error('Failed to download video from Hailuo');
-            }
+            if (!videoResponse.ok) throw new Error('Failed to download video from Hailuo');
             videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
-
         } else if (executionProvider === 'openai-video') {
             if (!OPENAI_API_KEY) {
                 return res.status(500).json({
                     error:
-                        getHostedFallbackMessage({
-                            hostedProviderApiKey,
-                            featureLabel: 'OpenAI 视频模型',
-                        }) ||
+                        getHostedFallbackMessage({ hostedProviderApiKey, featureLabel: 'OpenAI 视频模型' }) ||
                         'OpenAI 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
             executedVideoModel = normalizedModel;
             videoBuffer = await generateOpenAIVideo({
-                prompt,
+                prompt: executionPrompt,
                 imageBase64,
                 aspectRatio,
                 duration: duration || 4,
                 resolution: resolution || '720p',
                 videoModel: normalizedModel,
-                apiKey: OPENAI_API_KEY
+                apiKey: OPENAI_API_KEY,
             });
         } else if (executionProvider === 'xai-video') {
             if (!XAI_API_KEY) {
                 return res.status(500).json({
                     error:
-                        getHostedFallbackMessage({
-                            hostedProviderApiKey,
-                            featureLabel: 'Grok 视频模型',
-                        }) ||
+                        getHostedFallbackMessage({ hostedProviderApiKey, featureLabel: 'Grok 视频模型' }) ||
                         'Grok 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
             executedVideoModel = normalizedModel;
-            console.log(
-                `Using xAI video model: ${normalizedModel}, mode: ${executionMode}, singleImage: ${Boolean(imageBase64)}, referenceImages: ${referenceImagesBase64?.length || 0}`
-            );
             videoBuffer = await generateXAIVideo({
-                prompt,
+                prompt: executionPrompt,
                 imageBase64,
                 referenceImagesBase64,
                 aspectRatio: aspectRatio || '16:9',
@@ -944,24 +893,20 @@ router.post('/generate-video', async (req, res) => {
                 resolution: resolution || '720p',
                 videoModel: normalizedModel,
                 executionMode,
-                apiKey: XAI_API_KEY
+                apiKey: XAI_API_KEY,
             });
         } else if (executionProvider === 'seedance') {
             if (!SEEDANCE_API_KEY) {
                 return res.status(500).json({
                     error:
-                        getHostedFallbackMessage({
-                            hostedProviderApiKey,
-                            featureLabel: '即梦 / Seedance 视频模型',
-                        }) ||
+                        getHostedFallbackMessage({ hostedProviderApiKey, featureLabel: '即梦 / Seedance 视频模型' }) ||
                         '即梦 / Seedance 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
             executedVideoModel = normalizedModel;
-            console.log(`Using Seedance video model: ${normalizedModel}, mode: ${executionMode}`);
             videoBuffer = await generateSeedanceVideo({
-                prompt,
+                prompt: executionPrompt,
                 imageBase64,
                 lastFrameBase64,
                 aspectRatio: aspectRatio || '16:9',
@@ -969,29 +914,20 @@ router.post('/generate-video', async (req, res) => {
                 resolution: resolution || '720p',
                 videoModel: normalizedModel,
                 generateAudio: req.body.generateAudio === true,
-                apiKey: SEEDANCE_API_KEY
+                apiKey: SEEDANCE_API_KEY,
             });
         } else if (executionProvider === 'veo') {
-            // --- VEO VIDEO GENERATION (Default) ---
             if (!GEMINI_API_KEY) {
                 return res.status(500).json({
                     error:
-                        getHostedFallbackMessage({
-                            hostedProviderApiKey,
-                            featureLabel: 'Veo 视频模型',
-                            localKeyName: 'GEMINI_API_KEY',
-                        }) ||
-                        "Server missing API Key config"
+                        getHostedFallbackMessage({ hostedProviderApiKey, featureLabel: 'Veo 视频模型' }) ||
+                        'Veo 视频模型执行链尚未接入；当前只保留前端参数与面板交互。'
                 });
             }
 
             executedVideoModel = resolveVeoVideoModel(normalizedModel || requestedVideoModel);
-
-            const shouldGenerateVeoAudio = req.body.generateAudio === true;
-            console.log(`Using Veo model: ${executedVideoModel}, duration: ${duration || 8}s, generateAudio: ${shouldGenerateVeoAudio}`);
-
             videoBuffer = await generateVeoVideo({
-                prompt,
+                prompt: executionPrompt,
                 imageBase64,
                 referenceImagesBase64,
                 lastFrameBase64,
@@ -999,25 +935,21 @@ router.post('/generate-video', async (req, res) => {
                 resolution,
                 duration: duration || 8,
                 videoModel: executedVideoModel,
-                generateAudio: shouldGenerateVeoAudio,
-                apiKey: GEMINI_API_KEY
+                generateAudio: req.body.generateAudio === true,
+                apiKey: GEMINI_API_KEY,
             });
-
         } else {
             throw new Error(`Unsupported video runtime provider: ${executionProvider}`);
         }
 
-        // Save to library - use unique filename to preserve previous generations
         const saved = saveBufferToFile(videoBuffer, VIDEOS_DIR, 'vid', 'mp4');
-
-        // Determine metadata ID: use nodeId for recovery if available, otherwise use file ID
         const metadataId = nodeId || saved.id;
-
-        // Save metadata (id must match the metadata filename for delete to work)
         const metadata = {
-            id: metadataId,  // Must match the filename for delete API to find it
+            id: metadataId,
             filename: saved.filename,
-            prompt: prompt,
+            prompt: executionPrompt,
+            originalPrompt: prompt,
+            videoPromptContext,
             model: executedVideoModel,
             requestedModel: requestedVideoModel,
             executionMode,
@@ -1026,7 +958,7 @@ router.post('/generate-video', async (req, res) => {
             aspectRatio: aspectRatio || 'Auto',
             resolution: resolution || 'Auto',
             createdAt: new Date().toISOString(),
-            type: 'videos'
+            type: 'videos',
         };
         fs.writeFileSync(path.join(VIDEOS_DIR, `${metadataId}.json`), JSON.stringify(metadata, null, 2));
 
@@ -1039,7 +971,6 @@ router.post('/generate-video', async (req, res) => {
             executedMode,
             executionProvider: runtimeExecutionProvider,
         });
-
     } catch (error) {
         console.error("Server Video Gen Error:", error);
         res.status(500).json({ error: error.message || "Video generation failed" });

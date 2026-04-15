@@ -82,4 +82,48 @@ describe('mockTasks real provider routing', () => {
     expect(persisted).toContain('gemini-3-pro-image-preview');
     expect(persisted).not.toContain('sk-hosted-token');
   });
+
+  it('sends the three-view reference prompt as one finished contact-sheet request', async () => {
+    mockGenerateOpenAiTeachGeminiImage.mockResolvedValue(Buffer.from('fake-png'));
+    const { createTask, getTasks } = await import('./mockTasks.js');
+
+    const task = createTask({
+      params: {
+        scene: 'character_three_view_generate',
+        executionMode: 'real',
+        imageModel: 'gemini-3-pro-image-preview',
+        providerApiKey: 'sk-hosted-token',
+        characterImageUrl: 'data:image/png;base64,character-ref',
+        prompt: '古风女性角色',
+      },
+      metadata: { node_id: 'node-three-view', project_id: 'project-1' },
+      provider: 'openai',
+      model: 'gemini-3-pro-image-preview',
+      taskType: 'image',
+      requestId: 'request-three-view',
+    }, {
+      TASK_SINGLE_MS: 20,
+      TASKS_DIR: tasksDir,
+      IMAGES_DIR: imagesDir,
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    const [snapshot] = getTasks([task.taskId], {
+      TASKS_DIR: tasksDir,
+      IMAGES_DIR: imagesDir,
+    });
+
+    expect(mockGenerateOpenAiTeachGeminiImage).toHaveBeenCalledTimes(1);
+    expect(mockGenerateOpenAiTeachGeminiImage).toHaveBeenCalledWith(expect.objectContaining({
+      imageBase64Array: ['data:image/png;base64,character-ref'],
+      prompt: expect.stringContaining('front view'),
+    }));
+    const call = mockGenerateOpenAiTeachGeminiImage.mock.calls[0][0];
+    expect(call.prompt).toContain('side profile view');
+    expect(call.prompt).toContain('back view');
+    expect(call.prompt).toContain('full-body');
+    expect(call.prompt).toContain('same character');
+    expect(snapshot.status).toBe('succeeded');
+    expect(snapshot.result.imageList).toHaveLength(1);
+  });
 });

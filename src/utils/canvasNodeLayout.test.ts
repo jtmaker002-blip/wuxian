@@ -58,4 +58,16 @@ describe('canvasNodeLayout', () => {
       })
     ).toEqual({ width: 622, height: 350 });
   });
+
+  it('uses a large 16:9 canvas for video nodes', () => {
+    expect(
+      getCanvasNodeDimensions({
+        type: NodeType.VIDEO,
+        status: NodeStatus.IDLE,
+        resultUrl: undefined,
+        resultAspectRatio: undefined,
+        aspectRatio: '16:9',
+      })
+    ).toEqual({ width: 1050, height: 591 });
+  });
 });

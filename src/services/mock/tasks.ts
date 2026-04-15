@@ -10,6 +10,38 @@ type StoredTask = TaskSnapshot & {
 
 const tasks = new Map<string, StoredTask>();
 
+function makeThreeViewContactSheetDataUrl(params: Record<string, any>) {
+  const style = String(params.style || 'realistic').replace(/[<>&]/g, '');
+  const background = String(params.background || 'plain white').replace(/[<>&]/g, '');
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+      <rect width="1200" height="720" fill="#f8f7f3"/>
+      <rect x="58" y="54" width="1084" height="612" rx="28" fill="#ffffff" stroke="#e7e5df" stroke-width="2"/>
+      <text x="92" y="110" fill="#222" font-size="28" font-family="Arial, sans-serif" font-weight="700">角色三视图</text>
+      <text x="92" y="146" fill="#777" font-size="17" font-family="Arial, sans-serif">${style} · ${background} · front / side / back</text>
+      ${['Front', 'Side', 'Back'].map((view, index) => {
+        const x = 210 + index * 390;
+        const bodyWidth = index === 1 ? 74 : 118;
+        const headRx = index === 1 ? 34 : 42;
+        return `
+          <g transform="translate(${x},176)">
+            <ellipse cx="0" cy="468" rx="112" ry="16" fill="#111" opacity="0.08"/>
+            <ellipse cx="0" cy="72" rx="${headRx}" ry="48" fill="#ead8c5" stroke="#d7b99d" stroke-width="3"/>
+            <path d="M-${headRx + 12} 66 C-${headRx + 8} 24 -24 12 0 18 C34 20 ${headRx + 16} 42 ${headRx + 9} 92 C28 80 -20 82 -${headRx + 12} 66Z" fill="#242424"/>
+            <path d="M-${bodyWidth / 2} 142 C-${bodyWidth / 2 + 12} 248 -${bodyWidth / 2 + 22} 338 -${bodyWidth / 2 - 8} 448 L${bodyWidth / 2 + 8} 448 C${bodyWidth / 2 + 22} 338 ${bodyWidth / 2 - 12} 248 ${bodyWidth / 2} 142Z" fill="#7c9b80" stroke="#55745c" stroke-width="4"/>
+            <path d="M-${bodyWidth / 2} 160 L-${bodyWidth / 2 + 56} 362" stroke="#9ab79d" stroke-width="28" stroke-linecap="round" opacity="0.72"/>
+            <path d="M${bodyWidth / 2} 160 L${bodyWidth / 2 + 56} 362" stroke="#9ab79d" stroke-width="28" stroke-linecap="round" opacity="0.72"/>
+            <path d="M-34 448 L-48 552" stroke="#4f604f" stroke-width="28" stroke-linecap="round"/>
+            <path d="M34 448 L48 552" stroke="#4f604f" stroke-width="28" stroke-linecap="round"/>
+            <text x="0" y="606" fill="#555" font-size="22" font-family="Arial, sans-serif" text-anchor="middle">${view}</text>
+          </g>
+        `;
+      }).join('')}
+    </svg>
+  `;
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+}
+
 function buildOutput(scene: SceneId, params: Record<string, any>): PipelineOutput {
   const storyText = params.storyText || params.prompt || '电影级画布创作';
 
@@ -60,11 +92,13 @@ function buildOutput(scene: SceneId, params: Record<string, any>): PipelineOutpu
   if (scene === SCENES.CHARACTER_THREE_VIEW_GENERATE) {
     const views = ['front', 'side', 'back'];
     return {
-      imageList: views.map((view, index) => ({
-        url: makeMockImageDataUrl(`角色三视图 · ${view}`, '#16a34a', index + 1),
-        label: view,
-        status: 'succeeded',
-      })),
+      imageList: [
+        {
+          url: makeThreeViewContactSheetDataUrl(params),
+          label: 'Front / Side / Back',
+          status: 'succeeded',
+        },
+      ],
       structuredData: {
         characterProfile: {
           style: params.style || 'realistic',
