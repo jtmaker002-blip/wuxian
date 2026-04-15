@@ -1240,7 +1240,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
         <div
             className={`${isVideoNode ? 'relative rounded-[20px] p-3 shadow-2xl' : isLiblibImagePanel || isLiblibVideoFromImagePanel ? 'relative rounded-[28px] p-4' : 'p-4 rounded-2xl shadow-2xl'} cursor-default w-full transition-colors duration-300 border ${panelBg}`}
             style={{
-                transform: `scale(${localScale})`,
+                transform: isVideoNode ? 'none' : `scale(${localScale})`,
                 transformOrigin: 'top center',
                 transition: 'transform 0.1s ease-out'
             }}
