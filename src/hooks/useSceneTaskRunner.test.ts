@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NodeStatus, NodeType, type NodeData } from '../types';
-import { getRestorableSceneTasks } from './useSceneTaskRunner';
+import { getRestorableSceneTasks, isRealSceneExecutionParams } from './useSceneTaskRunner';
 
 function createNode(overrides: Partial<NodeData>): NodeData {
   return {
@@ -74,5 +74,12 @@ describe('useSceneTaskRunner helpers', () => {
     ]);
 
     expect(tasks).toEqual([]);
+  });
+
+  it('marks only explicit real scene params as remote-only execution', () => {
+    expect(isRealSceneExecutionParams({ executionMode: 'real' })).toBe(true);
+    expect(isRealSceneExecutionParams({ providerMode: 'real' })).toBe(true);
+    expect(isRealSceneExecutionParams({ executionMode: 'mock', providerMode: 'mock' })).toBe(false);
+    expect(isRealSceneExecutionParams({})).toBe(false);
   });
 });

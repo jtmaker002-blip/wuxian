@@ -188,9 +188,22 @@ async function main() {
     await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('九宫格'))?.click());
     await page.waitForTimeout(300);
     await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('剧情推演四宫格'))?.click());
-    await page.waitForTimeout(1400);
-    await expectOneOfText(page, ['九宫格-原图', '当前动作 · 剧情推演四宫格', '-grid']);
-    await saveScreenshot(page, artifactDir, artifacts, '05-nine-grid.png', 'Nine-grid action produced visible grid output state.');
+    await waitForOneOfText(page, ['单格详情', '真实服务未执行，已回退 Mock'], 10000);
+    await expectText(page, '剧情推演四宫格');
+    await saveScreenshot(page, artifactDir, artifacts, '05-nine-grid-scene-launch.png', 'Nine-grid menu launched the LibTV four-grid scene node instead of the legacy local grid variant.');
+  });
+
+  await runCase(browser, 'character-three-view', async (page) => {
+    await createUploadedImageNode(page);
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('九宫格'))?.click());
+    await page.waitForTimeout(300);
+    await page.evaluate(() => [...document.querySelectorAll('button')].find((el) => el.textContent?.includes('角色三视图生成'))?.click());
+    await waitForOneOfText(page, ['下载三视图成品', '真实服务未执行，已回退 Mock'], 10000);
+    await expectText(page, '角色三视图生成');
+    if ((await page.getByText(/九宫格-|角度 1|Angle 1/).count()) > 0) {
+      throw new Error('character three-view still fell back to the legacy grid variant path');
+    }
+    await saveScreenshot(page, artifactDir, artifacts, '06-character-three-view-scene-launch.png', 'Character three-view menu launched the dedicated LibTV scene node instead of legacy grid tiles.');
   });
 
   await browser.close();
@@ -239,6 +252,17 @@ async function expectOneOfText(page, texts) {
     if ((await page.getByText(text, { exact: false }).count()) > 0) return;
   }
   throw new Error(`Expected one of texts not found: ${texts.join(', ')}`);
+}
+
+async function waitForOneOfText(page, texts, timeoutMs = 8000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    for (const text of texts) {
+      if ((await page.getByText(text, { exact: false }).count()) > 0) return text;
+    }
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`Timed out waiting for one of texts: ${texts.join(', ')}`);
 }
 
 main().catch((error) => {

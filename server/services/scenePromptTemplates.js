@@ -30,9 +30,9 @@ function mergeUserIntent(params = {}) {
 
 function buildMultiViewPrompt(params = {}) {
   return [
-    'Create one single 3x3 contact sheet for "多机位九宫格".',
+    'Create nine coordinated panels for "多机位九宫格".',
     'All nine panels must describe the same exact subject and same scene at the same story moment, only changing camera position/lens/shot size.',
-    'Lay out the result as a clean 3 by 3 grid, consistent color grading, no UI labels, no text overlays, no borders thicker than a subtle storyboard gutter.',
+    'Generate nine separate images, one panel per image. When displayed together they should read as a clean 3 by 3 camera grid with consistent color grading, no UI labels, and no text overlays.',
     `Nine panels:\n${listShots(CAMERA_GRID_SHOTS)}`,
     `User intent: ${mergeUserIntent(params)}`,
     BASE_REFERENCE_RULES,
@@ -79,8 +79,9 @@ function buildThreeViewPrompt(params = {}) {
   return [
     'Create a single finished "角色三视图生成" character turnaround sheet.',
     'The output must be one image on a clean white or very light neutral background containing exactly three full-body views of the same character: front view, side profile view, and back view.',
-    'The three figures must have identical face identity, hairstyle, hair ornaments, clothing layers, colors, fabric, props, height, body proportions, and silhouette. Use a neutral standing pose, arms readable, feet visible, no cropping.',
-    'Place the views left-to-right as front / side / back with even spacing, like a production character reference sheet. No extra characters, no scenery, no heavy shadow, no text labels, no watermark.',
+    'The three figures must have identical face identity, hairstyle, hair ornaments, clothing layers, colors, fabric, props, height, body proportions, and silhouette. Use a neutral standing pose, arms slightly away from the body, feet visible, no cropping.',
+    'Place the views left-to-right as front / side / back with even spacing, like a production character reference sheet. Use a neutral camera, minimal perspective distortion, and clear readable silhouette. No extra characters, no scenery, no heavy shadow, no text labels, no watermark.',
+    'Each figure should fill most of the image height while keeping the full body visible from head to toe. The side view must be a true side profile, and the back view must clearly show the back of the costume and hair.',
     `Style: ${compact(params.style, 'realistic')}. Background: ${compact(params.background, 'plain white')}.`,
     `User intent: ${mergeUserIntent(params)}`,
     BASE_REFERENCE_RULES,
@@ -137,6 +138,21 @@ export function buildSceneImagePrompts({ scene, params = {}, count = 1, storyboa
   const template = getScenePromptTemplate(scene, params);
   if (scene === 'character_three_view_generate') return [template];
 
+  if (scene === 'multi_view_nine_grid') {
+    return CAMERA_GRID_SHOTS.slice(0, count).map(([label, shot], index) => {
+      const plannedShot = Array.isArray(storyboard) ? storyboard[index] : undefined;
+      return [
+        `Generate panel ${label} for "多机位九宫格".`,
+        shot,
+        'Generate one standalone image for this tile of a 3x3 camera grid. Keep the same exact subject, same moment, same environment, same costume, and same color grade as every other tile.',
+        plannedShot?.plotDescription ? `Planned continuity beat: ${plannedShot.plotDescription}` : '',
+        plannedShot?.lightingAndAtmosphere ? `Shared lighting plan: ${plannedShot.lightingAndAtmosphere}` : '',
+        `User intent: ${mergeUserIntent(params)}`,
+        BASE_REFERENCE_RULES,
+      ].filter(Boolean).join('\n\n');
+    });
+  }
+
   if (Array.isArray(storyboard) && storyboard.length > 0) {
     return storyboard.slice(0, count).map((shot, index) => [
       shot.imageGenerationPrompt || shot.plotDescription || `Shot ${index + 1}`,
@@ -145,16 +161,6 @@ export function buildSceneImagePrompts({ scene, params = {}, count = 1, storyboa
       shot.lightingAndAtmosphere ? `Lighting: ${shot.lightingAndAtmosphere}` : '',
       BASE_REFERENCE_RULES,
     ].filter(Boolean).join('\n\n'));
-  }
-
-  if (scene === 'multi_view_nine_grid') {
-    return CAMERA_GRID_SHOTS.slice(0, count).map(([label, shot]) => [
-      `Generate panel ${label} for "多机位九宫格".`,
-      shot,
-      'This is one tile of a 3x3 camera grid. Keep the same exact subject, same moment, same environment, same costume, and same color grade as every other tile.',
-      `User intent: ${mergeUserIntent(params)}`,
-      BASE_REFERENCE_RULES,
-    ].join('\n\n'));
   }
 
   if (scene === 'plot_deduction_four_grid') {
@@ -188,7 +194,7 @@ export function buildSceneImagePrompts({ scene, params = {}, count = 1, storyboa
 export function buildStoryboardPlannerPrompt({ scene, count, params = {} }) {
   const baseIntent = mergeUserIntent(params);
   const sceneRules = {
-    multi_view_nine_grid: 'Plan one 3x3 multi-camera contact sheet. Keep all panels as the same moment from nine camera angles.',
+    multi_view_nine_grid: 'Plan a continuity anchor for nine separate multi-camera panels. Keep all panels as the same moment from the fixed nine camera angles.',
     plot_deduction_four_grid: 'Plan four panels: setup, discovery, choice, consequence.',
     coherent_storyboard_25: 'Plan 25 continuous shots with character/world bibles and a 5-act progression.',
   }[scene] || 'Plan a cinematic image sequence.';

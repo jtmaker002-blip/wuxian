@@ -44,6 +44,8 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
   const isUpscale = data.scene === SCENES.UPSCALE;
   const selectedShot = storyboard[selectedIndex];
   const selectedImage = images[selectedIndex];
+  const heroImage = selectedImage || images[0];
+  const heroShot = selectedShot || storyboard[0];
   const childTasks = data.taskInfo && 'childTasks' in data.taskInfo ? (data.taskInfo as any).childTasks || [] : [];
   const maxConcurrency = data.taskInfo && 'maxConcurrency' in data.taskInfo ? (data.taskInfo as any).maxConcurrency || 4 : 4;
 
@@ -350,6 +352,77 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
       </div>
 
       <div className="p-4">
+        {isGridSplit && images.length > 0 ? (
+          <GridSplitNode data={data} onSendImageToNode={onSendImageToNode} />
+        ) : images.length > 0 ? (
+          <div className="mb-4 space-y-3">
+            <div className={`relative overflow-hidden rounded-2xl border border-white/10 ${isThreeView ? 'bg-[#f7f5ef]' : 'bg-black/40'}`}>
+              <img
+                src={heroImage?.url}
+                alt={heroImage?.label || definition?.label || 'scene result'}
+                className={`${isThreeView ? 'aspect-[4/3] object-contain p-4' : 'aspect-video object-cover'} w-full`}
+              />
+              {heroImage?.label && (
+                <div className={`absolute left-3 top-3 rounded-full px-2.5 py-1 text-[10px] font-semibold ${isThreeView ? 'bg-black/75 text-white' : 'bg-black/65 text-white'}`}>
+                  {heroImage.label}
+                </div>
+              )}
+              {heroShot?.plotDescription && (
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/88 to-transparent p-3">
+                  <div className="text-xs font-semibold text-white">{heroShot.plotDescription}</div>
+                  {(heroShot.shotSize || heroShot.lightingAndAtmosphere) && (
+                    <div className="mt-1 text-[11px] text-white/72">
+                      {[heroShot.shotSize, heroShot.lightingAndAtmosphere].filter(Boolean).join(' · ')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {images.length > 1 && (
+              <div className={`grid ${getGridClass(images.length)} gap-2`}>
+                {images.map((image, index) => {
+                  const shot = storyboard[index];
+                  return (
+                    <button
+                      key={`${image.url}-${index}`}
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedIndex(index);
+                      }}
+                      className={`group relative overflow-hidden rounded-xl border bg-black/40 text-left transition-colors ${
+                        selectedIndex === index ? 'border-blue-300/80' : 'border-white/10 hover:border-white/28'
+                      }`}
+                    >
+                      <img src={image.url} alt={image.label || `scene ${index + 1}`} className="aspect-video w-full object-cover" />
+                      <div className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[9px] font-semibold text-white">
+                        #{index + 1}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          retryGridItem(index);
+                        }}
+                        className="absolute right-2 top-2 rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100"
+                      >
+                        单格重试
+                      </button>
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/88 to-transparent p-2">
+                        <div className="text-[10px] font-semibold">{image.label || `#${index + 1}`}</div>
+                        {shot?.plotDescription && !isStoryboard25 && (
+                          <div className="mt-0.5 line-clamp-2 text-[9px] text-white/72">{shot.plotDescription}</div>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : null}
+
         {selected && <SceneParameterForm data={data} onUpdate={onUpdate} />}
 
         {childTasks.length > 0 && isLoading && (
@@ -375,81 +448,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
           </div>
         )}
 
-        {isGridSplit && images.length > 0 ? (
-          <GridSplitNode data={data} onSendImageToNode={onSendImageToNode} />
-        ) : images.length > 0 ? (
-          <div className={`grid ${getGridClass(images.length)} gap-2`}>
-            {images.map((image, index) => {
-              const shot = storyboard[index];
-              return (
-                <button
-                  key={`${image.url}-${index}`}
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    setSelectedIndex(index);
-                  }}
-                  className={`group relative overflow-hidden rounded-xl border bg-black/40 text-left transition-colors ${
-                    selectedIndex === index ? 'border-blue-300/80' : 'border-white/10 hover:border-white/28'
-                  }`}
-                >
-                  <img src={image.url} alt={image.label || `scene ${index + 1}`} className="aspect-video w-full object-cover" />
-                  <div className="absolute left-2 top-2 rounded-full bg-black/65 px-2 py-0.5 text-[9px] font-semibold text-white">
-                    #{index + 1}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      retryGridItem(index);
-                    }}
-                    className="absolute right-2 top-2 rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white opacity-0 transition-opacity group-hover:opacity-100"
-                  >
-                    单格重试
-                  </button>
-                  <div className="absolute left-2 right-2 top-8 flex flex-wrap gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSendImageToNode?.(data.id, image, 'upscale-node');
-                      }}
-                      className="rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white"
-                    >
-                      单格放大
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onSendImageToNode?.(data.id, image, 'image-node');
-                      }}
-                      className="rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white"
-                    >
-                      新节点
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        downloadGridItem(image, index);
-                      }}
-                      className="rounded-full border border-white/20 bg-black/55 px-2 py-0.5 text-[9px] font-semibold text-white"
-                    >
-                      下载
-                    </button>
-                  </div>
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/88 to-transparent p-2">
-                    <div className="text-[10px] font-semibold">{image.label || `#${index + 1}`}</div>
-                    {shot?.plotDescription && !isStoryboard25 && (
-                      <div className="mt-0.5 line-clamp-2 text-[9px] text-white/72">{shot.plotDescription}</div>
-                    )}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
+        {!images.length && !isGridSplit && (
           <div className="flex min-h-[210px] flex-col items-center justify-center rounded-2xl border border-dashed border-white/14 bg-white/[0.03] text-center">
             <div className="text-sm font-semibold">等待运行统一任务</div>
             <div className="mt-1 max-w-[320px] text-xs text-neutral-500">
@@ -485,11 +484,21 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
+                      downloadGridItem(selectedImage, selectedIndex);
+                    }}
+                    className="rounded-full border border-white/14 px-2 py-1 text-[10px] text-white"
+                  >
+                    下载
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
                       onSendImageToNode?.(data.id, selectedImage, 'upscale-node');
                     }}
                     className="rounded-full border border-white/14 px-2 py-1 text-[10px] text-white"
                   >
-                    创建高清节点
+                    单格放大
                   </button>
                   <button
                     type="button"
@@ -499,7 +508,7 @@ export const SceneResultPanel: React.FC<SceneResultPanelProps> = ({ data, isLoad
                     }}
                     className="rounded-full border border-white/14 px-2 py-1 text-[10px] text-white"
                   >
-                    发送到新节点
+                    新节点
                   </button>
                 </>
               )}

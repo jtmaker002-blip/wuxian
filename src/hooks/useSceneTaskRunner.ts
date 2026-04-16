@@ -32,6 +32,10 @@ export function buildSceneTaskParams(node: NodeData): Record<string, any> | unde
   };
 }
 
+export function isRealSceneExecutionParams(params: Record<string, any>): boolean {
+  return params.executionMode === 'real' || params.providerMode === 'real';
+}
+
 export function getRestorableSceneTasks(nodes: NodeData[]): ActiveSceneTask[] {
   return nodes.flatMap((node) => {
     if (!node.scene || !node.taskInfo?.taskId || !node.taskInfo.loading) return [];
@@ -197,7 +201,10 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       try {
         const created = await createRemoteTask(primaryRequest);
         taskId = created.taskId;
-      } catch {
+      } catch (error) {
+        if (isRealSceneExecutionParams(params)) {
+          throw error;
+        }
         const created = await createMockTask(primaryRequest);
         taskId = created.taskId;
         remote = false;

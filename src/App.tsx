@@ -649,6 +649,84 @@ export default function App() {
     setSelectedNodeIds([nodeId]);
   }, [setNodes, setSelectedNodeIds, viewport]);
 
+  const handleLaunchSceneFromImage = React.useCallback((sourceNodeId: string, scene: SceneId) => {
+    const sourceNode = nodes.find((node) => node.id === sourceNodeId);
+    const definition = getSceneDefinition(scene);
+    if (!sourceNode?.resultUrl || !definition) return;
+    const sourceDimensions = getCanvasNodeDimensions(sourceNode);
+    const sourcePrompt = (sourceNode.prompt || '').trim();
+
+    const nodeType =
+      definition.nodeType === 'storyboard'
+        ? NodeType.STORYBOARD
+        : definition.nodeType === 'image'
+          ? NodeType.IMAGE
+          : NodeType.TOOL;
+
+    const nodeId = crypto.randomUUID();
+    const params: Record<string, any> = {
+      ...definition.defaultParams,
+      executionMode: 'real',
+    };
+    let scenePrompt = sourcePrompt;
+
+    if (scene === 'multi_view_nine_grid') {
+      params.imageUrl = sourceNode.resultUrl;
+      params.referenceImages = [sourceNode.resultUrl];
+      scenePrompt = sourcePrompt || '保持同一主体与场景，仅改变九个机位和景别';
+      params.prompt = scenePrompt;
+    } else if (scene === 'plot_deduction_four_grid' || scene === 'coherent_storyboard_25') {
+      params.referenceImages = [sourceNode.resultUrl];
+      scenePrompt = sourcePrompt || (scene === 'plot_deduction_four_grid' ? '基于参考图拆出四段连续剧情' : '基于参考图扩展为25格连续分镜');
+      params.storyText = scenePrompt;
+      params.prompt = scenePrompt;
+    } else if (scene === 'cinematic_light_correction') {
+      params.originImage = sourceNode.resultUrl;
+      scenePrompt = definition.defaultParams.prompt || sourcePrompt || '保持主体，增强电影级层次光影';
+      params.prompt = scenePrompt;
+    } else if (scene === 'character_three_view_generate') {
+      params.characterImageUrl = sourceNode.resultUrl;
+      scenePrompt = sourcePrompt || '保持参考图角色一致，生成正面、侧面、背面三视图成品图';
+      params.prompt = scenePrompt;
+    } else if (scene === 'frame_deduction_plus_3s' || scene === 'frame_deduction_minus_5s') {
+      params.imageUrl = sourceNode.resultUrl;
+      scenePrompt = sourcePrompt || definition.defaultParams.prompt || (scene === 'frame_deduction_plus_3s' ? '推演3秒后的关键帧' : '推演5秒前的关键帧');
+      params.prompt = scenePrompt;
+    }
+
+    const newNode: NodeData = {
+      id: nodeId,
+      type: nodeType,
+      x: sourceNode.x,
+      y: sourceNode.y + sourceDimensions.height + 48,
+      prompt: scenePrompt || definition.defaultParams.storyText || definition.defaultParams.prompt || definition.label,
+      status: NodeStatus.IDLE,
+      model: 'mock-scene-pipeline',
+      imageModel: definition.defaultParams.imageModel,
+      aspectRatio: definition.defaultParams.ratio || '16:9',
+      resolution: definition.scene === 'upscale' ? '2x' : 'Auto',
+      title: definition.label,
+      name: definition.label,
+      scene,
+      params,
+      outputs: undefined,
+      taskInfo: undefined,
+      parentIds: [sourceNode.id],
+      isPromptExpanded: true,
+    };
+
+    setNodes((prev) => [...prev, newNode]);
+    setSelectedNodeIds([nodeId]);
+    setViewport((current) => ({
+      ...current,
+      x: window.innerWidth / 2 - (newNode.x + 260) * current.zoom,
+      y: window.innerHeight / 2 - (newNode.y + 220) * current.zoom,
+    }));
+    setTimeout(() => {
+      handleGenerateRef.current(nodeId);
+    }, 80);
+  }, [nodes, setNodes, setSelectedNodeIds]);
+
   const handleSendSceneImageToNode = React.useCallback((
     sourceNodeId: string,
     image: { url: string; label?: string },
@@ -1860,6 +1938,7 @@ export default function App() {
                 onQuickAddInputNode={handleQuickAddInputNode}
                 onSplitImageGrid={handleSplitImageGrid}
                 onCreateNineGridTiles={handleCreateNineGridTiles}
+                onLaunchSceneFromImage={handleLaunchSceneFromImage}
                 selected={selectedNodeIds.includes(node.id)}
                 showControls={selectedNodeIds.length === 1 && selectedNodeIds.includes(node.id)}
                 onNodePointerDown={(e) => {

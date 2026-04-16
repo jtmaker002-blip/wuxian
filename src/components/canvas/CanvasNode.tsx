@@ -7,6 +7,7 @@
 
 import React from 'react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
+import type { SceneId } from '../../types/scene';
 import { NodeConnectors } from './NodeConnectors';
 import { NodeContent } from './NodeContent';
 import { NodeControls } from './NodeControls';
@@ -15,6 +16,7 @@ import { LightingPanel } from './image-node/LightingPanel';
 import { ImageToolMenuPanel } from './image-node/ImageToolMenuPanel';
 import { GridSplitMenu, type GridSplitSelection } from '../menus/GridSplitMenu';
 import { getControlPanelScale, getControlPanelWidthClassName } from './controlPanelLayout';
+import { GRID_SCENE_BY_LABEL } from './libtvSceneLaunchMap';
 import { shouldShowImageSuccessToolbar } from './imageToolbarVisibility';
 import { getCanvasNodeAspectRatioStyle, getCanvasNodeDimensions } from '../../utils/canvasNodeLayout';
 import {
@@ -88,6 +90,7 @@ interface CanvasNodeProps {
   onQuickAddInputNode?: (nodeId: string, inputType: 'image' | 'video') => void;
   onSplitImageGrid?: (nodeId: string) => void;
   onCreateNineGridTiles?: (nodeId: string, actionLabel: string) => void;
+  onLaunchSceneFromImage?: (sourceNodeId: string, scene: SceneId) => void;
   zoom: number;
   // Mouse event callbacks for chat panel drag functionality
   onMouseEnter?: () => void;
@@ -131,6 +134,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onQuickAddInputNode,
   onSplitImageGrid,
   onCreateNineGridTiles,
+  onLaunchSceneFromImage,
   zoom,
   onMouseEnter,
   onMouseLeave,
@@ -173,7 +177,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     Boolean(actualVideoModelLabel) &&
     requestedVideoModelLabel !== actualVideoModelLabel;
   const titlePositionStyle = data.type === NodeType.VIDEO
-    ? { left: 0, right: 'auto', top: '-32px' }
+    ? { left: 0, right: 'auto', top: '-44px' }
     : { right: 'calc(100% + 8px)' };
   const activeImageDropdownMode =
     imageToolMode === 'style' || imageToolMode === 'mark' || imageToolMode === 'grid' || imageToolMode === 'enhance' || imageToolMode === 'split'
@@ -190,6 +194,16 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   }, [data.id, data.prompt, onUpdate]);
 
   const applyImageToolAction = React.useCallback(async (mode: 'enhance' | 'grid' | 'split' | 'style', item: string, promptPrefix: string) => {
+    const gridScene = mode === 'grid' ? GRID_SCENE_BY_LABEL[item] : undefined;
+    if (gridScene && data.resultUrl && onLaunchSceneFromImage) {
+      onLaunchSceneFromImage(data.id, gridScene);
+      onUpdate(data.id, {
+        imageToolMode: null,
+        imageToolAction: item,
+      });
+      return;
+    }
+
     const focusRequiredActions = ['擦除', '重绘', '裁剪', '抠图'];
     if (mode === 'enhance' && focusRequiredActions.includes(item) && data.resultUrl && !data.focusSelection) {
       onUpdate(data.id, {
@@ -324,7 +338,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
       imageToolMode: mode,
       imageToolAction: item,
     });
-  }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onCreateNineGridTiles, onUpdate]);
+  }, [data.focusSelection, data.id, data.prompt, data.resultUrl, data.title, onCreateNineGridTiles, onLaunchSceneFromImage, onUpdate]);
 
   const applyGridSplitSelection = React.useCallback((selection: GridSplitSelection) => {
     if (!data.resultUrl) return;
@@ -1382,6 +1396,12 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                 : isDark
                   ? 'border-white/10'
                   : 'border-neutral-200'
+              : data.type === NodeType.VIDEO
+                ? selected
+                  ? 'rounded-[30px] border-[2px] border-white/55 bg-[#2b2b2b] ring-0 shadow-[0_30px_90px_rgba(0,0,0,0.48)]'
+                  : isDark
+                    ? 'rounded-[30px] border-white/18 bg-[#2b2b2b]'
+                    : 'rounded-[30px] border-neutral-300'
               : selected
                 ? 'border-blue-500/50 ring-1 ring-blue-500/30'
                 : isDark
@@ -1429,6 +1449,8 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   ? selected
                     ? 'text-white/90'
                     : 'text-neutral-400'
+                  : data.type === NodeType.VIDEO
+                    ? 'text-white/58'
                   : selected
                     ? 'bg-blue-500/20 text-blue-200'
                     : 'text-neutral-600'
@@ -1446,6 +1468,13 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5 opacity-80" fill="currentColor">
                     <path d="M21 5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5Zm-2 0v8.59l-2.3-2.3a1 1 0 0 0-1.4 0L11 15.59l-1.3-1.3a1 1 0 0 0-1.4 0L5 17.59V5h14ZM8.5 11A1.5 1.5 0 1 0 8.5 8a1.5 1.5 0 0 0 0 3Z" />
                   </svg>
+                )}
+                {data.type === NodeType.VIDEO && (
+                  <span className="flex h-7 w-7 items-center justify-center rounded-[4px] bg-white/14 text-white/80">
+                    <svg viewBox="0 0 24 24" className="ml-0.5 h-4 w-4" fill="currentColor">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  </span>
                 )}
                 <span>{data.title || data.type}</span>
               </span>
@@ -1572,7 +1601,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             isImageToVideoNode,
           })} flex justify-center`}
               style={{
-                transform: data.type === NodeType.VIDEO ? 'none' : `scale(${controlPanelScale})`,
+                transform: `scale(${controlPanelScale})`,
                 transformOrigin: 'top center',
               }}
             >
