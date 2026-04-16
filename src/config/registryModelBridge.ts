@@ -12,10 +12,13 @@ import {
 import { getVideoCapability } from './modelCapabilities';
 
 const LEGACY_VIDEO_TO_REGISTRY: Record<string, string> = {
-  'veo-3.1': 'veo3.1',
-  'veo-3.1-fast-generate-preview': 'veo3.1',
-  'veo3.1-pro': 'veo3.1',
-  'veo3.1-fast-components': 'veo3.1',
+  'veo-3.1': 'veo3.1-fast',
+  'veo-3.1-fast-generate-preview': 'veo3.1-fast',
+  'veo3.1': 'veo3.1-fast',
+  'veo_3_1-fast': 'veo3.1-fast',
+  'veo_3_1-lite': 'veo3.1-lite',
+  'veo3.1-pro': 'veo3.1-fast',
+  'veo3.1-fast-components': 'veo3.1-fast',
   'kling-v2-1': 'kling-v3',
   'kling-v2-1-master': 'kling-v3',
   'kling-v2-5-turbo': 'kling-v2-5-turbo',
@@ -36,7 +39,7 @@ function getExecutableRegistryVideoIdSet() {
 }
 
 export const DEFAULT_REGISTRY_VIDEO_ID =
-  getRegistryVideoModels().find((m) => m.id === 'veo3.1')?.id ?? getRegistryVideoModels()[0]?.id ?? 'veo3.1';
+  getRegistryVideoModels().find((m) => m.id === 'veo3.1-fast')?.id ?? getRegistryVideoModels()[0]?.id ?? 'veo3.1-fast';
 
 export const DEFAULT_REGISTRY_IMAGE_ID =
   REGISTRY_IMAGE_MODELS.find((m) => m.id === 'gemini-2.5-flash-image-preview')?.id ??

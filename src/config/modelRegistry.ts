@@ -93,7 +93,8 @@ export const MODEL_REGISTRY: ModelEntry[] = [
   { id: 'qwen-image-edit-2509',               name: 'Qwen Image Edit',               category: 'image', region: 'china',  providerId: 'openaiteach' },
   // ── Video ───────────────────────────────────────────────────────────────
   { id: 'sora-2',                             name: 'Sora 2',                        category: 'video', region: 'global', providerId: 'openaiteach', tags: ['HOT'] },
-  { id: 'veo3.1',                             name: 'Veo 3.1',                       category: 'video', region: 'global', providerId: 'openaiteach' },
+  { id: 'veo3.1-fast',                        name: 'Veo 3.1 Fast',                  category: 'video', region: 'global', providerId: 'openaiteach' },
+  { id: 'veo3.1-lite',                        name: 'Veo 3.1 Lite',                  category: 'video', region: 'global', providerId: 'openaiteach' },
   { id: 'grok-video-3',                       name: 'Grok Video 3',                  category: 'video', region: 'global', providerId: 'openaiteach' },
   { id: 'kling-v3',                           name: 'Kling V3',                      category: 'video', region: 'china',  providerId: 'openaiteach', tags: ['HOT'] },
   { id: 'kling-v2-6',                         name: 'Kling V2.6',                    category: 'video', region: 'china',  providerId: 'openaiteach' },

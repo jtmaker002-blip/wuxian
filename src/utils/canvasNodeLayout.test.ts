@@ -68,6 +68,6 @@ describe('canvasNodeLayout', () => {
         resultAspectRatio: undefined,
         aspectRatio: '16:9',
       })
-    ).toEqual({ width: 1050, height: 591 });
+    ).toEqual({ width: 622, height: 350 });
   });
 });

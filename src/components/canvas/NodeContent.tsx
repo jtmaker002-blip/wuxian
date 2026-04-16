@@ -6,7 +6,7 @@
  */
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive, AudioLines } from 'lucide-react';
+import { Loader2, Maximize2, ImageIcon as ImageIcon, Film, Upload, Pencil, Video, GripVertical, Download, Expand, Shrink, HardDrive, AudioLines, Sparkles, Layers3 } from 'lucide-react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import { useTranslation } from 'react-i18next';
 import { getLiblibBlankImageNodeState } from './image-node/imageNodeUiState';
@@ -465,7 +465,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                 : isImageType && !isLocalModel
                     ? (isDark ? 'rounded-[28px] border border-white/40 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]' : 'rounded-[28px] border border-neutral-300')
                     : isVideoType
-                        ? `rounded-[18px] border ${isDark ? 'border-white/45 bg-[#222]' : 'border-neutral-500 bg-[#242424]'}`
+                        ? `rounded-[30px] border-2 ${isDark ? 'border-white/55 bg-[#2b2b2b]' : 'border-neutral-500 bg-[#2b2b2b]'}`
                         : `rounded-xl border border-dashed ${isDark ? 'border-white/10' : 'border-neutral-300'}`}
             ${isVideoType ? 'bg-[#242424]' : isDark ? (isImageType && !isLocalModel && selected ? 'bg-[#1b1b1b]' : 'bg-[#141414]') : 'bg-neutral-50'}`
                     }
@@ -526,6 +526,55 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             <Loader2 size={32} className="animate-spin text-blue-400" />
                             <span className="text-xs text-neutral-500 font-medium">{t('nodeContent.generating')}</span>
                         </div>
+                    ) : isVideoType && selected ? (
+                        <>
+                            {onUpload && !isVideoFromImageFlow && (
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    onPointerDown={(e) => e.stopPropagation()}
+                                    className="absolute left-1/2 top-0 z-20 flex h-14 -translate-x-1/2 -translate-y-[72px] items-center gap-2 rounded-[20px] border border-white/10 bg-[#2d2d2d] px-6 text-[16px] font-medium text-white shadow-[0_18px_40px_rgba(0,0,0,0.35)] transition-colors hover:bg-[#363636]"
+                                >
+                                    <Upload size={20} />
+                                    上传
+                                </button>
+                            )}
+
+                            <div className="relative z-10 h-full w-full">
+                                <div className="absolute left-1/2 top-[34%] flex h-[108px] w-[108px] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[16px] bg-white/16 text-black/70">
+                                    <svg viewBox="0 0 24 24" className="ml-1 h-12 w-12" fill="currentColor">
+                                        <path d="M8 5v14l11-7z" />
+                                    </svg>
+                                </div>
+                                <div className="absolute left-10 top-[49%] flex flex-col gap-6 text-white">
+                                    <div className="text-[20px] font-medium tracking-[0.01em] text-white/56">尝试:</div>
+                                    <button
+                                        type="button"
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onUpdate?.(data.id, { videoPanelMode: 'frames2video', videoMode: 'frame-to-frame' });
+                                        }}
+                                        className="flex items-center gap-3 text-[18px] font-medium text-white/92 transition-colors hover:text-white"
+                                    >
+                                        <Layers3 size={20} />
+                                        <span>首尾帧生成视频</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onPointerDown={(event) => event.stopPropagation()}
+                                        onClick={(event) => {
+                                            event.stopPropagation();
+                                            onUpdate?.(data.id, { videoPanelMode: 'singleImage2video', videoMode: 'standard' });
+                                        }}
+                                        className="flex items-center gap-3 text-[18px] font-medium text-white/92 transition-colors hover:text-white"
+                                    >
+                                        <Sparkles size={20} />
+                                        <span>首帧生成视频</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </>
                     ) : (
                         <div className="relative z-10 flex flex-col items-center gap-3">
                             {/* Upload Button for Image/Video Nodes */}

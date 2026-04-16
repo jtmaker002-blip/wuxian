@@ -7,6 +7,8 @@ const HOSTED_TEXT_MODEL_MAP = Object.freeze({});
 
 const HOSTED_VIDEO_STANDARD_MODEL_MAP = Object.freeze({
   'veo3.1': 'veo3.1-fast',
+  'veo3.1-fast': 'veo_3_1-fast',
+  'veo3.1-lite': 'veo_3_1-lite',
   'sora-2': 'sora-2',
   'grok-video-3': 'grok-video-3',
   'minimax-hailuo': 'MiniMax-Hailuo-02',
@@ -21,6 +23,8 @@ const HOSTED_VIDEO_STANDARD_MODEL_MAP = Object.freeze({
 
 const HOSTED_VIDEO_IMAGE_MODEL_MAP = Object.freeze({
   'veo3.1': 'veo3-fast-frames',
+  'veo3.1-fast': 'veo_3_1-fast',
+  'veo3.1-lite': 'veo_3_1-lite',
   'jimeng-4.0': 'doubao-seedance-1-0-lite-i2v-250428',
 });
 

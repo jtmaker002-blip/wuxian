@@ -79,6 +79,14 @@ const VIDEO_SUPPORT: Record<string, ModelExecutionSupport> = {
     mode: 'hosted-token',
     note: '已接 OpenAiTeach token 托管执行链。',
   },
+  'veo3.1-fast': {
+    mode: 'hosted-token',
+    note: '已接 OpenAiTeach token 托管执行链。',
+  },
+  'veo3.1-lite': {
+    mode: 'hosted-token',
+    note: '已接 OpenAiTeach token 托管执行链。',
+  },
   'grok-video-3': {
     mode: 'hosted-token',
     note: '标准文生/图生视频已接 OpenAiTeach token 托管；若上游无渠道会直接返回渠道错误。',

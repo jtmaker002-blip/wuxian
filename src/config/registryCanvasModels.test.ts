@@ -44,12 +44,12 @@ describe('registry canvas models', () => {
   it('reflects runtime video capability overrides in the generated video registry list', () => {
     setRuntimeVideoCapabilities({
       ...LOCAL_VIDEO_CAPABILITIES,
-      'veo3.1': {
-        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
+      'veo3.1-fast': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'],
         modes: {
-          ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes,
+          ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes,
           standard: {
-            ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard,
+            ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard,
             durations: [6],
             defaultDuration: 6,
           },
@@ -57,13 +57,13 @@ describe('registry canvas models', () => {
       },
     });
 
-    const veo = getRegistryVideoModels().find((model) => model.id === 'veo3.1');
+    const veo = getRegistryVideoModels().find((model) => model.id === 'veo3.1-fast');
     expect(veo?.durations).toEqual([6]);
   });
 
   it('does not treat start/end frame support as standard multi-image capability in the canvas registry metadata', () => {
     const kling = getRegistryVideoModels().find((model) => model.id === 'kling-v3');
-    const veo = getRegistryVideoModels().find((model) => model.id === 'veo3.1');
+    const veo = getRegistryVideoModels().find((model) => model.id === 'veo3.1-fast');
     const grok = getRegistryVideoModels().find((model) => model.id === 'grok-video-3');
     const wan = getRegistryVideoModels().find((model) => model.id === 'wan2.6-i2v');
     const seedance = getRegistryVideoModels().find((model) => model.id === 'jimeng-seedance-2');
@@ -79,7 +79,8 @@ describe('registry canvas models', () => {
   it('only exposes currently executable video model ids', () => {
     expect(getRegistryVideoModels().map((model) => model.id)).toEqual([
       'sora-2',
-      'veo3.1',
+      'veo3.1-fast',
+      'veo3.1-lite',
       'grok-video-3',
       'kling-v3',
       'kling-v2-6',
@@ -98,16 +99,16 @@ describe('registry canvas models', () => {
   it('drops video models whose runtime capabilities disable every mode', () => {
     setRuntimeVideoCapabilities({
       ...LOCAL_VIDEO_CAPABILITIES,
-      'veo3.1': {
-        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
+      'veo3.1-fast': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'],
         modes: {
-          standard: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard, enabled: false },
-          frameToFrame: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.frameToFrame, enabled: false },
-          motionControl: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.motionControl, enabled: false },
+          standard: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard, enabled: false },
+          frameToFrame: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.frameToFrame, enabled: false },
+          motionControl: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.motionControl, enabled: false },
         },
       },
     });
 
-    expect(getRegistryVideoModels().some((model) => model.id === 'veo3.1')).toBe(false);
+    expect(getRegistryVideoModels().some((model) => model.id === 'veo3.1-fast')).toBe(false);
   });
 });

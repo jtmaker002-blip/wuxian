@@ -50,7 +50,9 @@ export function resolveGeminiImageModel(imageModel) {
 }
 
 export const SUPPORTED_VEO_VIDEO_MODELS = Object.freeze([
-    'veo-3.1-fast-generate-preview'
+    'veo-3.1-fast-generate-preview',
+    'veo_3_1-fast',
+    'veo_3_1-lite'
 ]);
 
 export const DEFAULT_VEO_VIDEO_MODEL = 'veo-3.1-fast-generate-preview';
@@ -58,6 +60,8 @@ export const DEFAULT_VEO_VIDEO_MODEL = 'veo-3.1-fast-generate-preview';
 const VEO_VIDEO_MODEL_ALIASES = Object.freeze({
     'veo-3.1': 'veo-3.1-fast-generate-preview',
     'veo3.1': 'veo-3.1-fast-generate-preview',
+    'veo3.1-fast': 'veo_3_1-fast',
+    'veo3.1-lite': 'veo_3_1-lite',
     'veo3.1-pro': 'veo-3.1-fast-generate-preview',
     'veo3.1-fast-components': 'veo-3.1-fast-generate-preview'
 });

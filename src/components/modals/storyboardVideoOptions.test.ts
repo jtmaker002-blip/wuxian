@@ -19,12 +19,12 @@ describe('storyboardVideoOptions', () => {
   it('only exposes enabled runtime-executable standard image-to-video models', () => {
     setRuntimeVideoCapabilities({
       ...LOCAL_VIDEO_CAPABILITIES,
-      'veo3.1': {
-        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
+      'veo3.1-fast': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'],
         modes: {
-          ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes,
+          ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes,
           standard: {
-            ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard,
+            ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard,
             enabled: false,
           },
         },
@@ -41,7 +41,7 @@ describe('storyboardVideoOptions', () => {
       },
     });
 
-    const options = getStoryboardVideoOptions(new Set(['veo3.1', 'kling-v2-6', 'minimax-hailuo']));
+    const options = getStoryboardVideoOptions(new Set(['veo3.1-fast', 'kling-v2-6', 'minimax-hailuo']));
 
     expect(options.map((option) => option.model.id)).toEqual(['minimax-hailuo']);
   });
@@ -49,12 +49,12 @@ describe('storyboardVideoOptions', () => {
   it('normalizes invalid settings using runtime capability defaults', () => {
     setRuntimeVideoCapabilities({
       ...LOCAL_VIDEO_CAPABILITIES,
-      'veo3.1': {
-        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
+      'veo3.1-fast': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'],
         modes: {
-          ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes,
+          ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes,
           standard: {
-            ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard,
+            ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard,
             durations: [6],
             defaultDuration: 6,
             resolutions: ['1080p'],
@@ -64,10 +64,10 @@ describe('storyboardVideoOptions', () => {
       },
     });
 
-    const options = getStoryboardVideoOptions(new Set(['veo3.1']));
+    const options = getStoryboardVideoOptions(new Set(['veo3.1-fast']));
     const normalized = normalizeStoryboardVideoSettings(
       {
-        model: 'veo3.1',
+        model: 'veo3.1-fast',
         duration: 4,
         resolution: '720p',
       },
@@ -75,7 +75,7 @@ describe('storyboardVideoOptions', () => {
     );
 
     expect(normalized).toEqual({
-      model: 'veo3.1',
+      model: 'veo3.1-fast',
       duration: 6,
       resolution: '1080p',
     });
@@ -84,12 +84,12 @@ describe('storyboardVideoOptions', () => {
   it('builds modal state from runtime-safe options and falls back when the selected model is no longer executable', () => {
     setRuntimeVideoCapabilities({
       ...LOCAL_VIDEO_CAPABILITIES,
-      'veo3.1': {
-        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
+      'veo3.1-fast': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'],
         modes: {
-          ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes,
+          ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes,
           standard: {
-            ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard,
+            ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard,
             enabled: false,
           },
         },
@@ -110,9 +110,9 @@ describe('storyboardVideoOptions', () => {
     });
 
     const state = getStoryboardVideoModalState(
-      new Set(['veo3.1', 'kling-v2-6']),
+      new Set(['veo3.1-fast', 'kling-v2-6']),
       {
-        model: 'veo3.1',
+        model: 'veo3.1-fast',
         duration: 4,
         resolution: '720p',
       }

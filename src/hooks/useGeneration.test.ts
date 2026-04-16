@@ -116,7 +116,7 @@ function createParentVideoNode(id: string, resultUrl = 'https://example.com/ref.
     status: NodeStatus.SUCCESS,
     resultUrl,
     model: 'veo3.1',
-    videoModel: 'veo3.1',
+    videoModel: 'veo3.1-fast',
     videoMode: 'standard',
     videoDuration: 4,
     aspectRatio: '16:9',
@@ -565,7 +565,7 @@ describe('useGeneration 视频链路保护', () => {
 
     const nodes = [
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         videoDuration: 10,
         aspectRatio: '1:1',
         resolution: '4K',
@@ -579,7 +579,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         duration: 4,
         aspectRatio: '16:9',
         resolution: '720p',
@@ -596,7 +596,7 @@ describe('useGeneration 视频链路保护', () => {
     const nodes = [
       createImageNode('image-a', 'data:image/png;base64,veo-start'),
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         videoMode: 'standard',
         parentIds: ['image-a'],
         frameInputs: [
@@ -612,7 +612,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         imageBase64: 'data:image/png;base64,veo-start',
         referenceImagesBase64: undefined,
         lastFrameBase64: undefined,
@@ -720,7 +720,7 @@ describe('useGeneration 视频链路保护', () => {
 
     const nodes = [
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         cameraPresets: [cameraPreset],
         videoCameraControl: cameraControl,
       }),
@@ -746,7 +746,7 @@ describe('useGeneration 视频链路保护', () => {
       createImageNode('image-a', 'data:image/png;base64,image-a'),
       createImageNode('image-b', 'data:image/png;base64,image-b'),
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         videoMode: 'standard',
         parentIds: ['image-a', 'image-b'],
       }),
@@ -758,7 +758,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         referenceImagesBase64: [
           'data:image/png;base64,image-a',
           'data:image/png;base64,image-b',
@@ -858,7 +858,7 @@ describe('useGeneration 视频链路保护', () => {
     const nodes = [
       createImageNode('image-a', 'data:image/png;base64:image-a'),
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         videoPanelMode: 'text2video',
         parentIds: ['image-a'],
       }),
@@ -870,7 +870,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         imageBase64: undefined,
         referenceImagesBase64: undefined,
         lastFrameBase64: undefined,
@@ -884,7 +884,7 @@ describe('useGeneration 视频链路保护', () => {
     const nodes = [
       createParentVideoNode('video-ref', 'https://example.com/ref.mp4'),
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         videoPanelMode: 'singleImage2video',
         parentIds: ['video-ref'],
       }),
@@ -943,7 +943,7 @@ describe('useGeneration 视频链路保护', () => {
       createImageNode('image-a', 'data:image/png;base64,image-a'),
       createImageNode('image-b', 'data:image/png;base64,image-b'),
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         videoMode: 'standard',
         parentIds: ['image-a', 'image-b'],
       }),
@@ -955,7 +955,7 @@ describe('useGeneration 视频链路保护', () => {
 
     expect(generateVideoMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         referenceImagesBase64: [
           'data:image/png;base64,image-a',
           'data:image/png;base64,image-b',
@@ -1004,7 +1004,7 @@ describe('useGeneration 视频链路保护', () => {
     const nodes = [
       createParentVideoNode('video-ref', 'https://example.com/ref.mp4'),
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         parentIds: ['video-ref'],
       }),
       {
@@ -1083,7 +1083,7 @@ describe('useGeneration 视频链路保护', () => {
     const updateNode = vi.fn();
     const nodes = [
       createVideoNode({
-        videoModel: 'veo3.1',
+        videoModel: 'veo3.1-fast',
         videoMode: 'standard',
       }),
     ];

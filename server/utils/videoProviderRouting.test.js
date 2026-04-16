@@ -21,6 +21,14 @@ describe('resolveVideoProvider', () => {
       provider: 'veo',
       normalizedModel: 'veo-3.1-fast-generate-preview',
     });
+    expect(resolveVideoProvider('veo3.1-fast')).toEqual({
+      provider: 'veo',
+      normalizedModel: 'veo_3_1-fast',
+    });
+    expect(resolveVideoProvider('veo3.1-lite')).toEqual({
+      provider: 'veo',
+      normalizedModel: 'veo_3_1-lite',
+    });
   });
 
   it('routes wan 2.6 image-to-video through the wan provider family', () => {

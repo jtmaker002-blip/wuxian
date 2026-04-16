@@ -54,12 +54,17 @@ describe('registry model bridge', () => {
   });
 
   it('canonicalizes legacy video aliases to visible executable registry ids', () => {
-    expect(canonicalizeVideoModelId('veo-3.1-fast-generate-preview')).toBe('veo3.1');
-    expect(canonicalizeVideoModelId('veo3.1-pro')).toBe('veo3.1');
-    expect(canonicalizeVideoModelId('veo3.1-fast-components')).toBe('veo3.1');
+    expect(canonicalizeVideoModelId('veo-3.1-fast-generate-preview')).toBe('veo3.1-fast');
+    expect(canonicalizeVideoModelId('veo3.1')).toBe('veo3.1-fast');
+    expect(canonicalizeVideoModelId('veo_3_1-fast')).toBe('veo3.1-fast');
+    expect(canonicalizeVideoModelId('veo_3_1-lite')).toBe('veo3.1-lite');
+    expect(canonicalizeVideoModelId('veo3.1-pro')).toBe('veo3.1-fast');
+    expect(canonicalizeVideoModelId('veo3.1-fast-components')).toBe('veo3.1-fast');
     expect(canonicalizeVideoModelId('wan2.6-i2v')).toBe('wan2.6-i2v');
     expect(canonicalizeVideoModelId('jimeng-4.5')).toBe('jimeng-4.5');
-    expect(mapRegistryVideoIdToServerVideoId('veo3.1')).toBe('veo-3.1-fast-generate-preview');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1-fast')).toBe('veo_3_1-fast');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1-lite')).toBe('veo_3_1-lite');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('veo3.1-pro')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('veo3.1-fast-components')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('wan2.6-i2v')).toBe('wan2.6-i2v');
@@ -69,18 +74,18 @@ describe('registry model bridge', () => {
   it('keeps sunset video models on the node for readonly display, but stops mapping them to executable server ids', () => {
     setRuntimeVideoCapabilities({
       ...LOCAL_VIDEO_CAPABILITIES,
-      'veo3.1': {
-        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
+      'veo3.1-fast': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'],
         modes: {
-          standard: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard, enabled: false },
-          frameToFrame: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.frameToFrame, enabled: false },
-          motionControl: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.motionControl, enabled: false },
+          standard: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard, enabled: false },
+          frameToFrame: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.frameToFrame, enabled: false },
+          motionControl: { ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.motionControl, enabled: false },
         },
       },
     });
 
-    expect(canonicalizeVideoModelId('veo3.1')).toBe('veo3.1');
-    expect(canonicalizeVideoModelId('veo-3.1-fast-generate-preview')).toBe('veo3.1');
-    expect(mapRegistryVideoIdToServerVideoId('veo3.1')).toBeUndefined();
+    expect(canonicalizeVideoModelId('veo3.1-fast')).toBe('veo3.1-fast');
+    expect(canonicalizeVideoModelId('veo-3.1-fast-generate-preview')).toBe('veo3.1-fast');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1-fast')).toBeUndefined();
   });
 });

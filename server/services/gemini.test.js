@@ -206,6 +206,10 @@ describe('resolveVeoVideoModel', () => {
     expect(resolveVeoVideoModel('veo-3.1-fast-generate-preview')).toBe(
       'veo-3.1-fast-generate-preview'
     );
+    expect(resolveVeoVideoModel('veo3.1-fast')).toBe('veo_3_1-fast');
+    expect(resolveVeoVideoModel('veo3.1-lite')).toBe('veo_3_1-lite');
+    expect(resolveVeoVideoModel('veo_3_1-fast')).toBe('veo_3_1-fast');
+    expect(resolveVeoVideoModel('veo_3_1-lite')).toBe('veo_3_1-lite');
   });
 
   it('rejects missing Veo video model ids instead of silently defaulting', async () => {

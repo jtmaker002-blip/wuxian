@@ -11,6 +11,8 @@ const KNOWN_VIDEO_CAPABILITY_IDS = Object.freeze([
   'grok-video-3',
   'sora-2',
   'veo3.1',
+  'veo3.1-fast',
+  'veo3.1-lite',
   'kling-v3',
   'kling-v2-6',
   'kling-v2-5-turbo',

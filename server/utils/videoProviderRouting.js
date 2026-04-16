@@ -10,6 +10,10 @@ const SUPPORTED_HAILUO_VIDEO_MODELS = new Set([
 
 const LOCAL_VIDEO_MODEL_ALIASES = Object.freeze({
   'veo3.1': 'veo-3.1-fast-generate-preview',
+  'veo3.1-fast': 'veo_3_1-fast',
+  'veo3.1-lite': 'veo_3_1-lite',
+  'veo_3_1-fast': 'veo_3_1-fast',
+  'veo_3_1-lite': 'veo_3_1-lite',
 });
 
 const UNSUPPORTED_REMOTE_PROVIDER_MODELS = Object.freeze({

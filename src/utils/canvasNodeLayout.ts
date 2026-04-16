@@ -4,7 +4,6 @@ export const CANVAS_NODE_WIDTH = 350;
 export const CANVAS_NODE_EMPTY_SIZE = 350;
 export const CANVAS_NODE_GAP = 100;
 export const CANVAS_NODE_MAX_SIZE = 1050;
-export const CANVAS_VIDEO_NODE_WIDTH = 1050;
 
 export type CanvasNodeDimensions = {
   width: number;
@@ -57,11 +56,7 @@ export function getCanvasNodeDimensions(node: Pick<NodeData,
 >, parentNode?: Pick<NodeData, 'status' | 'resultUrl' | 'resultAspectRatio'>): CanvasNodeDimensions {
   if (node.type === NodeType.VIDEO) {
     return computeNodeDimensionsFromRatio(
-      parseNodeAspectRatio(node.resultAspectRatio) ?? parseNodeAspectRatio(node.aspectRatio) ?? 16 / 9,
-      {
-        baseSize: Math.round(CANVAS_VIDEO_NODE_WIDTH / (16 / 9)),
-        maxSize: CANVAS_VIDEO_NODE_WIDTH,
-      }
+      parseNodeAspectRatio(node.resultAspectRatio) ?? parseNodeAspectRatio(node.aspectRatio) ?? 16 / 9
     );
   }
 

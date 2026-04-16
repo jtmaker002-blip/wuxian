@@ -19,15 +19,15 @@ describe('model capabilities', () => {
   });
 
   it('returns a known video capability by registry id', () => {
-    const capability = getVideoCapability('veo3.1');
+    const capability = getVideoCapability('veo3.1-fast');
 
-    expect(capability?.id).toBe('veo3.1');
+    expect(capability?.id).toBe('veo3.1-fast');
     expect(capability?.serverModelId).toBeTruthy();
     expect(capability?.modes.standard.enabled).toBe(true);
   });
 
   it('returns native capability overrides for models with officially confirmed broader features', () => {
-    expect(getNativeVideoCapability('veo3.1')?.modes.standard.supportsFullReference).toBe(true);
+    expect(getNativeVideoCapability('veo3.1-fast')?.modes.standard.supportsFullReference).toBe(true);
     expect(getNativeVideoCapability('jimeng-seedance-2')?.modes.frameToFrame.supportsStartEndFrames).toBe(true);
     expect(getNativeVideoCapability('kling-v3')?.modes.standard.supportsAudio).toBe(true);
     expect(getNativeVideoCapability('sora-2')?.modes.standard.supportsAudio).toBe(true);
@@ -46,12 +46,12 @@ describe('model capabilities', () => {
 
   it('exposes native model notes for UI clarification', () => {
     expect(getNativeVideoModelNotes('sora-2')[0]).toContain('音频');
-    expect(getNativeVideoModelNotes('veo3.1')[0]).toContain('首尾帧');
+    expect(getNativeVideoModelNotes('veo3.1-fast')[0]).toContain('首尾帧');
     expect(getNativeVideoModelNotes('wan2.6-i2v')[0]).toContain('比例跟随首帧');
   });
 
   it('exposes official source links for native capability assertions', () => {
-    expect(getNativeVideoModelSources('veo3.1')[0]).toContain('cloud.google.com');
+    expect(getNativeVideoModelSources('veo3.1-fast')[0]).toContain('cloud.google.com');
     expect(getNativeVideoModelSources('sora-2')[0]).toContain('openai.com');
     expect(getNativeVideoModelSources('minimax-hailuo')[0]).toContain('minimax');
   });
@@ -93,7 +93,9 @@ describe('model capabilities', () => {
   it('maps registry video ids through capability-backed server ids', () => {
     expect(mapRegistryVideoIdToServerVideoId('grok-video-3')).toBe('grok-video-3');
     expect(mapRegistryVideoIdToServerVideoId('sora-2')).toBe('sora-2');
-    expect(mapRegistryVideoIdToServerVideoId('veo3.1')).toBe('veo-3.1-fast-generate-preview');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1-fast')).toBe('veo_3_1-fast');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1-lite')).toBe('veo_3_1-lite');
+    expect(mapRegistryVideoIdToServerVideoId('veo3.1')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('veo3.1-pro')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('veo3.1-fast-components')).toBeUndefined();
     expect(mapRegistryVideoIdToServerVideoId('minimax-hailuo')).toBe('hailuo-2.3');
@@ -110,19 +112,20 @@ describe('model capabilities', () => {
   it('reads runtime-overridden video capabilities', () => {
     setRuntimeVideoCapabilities({
       ...LOCAL_VIDEO_CAPABILITIES,
-      'veo3.1': {
-        ...LOCAL_VIDEO_CAPABILITIES['veo3.1'],
-        serverModelId: 'veo3.1-remote',
+      'veo3.1-fast': {
+        ...LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'],
+        serverModelId: 'veo3.1-fast-remote',
       },
     });
 
-    expect(getVideoCapability('veo3.1')?.serverModelId).toBe('veo3.1-remote');
+    expect(getVideoCapability('veo3.1-fast')?.serverModelId).toBe('veo3.1-fast-remote');
   });
 
   it('pins only truly executable local video models to backend ids', () => {
     expect(LOCAL_VIDEO_CAPABILITIES['grok-video-3'].serverModelId).toBe('grok-video-3');
     expect(LOCAL_VIDEO_CAPABILITIES['sora-2'].serverModelId).toBe('sora-2');
-    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1'].serverModelId).toBe('veo-3.1-fast-generate-preview');
+    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].serverModelId).toBe('veo_3_1-fast');
+    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1-lite'].serverModelId).toBe('veo_3_1-lite');
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v3'].serverModelId).toBe('kling-v3');
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-6'].serverModelId).toBe('kling-v2-6');
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-5-turbo'].serverModelId).toBe('kling-v2-5-turbo');
@@ -140,8 +143,8 @@ describe('model capabilities', () => {
     expect(LOCAL_VIDEO_CAPABILITIES['grok-video-3'].modes.standard.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['grok-video-3'].modes.standard.supportsMultiImage).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['sora-2'].modes.standard.supportsFullReference).toBe(false);
-    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard.supportsFullReference).toBe(true);
-    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.standard.supportsMultiImage).toBe(true);
+    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard.supportsFullReference).toBe(true);
+    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.standard.supportsMultiImage).toBe(true);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v3'].modes.standard.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-6'].modes.standard.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-5-turbo'].modes.standard.supportsFullReference).toBe(false);
@@ -151,7 +154,7 @@ describe('model capabilities', () => {
 
   it('keeps frame-to-frame modes from pretending to be full-reference multi-image modes', () => {
     expect(LOCAL_VIDEO_CAPABILITIES['sora-2'].modes.frameToFrame.supportsFullReference).toBe(false);
-    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1'].modes.frameToFrame.supportsFullReference).toBe(false);
+    expect(LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'].modes.frameToFrame.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v3'].modes.frameToFrame.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['kling-v2-5-turbo'].modes.frameToFrame.supportsFullReference).toBe(false);
     expect(LOCAL_VIDEO_CAPABILITIES['minimax-hailuo'].modes.frameToFrame.supportsFullReference).toBe(false);
