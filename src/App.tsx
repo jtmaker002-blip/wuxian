@@ -136,6 +136,7 @@ export default function App() {
   const [canvasTheme, setCanvasTheme] = useState<'dark' | 'light'>('light');
   const [isZoomMenuOpen, setIsZoomMenuOpen] = useState(false);
   const [isMiniMapOpen, setIsMiniMapOpen] = useState(true);
+  const [pendingSceneAutoRunIds, setPendingSceneAutoRunIds] = useState<string[]>([]);
   const [layoutReview, setLayoutReview] = useState<null | {
     previousPositions: Array<{ id: string; x: number; y: number }>;
   }>(null);
@@ -589,7 +590,7 @@ export default function App() {
     setIsDirty(false);
   };
 
-  const { handleGenerate } = useGeneration({
+  const { handleGenerate, cancelGeneration } = useGeneration({
     nodes,
     updateNode
   });
@@ -610,6 +611,20 @@ export default function App() {
   React.useEffect(() => {
     handleGenerateRef.current = handleGenerateNode;
   }, [handleGenerateNode]);
+
+  React.useEffect(() => {
+    if (pendingSceneAutoRunIds.length === 0) return;
+    const readyIds = pendingSceneAutoRunIds.filter((nodeId) => {
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      return node?.scene && node.status === NodeStatus.IDLE && !node.taskInfo?.loading;
+    });
+    if (readyIds.length === 0) return;
+
+    setPendingSceneAutoRunIds((prev) => prev.filter((nodeId) => !readyIds.includes(nodeId)));
+    readyIds.forEach((nodeId) => {
+      void handleGenerateRef.current(nodeId);
+    });
+  }, [nodes, pendingSceneAutoRunIds]);
 
   const handleCreateSceneNode = React.useCallback((scene: SceneId) => {
     const definition = getSceneDefinition(scene);
@@ -722,9 +737,7 @@ export default function App() {
       x: window.innerWidth / 2 - (newNode.x + 260) * current.zoom,
       y: window.innerHeight / 2 - (newNode.y + 220) * current.zoom,
     }));
-    setTimeout(() => {
-      handleGenerateRef.current(nodeId);
-    }, 80);
+    setPendingSceneAutoRunIds((prev) => [...prev, nodeId]);
   }, [nodes, setNodes, setSelectedNodeIds]);
 
   const handleSendSceneImageToNode = React.useCallback((
@@ -775,6 +788,33 @@ export default function App() {
         : node
     )));
   }, [nodes, setNodes]);
+
+  const handleCancelNodeGeneration = React.useCallback(async (nodeId: string) => {
+    const node = nodes.find((candidate) => candidate.id === nodeId);
+    if (!node) return;
+    const taskId = node.taskInfo?.taskId;
+    if (taskId && node.taskInfo?.loading) {
+      await cancelTasks([taskId]).catch(() => []);
+      setNodes((prev) => prev.map((candidate) => (
+        candidate.id === nodeId
+          ? {
+            ...candidate,
+            status: NodeStatus.ERROR,
+            taskInfo: {
+              ...candidate.taskInfo,
+              loading: false,
+              status: 'cancelled',
+              failedReason: '任务已取消',
+              progressPercent: candidate.taskInfo?.progressPercent ?? 0,
+            },
+            errorMessage: '任务已取消',
+          }
+          : candidate
+      )));
+      return;
+    }
+    cancelGeneration(nodeId);
+  }, [cancelGeneration, nodes, setNodes]);
 
   // Create new canvas
   const handleNewCanvas = () => {
@@ -1909,7 +1949,12 @@ export default function App() {
                 if (!node.parentIds || node.parentIds.length === 0) return [];
                 return node.parentIds
                   .map(parentId => nodes.find(n => n.id === parentId))
-                  .filter(parent => parent && (parent.type === NodeType.IMAGE || parent.type === NodeType.VIDEO) && parent.resultUrl)
+                  .filter(parent => parent && (
+                    parent.type === NodeType.IMAGE ||
+                    parent.type === NodeType.IMAGE_EDITOR ||
+                    parent.type === NodeType.VIDEO ||
+                    parent.type === NodeType.AUDIO
+                  ) && parent.resultUrl)
                   .map(parent => ({
                     id: parent!.id,
                     url: (parent!.type === NodeType.VIDEO ? parent!.lastFrame : parent!.resultUrl) || parent!.resultUrl!,
@@ -1934,6 +1979,7 @@ export default function App() {
                 onUpdate={updateNodeWithSync}
                 onSwitchType={switchNodeType}
                 onGenerate={handleGenerateNode}
+                onCancelGeneration={handleCancelNodeGeneration}
                 onAddNext={handleAddNext}
                 onQuickAddInputNode={handleQuickAddInputNode}
                 onSplitImageGrid={handleSplitImageGrid}

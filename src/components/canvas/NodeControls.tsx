@@ -469,12 +469,12 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const isImageNode = isRegistryImageNode || data.type === NodeType.LOCAL_IMAGE_MODEL;
     const hasConnectedImages = connectedImageNodes.length > 0;
 
-    const connectedFrameSourceNodes = connectedImageNodes.filter(n => n.type === NodeType.IMAGE);
+    const connectedFrameSourceNodes = connectedImageNodes.filter(n => n.type === NodeType.IMAGE || n.type === NodeType.IMAGE_EDITOR);
     const hasVideoReferenceInput = connectedImageNodes.some(n => n.type === NodeType.VIDEO);
     const hasCharacterImageInput = connectedFrameSourceNodes.length > 0;
     const standardVideoSources = isVideoNode
         ? connectedImageNodes
-            .filter((node) => node.type === NodeType.IMAGE)
+            .filter((node) => node.type === NodeType.IMAGE || node.type === NodeType.IMAGE_EDITOR)
             .map((node) => ({
                 nodeId: node.id,
                 type: 'image' as const,
@@ -1342,6 +1342,42 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </button>
                                 </div>
 
+                                {activeVideoPanelMode !== 'text2video' && (
+                                    <div className="flex min-h-[54px] items-center gap-2 overflow-x-auto rounded-[12px] border border-white/8 bg-black/16 px-2 py-2">
+                                        {videoPanelReferenceItems.length > 0 ? (
+                                            videoPanelReferenceItems.map((item) => (
+                                                <div
+                                                    key={`${item.id}-${item.label}`}
+                                                    className="relative h-10 w-16 shrink-0 overflow-hidden rounded-[8px] border border-white/12 bg-black"
+                                                    title={item.label}
+                                                >
+                                                    {item.mediaType === 'video' ? (
+                                                        <video src={item.url} className="h-full w-full object-cover opacity-85" muted playsInline preload="metadata" />
+                                                    ) : item.mediaType === 'audio' ? (
+                                                        <div className="flex h-full w-full items-center justify-center bg-[#161616] text-cyan-300">
+                                                            <Sparkles size={16} />
+                                                        </div>
+                                                    ) : (
+                                                        <img src={item.url} alt={item.label} className="h-full w-full object-cover" />
+                                                    )}
+                                                    <div className="absolute inset-x-0 bottom-0 truncate bg-black/62 px-1 py-0.5 text-center text-[9px] font-medium text-white">
+                                                        {item.label}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                onClick={() => onQuickAddInputNode?.(data.id, activeVideoPanelPolicy.acceptsVideo ? 'video' : 'image')}
+                                                className="flex h-10 items-center gap-2 rounded-[8px] border border-dashed border-white/14 px-3 text-[12px] font-medium text-neutral-400 transition-colors hover:border-white/24 hover:text-white"
+                                            >
+                                                <ImageIcon size={14} />
+                                                添加参考素材
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
                                 <div className="min-h-[112px] rounded-[16px] bg-transparent px-2 py-1">
                                     <textarea
                                         className="min-h-[112px] w-full resize-none bg-transparent text-[14px] font-light leading-6 text-neutral-300 outline-none placeholder:text-neutral-500"
@@ -2109,245 +2145,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </div>
                                 )}
                             </div>
-                        ) : data.type === NodeType.VIDEO ? (
-                            <div className="relative" ref={modelDropdownRef}>
-                                <button
-                                    onClick={() => setShowModelDropdown(!showModelDropdown)}
-                                    disabled={!hasAvailableVideoModels}
-                                    className={`flex items-center gap-2 ${isVideoNode ? 'px-1 py-1 text-[18px]' : 'text-xs font-medium px-2.5 py-1.5 rounded-lg'} transition-colors border ${selectBtn}`}
-                                >
-                                    {currentVideoModel?.provider === 'openai' ? (
-                                        <OpenAIIcon size={isVideoNode ? 18 : 12} className="text-green-400" />
-                                    ) : currentVideoModel?.provider === 'google' ? (
-                                        <GoogleIcon size={isVideoNode ? 18 : 12} className="text-white" />
-                                    ) : currentVideoModel?.provider === 'xai' ? (
-                                        <Sparkles size={isVideoNode ? 18 : 12} className="text-orange-400" />
-                                    ) : currentVideoModel?.provider === 'seedance' ? (
-                                        <Sparkles size={isVideoNode ? 18 : 12} className="text-violet-400" />
-                                    ) : currentVideoModel?.provider === 'kling' ? (
-                                        <KlingIcon size={isVideoNode ? 18 : 14} />
-                                    ) : currentVideoModel?.provider === 'hailuo' ? (
-                                        <HailuoIcon size={isVideoNode ? 18 : 14} />
-                                    ) : (
-                                        <Film size={isVideoNode ? 18 : 12} className="text-cyan-400" />
-                                    )}
-                                    <span className="font-medium">{currentVideoModelLabel}</span>
-                                    {renderExecutionBadge(currentVideoExecutionSupport)}
-                                    <ChevronDown size={12} className="ml-0.5 opacity-50" />
-                                </button>
-
-                                {/* Model Dropdown Menu */}
-                                {showModelDropdown && (
-                                    <div className={`absolute top-full mt-1 left-0 w-52 rounded-lg shadow-xl overflow-hidden z-50 animate-in fade-in zoom-in-95 duration-100 border ${dropdownPanel}`}>
-                                        {/* Mode indicator */}
-                                        <div className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border-b flex items-center gap-1.5 ${dropdownHeader}`}>
-                                            <span className={`w-1.5 h-1.5 rounded-full ${videoGenerationMode === 'text-to-video' ? 'bg-blue-400' :
-                                                videoGenerationMode === 'image-to-video' ? 'bg-green-400' :
-                                                    videoGenerationMode === 'motion-control' ? 'bg-orange-400' : 'bg-purple-400'
-                                                }`} />
-                                            {videoGenerationMode === 'text-to-video' ? 'Text → Video' :
-                                                videoGenerationMode === 'image-to-video' ? 'Image → Video' :
-                                                    videoGenerationMode === 'motion-control' ? 'Motion Control' :
-                                                        'Frame-to-Frame'}
-                                        </div>
-                                        {/* OpenAI Models */}
-                                        {availableVideoModels.filter(m => m.provider === 'openai').length > 0 && (
-                                            <>
-                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f]">
-                                                    OpenAI
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'openai').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <OpenAIIcon size={12} className="text-green-400" />
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-                                        {/* Google Models */}
-                                        {availableVideoModels.filter(m => m.provider === 'google').length > 0 && (
-                                            <>
-                                                <div className={`px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] ${availableVideoModels.some((m) => m.provider === 'openai') ? 'border-t border-neutral-700' : ''}`}>
-                                                    Google
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'google').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            {model.provider === 'google' ? (
-                                                                <GoogleIcon size={12} className="text-white" />
-                                                            ) : (
-                                                                <Film size={12} className="text-cyan-400" />
-                                                            )}
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-
-                                        {/* xAI Models */}
-                                        {availableVideoModels.filter(m => m.provider === 'xai').length > 0 && (
-                                            <>
-                                                <div className={`px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] ${availableVideoModels.some((m) => m.provider === 'openai' || m.provider === 'google') ? 'border-t border-neutral-700' : ''}`}>
-                                                    xAI
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'xai').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <Sparkles size={12} className="text-orange-400" />
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-
-                                        {/* Kling Models */}
-                                        {availableVideoModels.filter(m => m.provider === 'kling').length > 0 && (
-                                            <>
-                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
-                                                    Kling AI
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'kling').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <KlingIcon size={14} />
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                            {model.recommended && (
-                                                                <span className="text-[9px] px-1 py-0.5 bg-green-600/30 text-green-400 rounded">REC</span>
-                                                            )}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-
-                                        {/* Hailuo Models */}
-                                        {availableVideoModels.filter(m => m.provider === 'hailuo').length > 0 && (
-                                            <>
-                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
-                                                    Hailuo AI
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'hailuo').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <HailuoIcon size={14} />
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-
-                                        {availableVideoModels.filter(m => m.provider === 'wan').length > 0 && (
-                                            <>
-                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
-                                                    Wan
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'wan').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <Film size={12} className="text-cyan-400" />
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-
-                                        {availableVideoModels.filter(m => m.provider === 'seedance').length > 0 && (
-                                            <>
-                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
-                                                    即梦 / Seedance
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'seedance').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <Sparkles size={12} className="text-violet-400" />
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-
-                                        {availableVideoModels.filter(m => m.provider === 'other').length > 0 && (
-                                            <>
-                                                <div className="px-3 py-1.5 text-[10px] font-bold text-neutral-500 uppercase tracking-wider bg-[#1f1f1f] border-t border-neutral-700">
-                                                    其他
-                                                </div>
-                                                {availableVideoModels.filter(m => m.provider === 'other').map(model => (
-                                                    <button
-                                                        key={model.id}
-                                                        onClick={() => handleVideoModelChange(model.id)}
-                                                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-[#333] transition-colors ${selectedVideoModel?.id === model.id ? 'text-blue-400' : 'text-neutral-300'
-                                                            }`}
-                                                    >
-                                                        <span className="flex items-center gap-2">
-                                                            <Film size={12} className="text-cyan-400" />
-                                                            {model.name}
-                                                            {renderExecutionBadge(getVideoDropdownExecutionSupport(model.id))}
-                                                        </span>
-                                                        {selectedVideoModel?.id === model.id && <Check size={12} />}
-                                                    </button>
-                                                ))}
-                                            </>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        ) : data.type === NodeType.AUDIO ? (
+                        ) : data.type === NodeType.VIDEO ? null : data.type === NodeType.AUDIO ? (
                             <div className="relative" ref={modelDropdownRef}>
                                 <button
                                     onClick={() => setShowModelDropdown(!showModelDropdown)}

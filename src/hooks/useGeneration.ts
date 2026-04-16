@@ -33,6 +33,9 @@ interface UseGenerationProps {
     updateNode: (id: string, updates: Partial<NodeData>) => void;
 }
 
+const activeGenerationByNode: Record<string, string> = {};
+const cancelledGenerationByNode: Record<string, string> = {};
+
 export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
     const providerConfig = useStoredOpenAiTeachProviderConfig();
 
@@ -106,6 +109,19 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
         const node = nodes.find(n => n.id === id);
         if (!node) return;
         const hasHostedToken = Boolean(providerConfig.providerApiKey);
+        const generationRunId = crypto.randomUUID();
+        activeGenerationByNode[id] = generationRunId;
+        delete cancelledGenerationByNode[id];
+
+        const isGenerationCurrent = () =>
+            activeGenerationByNode[id] === generationRunId &&
+            cancelledGenerationByNode[id] !== generationRunId;
+
+        const completeGeneration = (updates: Partial<NodeData>) => {
+            if (!isGenerationCurrent()) return;
+            delete activeGenerationByNode[id];
+            updateNode(id, updates);
+        };
 
         // Get prompts from connected TEXT nodes (if any)
         const getTextNodePrompts = (): string[] => {
@@ -161,7 +177,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 ? connectedParentNodes.filter(
                     (candidate): candidate is NodeData =>
                         Boolean(candidate) &&
-                        candidate.type === NodeType.IMAGE &&
+                        (candidate.type === NodeType.IMAGE || candidate.type === NodeType.IMAGE_EDITOR) &&
                         Boolean(candidate.resultUrl)
                 )
                 : [];
@@ -219,7 +235,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 ? connectedParentNodes.flatMap((candidate) => {
                     if (!candidate) return [];
                     if (hasExplicitVideoPanelMode && requestedVideoPanelMode === 'text2video') return [];
-                    if (candidate.type === NodeType.IMAGE && candidate.resultUrl) {
+                    if ((candidate.type === NodeType.IMAGE || candidate.type === NodeType.IMAGE_EDITOR) && candidate.resultUrl) {
                         if (
                             hasExplicitVideoPanelMode &&
                             (requestedVideoPanelMode === 'video2video' ||
@@ -273,8 +289,8 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     const endNode = nodes.find((candidate) => candidate.id === endFrameInput.nodeId);
 
                     return {
-                        startUrl: startNode?.type === NodeType.IMAGE ? startNode.resultUrl : undefined,
-                        endUrl: endNode?.type === NodeType.IMAGE ? endNode.resultUrl : undefined,
+                        startUrl: startNode?.type === NodeType.IMAGE || startNode?.type === NodeType.IMAGE_EDITOR ? startNode.resultUrl : undefined,
+                        endUrl: endNode?.type === NodeType.IMAGE || endNode?.type === NodeType.IMAGE_EDITOR ? endNode.resultUrl : undefined,
                     };
                 })()
                 : undefined;
@@ -333,7 +349,14 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
             return;
         }
 
-        updateNode(id, { status: NodeStatus.LOADING, generationStartTime: Date.now() });
+        updateNode(id, {
+            status: NodeStatus.LOADING,
+            generationStartTime: Date.now(),
+            taskInfo: {
+                loading: true,
+                status: 'running',
+            },
+        });
 
         try {
             if (node.type === NodeType.IMAGE || node.type === NodeType.IMAGE_EDITOR) {
@@ -423,12 +446,17 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 const { resultAspectRatio } = await getImageAspectRatio(resultUrl);
 
                 // Keep user's selected aspectRatio - don't overwrite it with detected ratio
-                updateNode(id, {
+                completeGeneration({
                     status: NodeStatus.SUCCESS,
                     resultUrl,
                     resultAspectRatio,
                     // Note: aspectRatio is intentionally NOT updated to preserve user's selection
-                    errorMessage: undefined
+                    errorMessage: undefined,
+                    taskInfo: {
+                        loading: false,
+                        status: 'succeeded',
+                        progressPercent: 100,
+                    },
                 });
 
 
@@ -470,11 +498,16 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     // Detect actual image dimensions
                     const { resultAspectRatio } = await getImageAspectRatio(resultUrl);
 
-                    updateNode(id, {
+                    completeGeneration({
                         status: NodeStatus.SUCCESS,
                         resultUrl,
                         resultAspectRatio,
-                        errorMessage: undefined
+                        errorMessage: undefined,
+                        taskInfo: {
+                            loading: false,
+                            status: 'succeeded',
+                            progressPercent: 100,
+                        },
                     });
                 } else {
                     throw new Error(result.error || 'Local generation failed');
@@ -652,7 +685,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     // Ignore errors, use undefined aspect ratio
                 }
 
-                updateNode(id, {
+                completeGeneration({
                     status: NodeStatus.SUCCESS,
                     resultUrl,
                     resultAspectRatio,
@@ -662,7 +695,12 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     executedVideoModel: videoGenerationResult.executedModel,
                     executedVideoMode: videoGenerationResult.executedMode,
                     executionProvider: videoGenerationResult.executionProvider,
-                    errorMessage: undefined // Clear any previous error
+                    errorMessage: undefined, // Clear any previous error
+                    taskInfo: {
+                        loading: false,
+                        status: 'succeeded',
+                        progressPercent: 100,
+                    },
                 });
 
             } else if (node.type === NodeType.AUDIO) {
@@ -702,10 +740,15 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
 
                 const resultUrl = `${rawResultUrl}${rawResultUrl.includes('?') ? '&' : '?'}t=${Date.now()}`;
 
-                updateNode(id, {
+                completeGeneration({
                     status: NodeStatus.SUCCESS,
                     resultUrl,
                     errorMessage: undefined,
+                    taskInfo: {
+                        loading: false,
+                        status: 'succeeded',
+                        progressPercent: 100,
+                    },
                 });
 
 
@@ -721,9 +764,36 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 errorMessage = '输入图片与当前视频模型不兼容。请优先使用 JPEG，比例保持 16:9 或 9:16，或者先切回无参考图生成。';
             }
 
-            updateNode(id, { status: NodeStatus.ERROR, errorMessage });
+            completeGeneration({
+                status: NodeStatus.ERROR,
+                errorMessage,
+                taskInfo: {
+                    loading: false,
+                    status: 'failed',
+                    failedReason: errorMessage,
+                    progressPercent: 0,
+                },
+            });
             console.error('Generation failed:', error);
         }
+    };
+
+    const cancelGeneration = (id: string) => {
+        const generationRunId = activeGenerationByNode[id];
+        if (generationRunId) {
+            cancelledGenerationByNode[id] = generationRunId;
+            delete activeGenerationByNode[id];
+        }
+        updateNode(id, {
+            status: NodeStatus.ERROR,
+            errorMessage: '任务已取消',
+            taskInfo: {
+                loading: false,
+                status: 'cancelled',
+                failedReason: '任务已取消',
+                progressPercent: 0,
+            },
+        });
     };
 
     // ============================================================================
@@ -731,6 +801,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
     // ============================================================================
 
     return {
-        handleGenerate
+        handleGenerate,
+        cancelGeneration,
     };
 };

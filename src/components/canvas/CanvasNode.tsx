@@ -65,6 +65,7 @@ interface CanvasNodeProps {
   onUpdate: (id: string, updates: Partial<NodeData>) => void;
   onSwitchType?: (id: string, nextType: SwitchableNodeType) => void;
   onGenerate: (id: string) => void;
+  onCancelGeneration?: (id: string) => void;
   onAddNext: (id: string, type: 'left' | 'right') => void;
   selected: boolean;
   showControls?: boolean; // Only show controls when single node is selected (not in group selection)
@@ -111,6 +112,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onUpdate,
   onSwitchType,
   onGenerate,
+  onCancelGeneration,
   onAddNext,
   selected,
   showControls = true, // Default to true for backward compatibility
@@ -1532,6 +1534,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             onUpdate={onUpdate}
             onPostToX={onPostToX}
             onGenerate={onGenerate}
+            onCancelGeneration={onCancelGeneration}
             onSendSceneImageToNode={onSendSceneImageToNode}
             canvasTheme={canvasTheme}
           />

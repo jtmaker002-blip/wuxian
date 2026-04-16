@@ -60,6 +60,7 @@ interface NodeContentProps {
     // Social sharing
     onPostToX?: (nodeId: string, mediaUrl: string, mediaType: 'image' | 'video') => void;
     onGenerate?: (nodeId: string) => void;
+    onCancelGeneration?: (nodeId: string) => void;
     onSendSceneImageToNode?: (sourceNodeId: string, image: { url: string; label?: string }, action: 'image-node' | 'upscale-node') => void;
     canvasTheme?: 'dark' | 'light';
 }
@@ -85,6 +86,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     onUpdate,
     onPostToX,
     onGenerate,
+    onCancelGeneration,
     onSendSceneImageToNode,
     canvasTheme = 'dark'
 }) => {
@@ -114,6 +116,9 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const effectiveInputMediaType = inputMediaType || (data.inputUrl ? NodeType.IMAGE : undefined);
     const isVideoFromImageFlow = isVideoType && Boolean(effectiveInputUrl);
     const activeGridSplit = data.imageToolMode === 'grid-split-select' ? data.gridSplit : undefined;
+    const progressPercent = typeof data.taskInfo?.progressPercent === 'number'
+        ? Math.max(0, Math.min(100, Math.round(data.taskInfo.progressPercent)))
+        : undefined;
     const requestedVideoModelLabel = isVideoType ? (data.requestedVideoModel || data.videoModel) : undefined;
     const actualVideoModelLabel = isVideoType ? data.executedVideoModel : undefined;
     const executedVideoModeLabel = isVideoType ? data.executedVideoMode : undefined;
@@ -213,8 +218,29 @@ export const NodeContent: React.FC<NodeContentProps> = ({
         reader.readAsDataURL(file);
     };
 
+    const progressOverlay = isLoading ? (
+        <div className="pointer-events-auto absolute inset-0 z-[80] flex items-center justify-center bg-black/18 backdrop-blur-[1px]">
+            <div className="flex h-12 items-center overflow-hidden rounded-[12px] border border-white/18 bg-[#2a2a2a]/92 text-white shadow-[0_18px_54px_rgba(0,0,0,0.42)]">
+                <div className="px-4 text-[16px] font-semibold tracking-[0.01em]">
+                    生成中 {progressPercent !== undefined ? `${progressPercent}%...` : '...'}
+                </div>
+                <button
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        onCancelGeneration?.(data.id);
+                    }}
+                    className="h-full border-l border-white/12 px-4 text-[15px] font-medium text-white/48 transition-colors hover:bg-white/8 hover:text-white"
+                >
+                    取消
+                </button>
+            </div>
+        </div>
+    ) : null;
+
     return (
-        <div className={`transition-all duration-200 ${!selected ? 'p-0 rounded-[28px] overflow-hidden' : 'p-0'}`}>
+        <div className={`relative transition-all duration-200 ${!selected ? 'p-0 rounded-[28px] overflow-hidden' : 'p-0'}`}>
             {/* Hidden File Input - Always rendered for upload functionality */}
             {(isImageType || isVideoType) && onUpload && (
                 <input
@@ -227,14 +253,17 @@ export const NodeContent: React.FC<NodeContentProps> = ({
             )}
 
             {data.scene ? (
-                <SceneResultPanel
-                    data={data}
-                    selected={selected}
-                    isLoading={isLoading}
-                    onGenerate={onGenerate}
-                    onUpdate={onUpdate}
-                    onSendImageToNode={onSendSceneImageToNode}
-                />
+                <>
+                    <SceneResultPanel
+                        data={data}
+                        selected={selected}
+                        isLoading={isLoading}
+                        onGenerate={onGenerate}
+                        onUpdate={onUpdate}
+                        onSendImageToNode={onSendSceneImageToNode}
+                    />
+                    {progressOverlay}
+                </>
             ) : (isSuccess || isLoading) && data.resultUrl ? (
                 <div
                     className={`relative w-full bg-black group/image ${!selected ? '' : 'rounded-[28px] overflow-hidden'}`}
@@ -377,13 +406,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                         </>
                     )}
 
-                    {/* Regenerating Overlay - Shows when loading with existing content */}
-                    {isLoading && (
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center z-20">
-                            <Loader2 size={40} className="animate-spin text-blue-400" />
-                            <span className="mt-3 text-sm text-white font-medium">{t('nodeContent.regenerating')}</span>
-                        </div>
-                    )}
+                    {progressOverlay}
                 </div>
             ) : data.type === NodeType.TEXT ? (
                 /* Text Node - Menu or Editing Mode */
@@ -661,6 +684,7 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             )}
                         </div>
                     )}
+                    {progressOverlay}
                 </div>
             )}
         </div>
