@@ -4,8 +4,9 @@ import { NodeData, NodeStatus } from '../types';
 import type { SceneId } from '../types/scene';
 import { getSceneDefinition } from '../services/scenes/registry';
 import { getScenePipeline } from '../services/pipelines/registry';
-import { createMockTask, getMockTaskStatus } from '../services/mock/tasks';
-import { createTask as createRemoteTask, pollTasks } from '../services/tasks/taskClient';
+import { cancelMockTask, createMockTask, getMockTaskStatus } from '../services/mock/tasks';
+import { cancelTasks, createTask as createRemoteTask, pollTasks } from '../services/tasks/taskClient';
+import { useStoredOpenAiTeachProviderConfig } from '../shared/provider/openaiteach-config';
 
 type UseSceneTaskRunnerOptions = {
   nodes: NodeData[];
@@ -52,9 +53,29 @@ export function getRestorableSceneTasks(nodes: NodeData[]): ActiveSceneTask[] {
   });
 }
 
+export function getRecoverableSceneTasks(nodes: NodeData[]): ActiveSceneTask[] {
+  return nodes.flatMap((node) => {
+    if (!node.scene || !node.taskInfo?.taskId) return [];
+    if (node.taskInfo.loading) return [];
+    if (node.taskInfo.status !== 'failed') return [];
+    if (node.outputs?.imageList?.length) return [];
+    const params = buildSceneTaskParams(node);
+    if (!params) return [];
+    return [{
+      nodeId: node.id,
+      scene: node.scene as SceneId,
+      taskId: node.taskInfo.taskId,
+      params,
+      remote: (node.taskInfo as any).remote !== false && !node.taskInfo.taskId.startsWith('local_'),
+    }];
+  });
+}
+
 export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskRunnerOptions) {
+  const providerConfig = useStoredOpenAiTeachProviderConfig();
   const pollingRef = useRef<number | undefined>(undefined);
   const activeTasksRef = useRef<Record<string, ActiveSceneTask>>({});
+  const reconciledTaskIdsRef = useRef<Record<string, true>>({});
 
   const patchNode = useCallback((nodeId: string, updates: Partial<NodeData>) => {
     setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, ...updates } : node)));
@@ -161,7 +182,14 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       return true;
     }
 
-    const params = buildSceneTaskParams(node)!;
+    const baseParams = buildSceneTaskParams(node)!;
+    const params = isRealSceneExecutionParams(baseParams)
+      ? {
+        ...baseParams,
+        providerApiKey: baseParams.providerApiKey || providerConfig.providerApiKey,
+        providerBaseUrl: baseParams.providerBaseUrl || providerConfig.providerBaseUrl,
+      }
+      : baseParams;
 
     try {
       await pipeline.validate(params);
@@ -174,8 +202,8 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       });
       if (localResult) {
         const taskId = `local_${scene}_${Date.now()}`;
-        patchNode(nodeId, {
-          status: NodeStatus.SUCCESS,
+      patchNode(nodeId, {
+        status: NodeStatus.SUCCESS,
           resultUrl: localResult.outputs.imageList?.[0]?.url,
           outputs: localResult.outputs,
           structuredData: localResult.structuredData,
@@ -213,11 +241,12 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       patchNode(nodeId, {
         status: NodeStatus.LOADING,
         taskInfo: {
-          taskId,
-          loading: true,
-          status: 'pending',
-          progressPercent: 0,
-        },
+            taskId,
+            loading: true,
+            status: 'pending',
+            progressPercent: 0,
+            ...(remote ? {} : { remote: false }),
+          },
         errorMessage: undefined,
       });
 
@@ -245,7 +274,51 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
       });
       return true;
     }
-  }, [ensureBatchPoller, nodes, patchNode, projectId]);
+  }, [ensureBatchPoller, nodes, patchNode, projectId, providerConfig.providerApiKey, providerConfig.providerBaseUrl]);
+
+  const cancelSceneTasks = useCallback(async (nodeIds: string[]) => {
+    const targets = nodeIds.flatMap((nodeId) => {
+      const active = activeTasksRef.current[nodeId];
+      if (active) return [active];
+
+      const node = nodes.find((candidate) => candidate.id === nodeId);
+      if (!node?.scene || !node.taskInfo?.taskId || !node.taskInfo.loading) return [];
+      return [{
+        nodeId,
+        scene: node.scene as SceneId,
+        taskId: node.taskInfo.taskId,
+        params: buildSceneTaskParams(node) || {},
+        remote: (node.taskInfo as any).remote !== false && !node.taskInfo.taskId.startsWith('local_'),
+      }];
+    });
+    if (targets.length === 0) return false;
+
+    const remoteTaskIds = targets.filter((task) => task.remote).map((task) => task.taskId);
+    const localTaskIds = targets.filter((task) => !task.remote).map((task) => task.taskId);
+
+    if (remoteTaskIds.length > 0) {
+      await cancelTasks(remoteTaskIds).catch(() => []);
+    }
+    await Promise.all(localTaskIds.map((taskId) => cancelMockTask(taskId)));
+
+    for (const target of targets) {
+      delete activeTasksRef.current[target.nodeId];
+      patchNode(target.nodeId, {
+        status: NodeStatus.ERROR,
+        taskInfo: {
+          taskId: target.taskId,
+          loading: false,
+          status: 'cancelled',
+          failedReason: '任务已取消',
+          progressPercent: 0,
+          ...(target.remote ? {} : { remote: false }),
+        },
+        errorMessage: '任务已取消',
+      });
+    }
+
+    return true;
+  }, [nodes, patchNode]);
 
   useEffect(() => {
     const restorableTasks = getRestorableSceneTasks(nodes);
@@ -260,5 +333,20 @@ export function useSceneTaskRunner({ nodes, projectId, setNodes }: UseSceneTaskR
     }
   }, [ensureBatchPoller, nodes]);
 
-  return { runSceneNode };
+  useEffect(() => {
+    const recoverableTasks = getRecoverableSceneTasks(nodes);
+    let addedTask = false;
+    for (const task of recoverableTasks) {
+      if (activeTasksRef.current[task.nodeId]) continue;
+      if (reconciledTaskIdsRef.current[task.taskId]) continue;
+      activeTasksRef.current[task.nodeId] = task;
+      reconciledTaskIdsRef.current[task.taskId] = true;
+      addedTask = true;
+    }
+    if (addedTask) {
+      ensureBatchPoller();
+    }
+  }, [ensureBatchPoller, nodes]);
+
+  return { runSceneNode, cancelSceneTasks };
 }

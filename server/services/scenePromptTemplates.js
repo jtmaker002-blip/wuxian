@@ -138,6 +138,34 @@ export function buildSceneImagePrompts({ scene, params = {}, count = 1, storyboa
   const template = getScenePromptTemplate(scene, params);
   if (scene === 'character_three_view_generate') return [template];
 
+  if (
+    count === 1 &&
+    (
+      scene === 'multi_view_nine_grid' ||
+      scene === 'plot_deduction_four_grid' ||
+      scene === 'coherent_storyboard_25'
+    )
+  ) {
+    const plannedBeats = Array.isArray(storyboard) && storyboard.length > 0
+      ? storyboard.map((shot, index) => {
+        const shotNumber = shot.shotNumber || index + 1;
+        return [
+          `${shotNumber}. ${shot.plotDescription || `Shot ${shotNumber}`}`,
+          shot.shotSize ? `shot size: ${shot.shotSize}` : '',
+          shot.characterAction ? `action: ${shot.characterAction}` : '',
+          shot.lightingAndAtmosphere ? `lighting: ${shot.lightingAndAtmosphere}` : '',
+        ].filter(Boolean).join(' | ');
+      }).join('\n')
+      : '';
+
+    return [[
+      template,
+      plannedBeats ? `Internal storyboard plan to embed into the contact sheet:\n${plannedBeats}` : '',
+      'Important output format: generate ONE finished image only. The grid/panels must be inside this single image, not separate files.',
+      'Do not include panel captions, numbers, UI chrome, toolbars, or explanatory text unless the task explicitly requires readable story text.',
+    ].filter(Boolean).join('\n\n')];
+  }
+
   if (scene === 'multi_view_nine_grid') {
     return CAMERA_GRID_SHOTS.slice(0, count).map(([label, shot], index) => {
       const plannedShot = Array.isArray(storyboard) ? storyboard[index] : undefined;

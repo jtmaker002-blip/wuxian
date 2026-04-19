@@ -236,6 +236,16 @@ export interface NodeData {
     status?: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
     failedReason?: string;
     progressPercent?: number;
+    remote?: boolean;
+    maxConcurrency?: number;
+    childTasks?: Array<{
+      taskId: string;
+      index: number;
+      status: 'pending' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+      progressPercent: number;
+      result?: any;
+      errorMessage?: string;
+    }>;
   };
 }
 

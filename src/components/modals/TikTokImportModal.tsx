@@ -80,7 +80,7 @@ export const TikTokImportModal: React.FC<TikTokImportModalProps> = ({
         setError(null);
 
         try {
-            const response = await fetch('http://localhost:3001/api/tiktok/import', {
+            const response = await fetch('/api/tiktok/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ url: url.trim(), enableTrim: true })
@@ -232,7 +232,7 @@ export const TikTokImportModal: React.FC<TikTokImportModalProps> = ({
                             {/* Video Preview */}
                             <div className="aspect-video bg-black rounded-lg overflow-hidden">
                                 <video
-                                    src={`http://localhost:3001${importedVideoUrl}`}
+                                    src={importedVideoUrl}
                                     className="w-full h-full object-contain"
                                     controls
                                     autoPlay

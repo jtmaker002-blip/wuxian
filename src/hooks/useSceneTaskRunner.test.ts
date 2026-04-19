@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { NodeStatus, NodeType, type NodeData } from '../types';
-import { getRestorableSceneTasks, isRealSceneExecutionParams } from './useSceneTaskRunner';
+import { getRecoverableSceneTasks, getRestorableSceneTasks, isRealSceneExecutionParams } from './useSceneTaskRunner';
 
 function createNode(overrides: Partial<NodeData>): NodeData {
   return {
@@ -50,6 +50,25 @@ describe('useSceneTaskRunner helpers', () => {
     ]);
   });
 
+  it('restores local mock scene tasks as local so polling/cancel stays on the mock runner', () => {
+    const tasks = getRestorableSceneTasks([
+      createNode({
+        scene: 'plot_deduction_four_grid',
+        taskInfo: {
+          taskId: 'local_restore',
+          loading: true,
+          status: 'running',
+          progressPercent: 42,
+        },
+      }),
+    ]);
+
+    expect(tasks[0]).toMatchObject({
+      taskId: 'local_restore',
+      remote: false,
+    });
+  });
+
   it('does not resume completed scene tasks or non-scene loading nodes', () => {
     const tasks = getRestorableSceneTasks([
       createNode({
@@ -74,6 +93,30 @@ describe('useSceneTaskRunner helpers', () => {
     ]);
 
     expect(tasks).toEqual([]);
+  });
+
+  it('collects failed scene tasks without outputs for recovery polling', () => {
+    const tasks = getRecoverableSceneTasks([
+      createNode({
+        scene: 'character_three_view_generate',
+        status: NodeStatus.ERROR,
+        taskInfo: {
+          taskId: 'task-recover',
+          loading: false,
+          status: 'failed',
+          progressPercent: 100,
+          failedReason: '任务执行中断，结果未写入，请重试。',
+        },
+      }),
+    ]);
+
+    expect(tasks).toEqual([
+      expect.objectContaining({
+        nodeId: 'scene-node',
+        taskId: 'task-recover',
+        scene: 'character_three_view_generate',
+      }),
+    ]);
   });
 
   it('marks only explicit real scene params as remote-only execution', () => {

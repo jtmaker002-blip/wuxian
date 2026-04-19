@@ -1,5 +1,17 @@
 import type { FrameDeductionResult, StoryboardShot } from '../../types/scene';
 
+export const MULTI_VIEW_CAMERA_LABELS = [
+  'LS',
+  'MLS',
+  'MS',
+  'MCU',
+  'CU',
+  'ECU',
+  'High-Angle',
+  'Low-Angle',
+  'OTS',
+] as const;
+
 export function makeMockImageDataUrl(label: string, accent = '#3b82f6', index = 1) {
   const safeLabel = label.replace(/[<>&]/g, '');
   const svg = `
@@ -45,6 +57,19 @@ export function makeStoryboardShots(count: number, storyText = '一段电影级�
       videoMotionPrompt: `camera slowly moves through shot ${shotNumber}, coherent action continuity`,
     };
   });
+}
+
+export function makeMultiViewShots(storyText = '同一场景的多机位变化'): StoryboardShot[] {
+  return MULTI_VIEW_CAMERA_LABELS.map((label, index) => ({
+    shotNumber: index + 1,
+    durationSeconds: 4,
+    plotDescription: `${storyText} · ${label}`,
+    shotSize: label,
+    characterAction: '保持主体动作与时间点一致，仅切换镜头语言',
+    emotion: '稳定',
+    lightingAndAtmosphere: '保持与参考图一致',
+    imageGenerationPrompt: `same scene, same subject, ${label} camera framing, cinematic still`,
+  }));
 }
 
 export function makeFrameDeduction(direction: 'plus' | 'minus'): FrameDeductionResult {

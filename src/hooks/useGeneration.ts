@@ -25,6 +25,7 @@ import {
     getLegacyVideoModeForPanelMode,
     getVideoPanelInputCounts,
     getVideoPanelModeValidation,
+    isVideoPanelModeSupported,
     resolveVideoPanelModeKey,
 } from '../utils/videoPanelModes';
 
@@ -109,20 +110,6 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
         const node = nodes.find(n => n.id === id);
         if (!node) return;
         const hasHostedToken = Boolean(providerConfig.providerApiKey);
-        const generationRunId = crypto.randomUUID();
-        activeGenerationByNode[id] = generationRunId;
-        delete cancelledGenerationByNode[id];
-
-        const isGenerationCurrent = () =>
-            activeGenerationByNode[id] === generationRunId &&
-            cancelledGenerationByNode[id] !== generationRunId;
-
-        const completeGeneration = (updates: Partial<NodeData>) => {
-            if (!isGenerationCurrent()) return;
-            delete activeGenerationByNode[id];
-            updateNode(id, updates);
-        };
-
         // Get prompts from connected TEXT nodes (if any)
         const getTextNodePrompts = (): string[] => {
             if (!node.parentIds) return [];
@@ -146,6 +133,18 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
             node.type === NodeType.VIDEO
                 ? resolveVideoPanelModeKey(node)
                 : 'text2video';
+        if (node.type === NodeType.VIDEO && videoCapability && !isVideoPanelModeSupported(requestedVideoPanelMode, videoCapability)) {
+            const unsupportedMode = getLegacyVideoModeForPanelMode(requestedVideoPanelMode);
+            updateNode(id, {
+                status: NodeStatus.ERROR,
+                errorMessage: unsupportedMode === 'frame-to-frame'
+                    ? '当前视频模型尚未接通首尾帧模式，请切换到支持该模式的模型。'
+                    : unsupportedMode === 'motion-control'
+                        ? '当前视频模型尚未接通运动参考模式，请切换到支持该模式的模型。'
+                        : '当前视频模型不支持所选生成模式，请切换模型或选择可用模式。',
+            });
+            return;
+        }
         const panelLegacyVideoMode =
             node.type === NodeType.VIDEO
                 ? getLegacyVideoModeForPanelMode(requestedVideoPanelMode)
@@ -349,6 +348,33 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
             return;
         }
 
+        const generationRunId = crypto.randomUUID();
+        activeGenerationByNode[id] = generationRunId;
+        delete cancelledGenerationByNode[id];
+
+        const isGenerationCurrent = () =>
+            activeGenerationByNode[id] === generationRunId &&
+            cancelledGenerationByNode[id] !== generationRunId;
+
+        const completeGeneration = (updates: Partial<NodeData>) => {
+            if (!isGenerationCurrent()) return;
+            delete activeGenerationByNode[id];
+            updateNode(id, updates);
+        };
+
+        const failGeneration = (errorMessage: string) => {
+            completeGeneration({
+                status: NodeStatus.ERROR,
+                errorMessage,
+                taskInfo: {
+                    loading: false,
+                    status: 'failed',
+                    failedReason: errorMessage,
+                    progressPercent: 0,
+                },
+            });
+        };
+
         updateNode(id, {
             status: NodeStatus.LOADING,
             generationStartTime: Date.now(),
@@ -367,10 +393,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 }
 
                 if (imageExecutionSupport?.mode === 'hosted-token' && !hasHostedToken) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: '当前图片模型需要先在设置里绑定 OpenAiTeach Token 后才能生成。',
-                    });
+                    failGeneration('当前图片模型需要先在设置里绑定 OpenAiTeach Token 后才能生成。');
                     return;
                 }
 
@@ -464,10 +487,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 // --- LOCAL MODEL GENERATION ---
                 // Check if model is selected
                 if (!node.localModelId && !node.localModelPath) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: 'No local model selected. Please select a model first.'
-                    });
+                    failGeneration('No local model selected. Please select a model first.');
                     return;
                 }
 
@@ -521,10 +541,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                         hasLegacyFrameFallback
                     )
                 ) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: '首尾帧模式需要两张图片输入后才能生成。',
-                    });
+                    failGeneration('首尾帧模式需要两张图片输入后才能生成。');
                     return;
                 }
 
@@ -532,10 +549,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     const hasVideoReference = connectedVideoSourceNodes.length > 0;
                     const hasCharacterImage = connectedFrameSourceNodes.length > 0;
                     if (!hasVideoReference || !hasCharacterImage) {
-                        updateNode(id, {
-                            status: NodeStatus.ERROR,
-                            errorMessage: '运动参考模式需要同时连接一个视频参考和一张角色图片。',
-                        });
+                        failGeneration('运动参考模式需要同时连接一个视频参考和一张角色图片。');
                         return;
                     }
                 }
@@ -550,10 +564,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                     : { isValid: true };
                 if (!panelValidation.isValid) {
                     const panelReason = 'reason' in panelValidation ? panelValidation.reason : undefined;
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: panelReason ?? '当前视频模式输入条件不满足。',
-                    });
+                    failGeneration(panelReason ?? '当前视频模式输入条件不满足。');
                     return;
                 }
 
@@ -583,10 +594,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 const standardPrimaryInputBase64 = standardVideoCapabilityState?.primaryInputUrl;
 
                 if (activeVideoMode === 'standard' && standardVideoCapabilityState?.isBlocked) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: standardVideoCapabilityState.blockedReason,
-                    });
+                    failGeneration(standardVideoCapabilityState.blockedReason);
                     return;
                 }
 
@@ -597,10 +605,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 });
 
                 if (videoExecutionSupport?.mode === 'hosted-token' && !hasHostedToken) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: '当前视频模式需要先在设置里绑定 OpenAiTeach Token 后才能生成。',
-                    });
+                    failGeneration('当前视频模式需要先在设置里绑定 OpenAiTeach Token 后才能生成。');
                     return;
                 }
 
@@ -636,10 +641,7 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                         ? executionVideoNode.videoModel
                         : mappedVideoModel;
                 if (!requestVideoModel) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: '当前视频模型在后端尚未接通真实执行链，请切换到已接通的可执行视频模型。',
-                    });
+                    failGeneration('当前视频模型在后端尚未接通真实执行链，请切换到已接通的可执行视频模型。');
                     return;
                 }
 
@@ -707,28 +709,19 @@ export const useGeneration = ({ nodes, updateNode }: UseGenerationProps) => {
                 const availableVoiceCapabilities = getAllVoiceCapabilities();
                 const selectedAudioModel = node.audioModel || node.model;
                 if (!selectedAudioModel) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: '请先为当前语音节点选择模型，再开始生成。',
-                    });
+                    failGeneration('请先为当前语音节点选择模型，再开始生成。');
                     return;
                 }
                 const voiceCapability = getVoiceCapability(selectedAudioModel);
                 const voiceExecutionSupport = getVoiceExecutionSupport(selectedAudioModel);
 
                 if (!voiceCapability) {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: '当前语音模型在前端能力表中不存在，请先切换到可用语音模型。',
-                    });
+                    failGeneration('当前语音模型在前端能力表中不存在，请先切换到可用语音模型。');
                     return;
                 }
 
                 if (voiceExecutionSupport?.mode === 'unimplemented') {
-                    updateNode(id, {
-                        status: NodeStatus.ERROR,
-                        errorMessage: voiceExecutionSupport.note,
-                    });
+                    failGeneration(voiceExecutionSupport.note);
                     return;
                 }
 

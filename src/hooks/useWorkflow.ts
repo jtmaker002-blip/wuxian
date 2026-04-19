@@ -81,7 +81,7 @@ export const useWorkflow = ({
             console.log('Project saved:', project.id);
 
             // Keep legacy workflow files in sync for the existing workflow panel until it is fully migrated.
-            void fetch('http://localhost:3001/api/workflows', {
+            void fetch('/api/workflows', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ ...workflow, id: project.id })
@@ -102,7 +102,7 @@ export const useWorkflow = ({
             const isPublic = id.startsWith('public:');
             const workflowId = isPublic ? id.replace('public:', '') : id;
             const endpoint = isPublic
-                ? `http://localhost:3001/api/public-workflows/${workflowId}`
+                ? `/api/public-workflows/${workflowId}`
                 : null;
 
             const workflow = isPublic

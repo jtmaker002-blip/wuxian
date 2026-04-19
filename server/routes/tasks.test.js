@@ -16,6 +16,7 @@ async function createServer() {
   app.locals.TASK_CHILD_DURATION_MS = 45;
   app.locals.TASK_CHILD_STAGGER_MS = 5;
   app.locals.TASK_SINGLE_MS = 80;
+  app.locals.OAT_PROXY_SESSION_FILE = path.join(rootDir, 'missing-openaiteach-sessions.json');
   app.use('/api/tasks', tasksRouter);
   return await new Promise((resolve) => {
     const server = app.listen(0, () => {
@@ -84,9 +85,8 @@ describe('tasks routes', () => {
           requestId: 'request-1',
         })
       );
-      expect(status.tasks[0].childTasks).toHaveLength(4);
-      expect(status.tasks[0].maxConcurrency).toBe(4);
-      expect(status.tasks[0].childTasks.slice(0, 4).every((task) => task.status === 'pending' || task.status === 'running' || task.status === 'succeeded')).toBe(true);
+      expect(status.tasks[0].childTasks).toEqual([]);
+      expect(status.tasks[0].maxConcurrency).toBeUndefined();
 
       const cancelResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/cancel`, {
         method: 'POST',
@@ -157,8 +157,8 @@ describe('tasks routes', () => {
       const status = await statusResponse.json();
 
       expect(status.tasks[0].status).toBe('succeeded');
-      expect(status.tasks[0].childTasks).toHaveLength(4);
-      expect(status.tasks[0].result.imageList).toHaveLength(4);
+      expect(status.tasks[0].childTasks).toEqual([]);
+      expect(status.tasks[0].result.imageList).toHaveLength(1);
       expect(status.tasks[0].result.imageList[0].url).toMatch(/^data:image\/svg\+xml;base64,/);
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
@@ -262,9 +262,8 @@ describe('tasks routes', () => {
       });
       const status = await statusResponse.json();
 
-      expect(status.tasks[0].childTasks).toHaveLength(25);
-      expect(status.tasks[0].maxConcurrency).toBe(4);
-      expect(status.tasks[0].childTasks.filter((task) => task.status === 'running').length).toBeLessThanOrEqual(4);
+      expect(status.tasks[0].childTasks).toEqual([]);
+      expect(status.tasks[0].maxConcurrency).toBeUndefined();
 
       await new Promise((resolve) => setTimeout(resolve, 70));
       const secondStatusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
@@ -273,13 +272,13 @@ describe('tasks routes', () => {
         body: JSON.stringify({ taskIds: [created.taskId] }),
       });
       const secondStatus = await secondStatusResponse.json();
-      expect(secondStatus.tasks[0].childTasks.filter((task) => task.status === 'running').length).toBeLessThanOrEqual(4);
+      expect(secondStatus.tasks[0].childTasks).toEqual([]);
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }
   });
 
-  it('records provider fallback when real execution is requested without keys', async () => {
+  it('fails real execution instead of returning mock images when provider setup is missing', async () => {
     const serverHandle = await createServer();
 
     try {
@@ -309,11 +308,9 @@ describe('tasks routes', () => {
       });
       const status = await statusResponse.json();
 
-      expect(status.tasks[0].status).toBe('succeeded');
-      expect(status.tasks[0].result.structuredData.realProviderRequested).toBe(true);
-      expect(status.tasks[0].result.structuredData.imageModel).toBeUndefined();
-      expect(status.tasks[0].result.structuredData.providerFallback).toContain('OPENAI_API_KEY');
-      expect(status.tasks[0].result.imageList[0].url).toMatch(/^data:image\/svg\+xml;base64,/);
+      expect(status.tasks[0].status).toBe('failed');
+      expect(status.tasks[0].result).toBeNull();
+      expect(status.tasks[0].errorMessage).toContain('OPENAI_API_KEY');
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }
@@ -442,16 +439,52 @@ describe('tasks routes', () => {
 
       expect(status.tasks[0].status).toBe('succeeded');
       expect(status.tasks[0].result.imageList).toHaveLength(1);
-      expect(status.tasks[0].result.imageList[0].label).toBe('Result 8');
+      expect(status.tasks[0].result.imageList[0].label).toBe('Shot 8');
+    } finally {
+      await new Promise((resolve) => serverHandle.server.close(resolve));
+    }
+  });
+
+  it('keeps the original camera label when retrying one multi-view cell', async () => {
+    const serverHandle = await createServer();
+
+    try {
+      const retryResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/retry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request: {
+            params: { scene: 'multi_view_nine_grid', gridItemIndex: 7 },
+            metadata: { node_id: 'node-retry-multiview-cell', project_id: 'project-1' },
+            provider: 'mock',
+            model: 'mock-model',
+            taskType: 'image',
+            requestId: 'request-retry-multiview-cell',
+          },
+        }),
+      });
+      const retried = await retryResponse.json();
+      await new Promise((resolve) => setTimeout(resolve, 180));
+
+      const statusResponse = await fetch(`${serverHandle.baseUrl}/api/tasks/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ taskIds: [retried.taskId] }),
+      });
+      const status = await statusResponse.json();
+
+      expect(status.tasks[0].status).toBe('succeeded');
+      expect(status.tasks[0].result.imageList).toHaveLength(1);
+      expect(status.tasks[0].result.imageList[0].label).toBe('Low-Angle');
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }
   });
 
   it.each([
-    ['multi_view_nine_grid', 9, 'multiView'],
-    ['plot_deduction_four_grid', 4, 'storyboard'],
-    ['coherent_storyboard_25', 25, 'characterBible'],
+    ['multi_view_nine_grid', 1, 'multiView'],
+    ['plot_deduction_four_grid', 1, 'storyboard'],
+    ['coherent_storyboard_25', 1, 'characterBible'],
     ['cinematic_light_correction', 1, 'lightingRequest'],
     ['character_three_view_generate', 1, 'characterProfile'],
     ['frame_deduction_plus_3s', 1, 'frameDeduction'],
@@ -487,6 +520,21 @@ describe('tasks routes', () => {
       expect(status.tasks[0].status).toBe('succeeded');
       expect(status.tasks[0].result.imageList).toHaveLength(expectedCount);
       expect(status.tasks[0].result.structuredData[expectedStructuredKey]).toBeTruthy();
+      if (scene === 'multi_view_nine_grid') {
+        expect(status.tasks[0].result.imageList[0].label).toBe('多机位九宫格');
+        expect(status.tasks[0].result.structuredData.multiView.cameraAngles.slice(0, 3)).toEqual(['LS', 'MLS', 'MS']);
+      }
+      if (scene === 'plot_deduction_four_grid') {
+        expect(status.tasks[0].result.imageList[0].label).toBe('剧情推演四宫格');
+        expect(status.tasks[0].result.structuredData.storyboard).toHaveLength(4);
+      }
+      if (scene === 'coherent_storyboard_25') {
+        expect(status.tasks[0].result.imageList[0].label).toBe('25宫格连贯分镜');
+        expect(status.tasks[0].result.structuredData.storyboard).toHaveLength(25);
+      }
+      if (scene === 'character_three_view_generate') {
+        expect(status.tasks[0].result.imageList[0].label).toBe('正 / 侧 / 背');
+      }
     } finally {
       await new Promise((resolve) => serverHandle.server.close(resolve));
     }

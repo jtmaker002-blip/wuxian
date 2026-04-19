@@ -7,6 +7,7 @@
 
 import React, { useCallback } from 'react';
 import { NodeData, NodeType, ContextMenuState, Viewport } from '../types';
+import { nodeEmitsImageResult } from '../utils/nodeResultTyping';
 
 interface UseContextMenuHandlersOptions {
     nodes: NodeData[];
@@ -77,7 +78,7 @@ export const useContextMenuHandlers = ({
             type: 'node-connector',
             sourceNodeId: nodeId,
             connectorSide: _direction,
-            sourceNodeType: sourceNode.type,
+            sourceNodeType: nodeEmitsImageResult(sourceNode) ? NodeType.IMAGE : sourceNode.type,
             dropCanvasPosition: {
                 x: (resolvedScreenPosition.x - viewport.x) / viewport.zoom,
                 y: (resolvedScreenPosition.y - viewport.y) / viewport.zoom,

@@ -42,24 +42,24 @@ describe('getControlPanelWidthClassName', () => {
 });
 
 describe('shouldShowImageSuccessToolbar', () => {
-  it('shows the Liblib image toolbar only for a single normal successful image node', () => {
+  it('shows the image toolbar for successful generated image results', () => {
     expect(shouldShowImageSuccessToolbar({
       type: NodeType.IMAGE,
       showControls: true,
       isSuccess: true,
       resultUrl: 'data:image/png;base64,result',
     })).toBe(true);
-  });
 
-  it('hides the image toolbar for scene result nodes and multi-select control suppression', () => {
     expect(shouldShowImageSuccessToolbar({
       type: NodeType.IMAGE,
       scene: SCENES.CHARACTER_THREE_VIEW_GENERATE,
       showControls: true,
       isSuccess: true,
       resultUrl: 'data:image/png;base64,result',
-    })).toBe(false);
+    })).toBe(true);
+  });
 
+  it('still hides the image toolbar when controls are suppressed', () => {
     expect(shouldShowImageSuccessToolbar({
       type: NodeType.IMAGE,
       showControls: false,

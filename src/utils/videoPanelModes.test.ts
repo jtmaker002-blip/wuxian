@@ -5,8 +5,10 @@ import {
   getVideoPanelModeByKey,
   getVideoPanelModeReferencePolicy,
   getVideoPanelModeValidation,
+  isVideoPanelModeSupported,
   resolveVideoPanelModeKey,
 } from './videoPanelModes';
+import { LOCAL_VIDEO_CAPABILITIES } from '../config/modelCapabilities';
 
 function createVideoNode(overrides: Partial<NodeData> = {}): NodeData {
   return {
@@ -98,5 +100,21 @@ describe('videoPanelModes', () => {
       canUsePresetCamera: true,
       acceptsVideo: true,
     });
+  });
+
+  it('gates panel tabs by the selected model capability', () => {
+    const veo = LOCAL_VIDEO_CAPABILITIES['veo3.1-fast'];
+    const grok = LOCAL_VIDEO_CAPABILITIES['grok-video-3'];
+    const kling = LOCAL_VIDEO_CAPABILITIES['kling-v2-6'];
+
+    expect(isVideoPanelModeSupported('text2video', veo)).toBe(true);
+    expect(isVideoPanelModeSupported('singleImage2video', veo)).toBe(true);
+    expect(isVideoPanelModeSupported('mixed2video', veo)).toBe(false);
+
+    expect(isVideoPanelModeSupported('frames2video', grok)).toBe(false);
+    expect(isVideoPanelModeSupported('image2video', grok)).toBe(false);
+
+    expect(isVideoPanelModeSupported('mixed2video', kling)).toBe(true);
+    expect(isVideoPanelModeSupported('frames2video', kling)).toBe(true);
   });
 });

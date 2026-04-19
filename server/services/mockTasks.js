@@ -3,12 +3,26 @@ import { generateGeminiImage } from './gemini.js';
 import { generateOpenAiTeachGeminiImage } from './openaiteachGeminiImage.js';
 import { buildSceneImagePrompts, buildStoryboardPlannerPrompt } from './scenePromptTemplates.js';
 import { detectImageExtensionFromBuffer, resolveImageToBase64, saveBufferToFile } from '../utils/imageHelpers.js';
+import { resolveRuntimePaths } from '../runtime-paths.js';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 
 const tasks = new Map();
+const SERVER_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const MAX_CHILD_CONCURRENCY = 4;
 const NANO_BANANA_PRO_MODEL = 'gemini-3-pro-image-preview';
+const MULTI_VIEW_CAMERA_LABELS = [
+  'LS',
+  'MLS',
+  'MS',
+  'MCU',
+  'CU',
+  'ECU',
+  'High-Angle',
+  'Low-Angle',
+  'OTS',
+];
 const DEFAULT_TIMING = {
   childWaveMs: 1800,
   childDurationMs: 1100,
@@ -78,11 +92,70 @@ function redactTaskForStorage(task) {
   return redactSecrets(task);
 }
 
+function normalizeHostedToken(raw) {
+  const value = String(raw || '').trim().replace(/^Bearer\s+/i, '');
+  if (!value || value.includes('*')) return '';
+  return value.startsWith('sk-') ? value : `sk-${value}`;
+}
+
+function findTokenItems(payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  if (Array.isArray(payload)) return payload;
+  for (const key of ['items', 'list', 'records', 'rows', 'tokens', 'keys', 'data']) {
+    const value = payload[key];
+    if (Array.isArray(value)) return value;
+    if (value && typeof value === 'object') {
+      const nested = findTokenItems(value);
+      if (nested.length > 0) return nested;
+    }
+  }
+  return [];
+}
+
+async function resolveOpenAiTeachProxyToken(runtime = {}) {
+  const sessionFile = runtime.OAT_PROXY_SESSION_FILE || resolveRuntimePaths({ serverDir: SERVER_DIR }).proxySessionStoreFile;
+  if (!sessionFile || !fs.existsSync(sessionFile)) return '';
+
+  let sessions;
+  try {
+    sessions = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+  } catch {
+    return '';
+  }
+  if (!Array.isArray(sessions) || sessions.length === 0) return '';
+
+  const latest = sessions
+    .filter((session) => session?.sid && session?.cookie)
+    .sort((a, b) => Number(b.at || 0) - Number(a.at || 0))[0];
+  if (!latest) return '';
+
+  const upstream = await fetch('https://openaiteach.com/api/token/?p=0&size=100', {
+    method: 'GET',
+    headers: {
+      Cookie: latest.cookie,
+      'User-Agent': 'TwitCanva-OpenAiTeach-Proxy/1.0',
+      ...(latest.userId ? { 'New-Api-User': latest.userId } : latest.username ? { 'New-Api-User': latest.username } : {}),
+    },
+  });
+  if (!upstream.ok) return '';
+  const payload = await upstream.json().catch(() => null);
+  const items = findTokenItems(payload);
+  for (const item of items) {
+    if (!item || typeof item !== 'object') continue;
+    const token = normalizeHostedToken(item.key || item.token || item.value || item.api_key || item.apiKey || item.sk);
+    if (token) return token;
+  }
+  return '';
+}
+
 function getSceneResultCount(scene, params = {}) {
   if (typeof params.gridItemIndex === 'number') return 1;
+  return 1;
+}
+
+function getScenePlanningCount(scene) {
   return scene === 'coherent_storyboard_25' ? 25 :
     scene === 'plot_deduction_four_grid' ? 4 :
-    scene === 'character_three_view_generate' ? 1 :
     scene === 'multi_view_nine_grid' ? 9 :
     1;
 }
@@ -155,6 +228,19 @@ function buildStoryboard(count, scene, storyText = '电影级画布创作') {
     lightingAndAtmosphere: index % 2 === 0 ? '暖色主光，空气透视' : '冷色边缘光，暗部保留',
     imageGenerationPrompt: `Generate ${scene} shot ${index + 1}: ${storyText}`,
     videoMotionPrompt: `Camera motion for ${scene} shot ${index + 1}`,
+  }));
+}
+
+function buildMultiViewStoryboard(storyText = '同一场景的多机位变化') {
+  return MULTI_VIEW_CAMERA_LABELS.map((label, index) => ({
+    shotNumber: index + 1,
+    durationSeconds: 4,
+    plotDescription: `${storyText} · ${label}`,
+    shotSize: label,
+    characterAction: '保持主体动作与时间点一致，仅切换镜头语言',
+    emotion: '稳定',
+    lightingAndAtmosphere: '保持与参考图一致',
+    imageGenerationPrompt: `same scene, same subject, ${label} camera framing, cinematic still`,
   }));
 }
 
@@ -262,10 +348,10 @@ function buildStructuredSceneData(scene, request, count) {
   return {
     ...base,
     multiView: {
-      cameraAngles: ['wide', 'medium', 'close', 'low', 'high', 'over-shoulder', 'macro', 'dutch', 'hero'],
+      cameraAngles: [...MULTI_VIEW_CAMERA_LABELS],
       ratio: params.ratio || '16:9',
     },
-    storyboard: count > 1 ? buildStoryboard(count, scene, storyText) : undefined,
+    storyboard: count > 1 ? buildMultiViewStoryboard(storyText) : undefined,
   };
 }
 
@@ -295,8 +381,10 @@ function extractJsonObject(text) {
 }
 
 async function generateStoryboardPlan({ scene, count, params, runtime }) {
-  const apiKey = params.providerApiKey || runtime.OPENAI_API_KEY;
-  const baseUrl = params.providerBaseUrl;
+  const proxyToken = params.providerApiKey ? '' : await resolveOpenAiTeachProxyToken(runtime);
+  const hostedApiKey = params.providerApiKey || proxyToken;
+  const apiKey = hostedApiKey || runtime.OPENAI_API_KEY;
+  const baseUrl = params.providerBaseUrl || (hostedApiKey ? 'https://openaiteach.com/v1' : undefined);
   if (!apiKey) return null;
 
   const prompt = buildStoryboardPlannerPrompt({ scene, count, params });
@@ -333,22 +421,24 @@ async function generateStoryboardPlan({ scene, count, params, runtime }) {
 }
 
 async function generateRealImages({ prompts, params, runtime }) {
-  const apiKey = params.providerApiKey || runtime.OPENAI_API_KEY;
-  const baseUrl = params.providerBaseUrl;
+  const proxyToken = params.providerApiKey ? '' : await resolveOpenAiTeachProxyToken(runtime);
+  const hostedApiKey = params.providerApiKey || proxyToken;
+  const apiKey = hostedApiKey || runtime.OPENAI_API_KEY;
+  const baseUrl = params.providerBaseUrl || (hostedApiKey ? 'https://openaiteach.com/v1' : undefined);
   const imageModel = params.imageModel || NANO_BANANA_PRO_MODEL;
   const usesGeminiImageModel = String(imageModel).startsWith('gemini-');
-  const geminiApiKey = params.providerApiKey || runtime.GEMINI_API_KEY;
+  const geminiApiKey = hostedApiKey || runtime.GEMINI_API_KEY;
   if ((!apiKey && !geminiApiKey) || !runtime.IMAGES_DIR) return null;
 
   const imageInputs = collectSceneImageInputs(params);
   const urls = [];
   for (let index = 0; index < prompts.length; index += 1) {
-    const buffer = usesGeminiImageModel && params.providerApiKey
+    const buffer = usesGeminiImageModel && hostedApiKey
       ? await generateOpenAiTeachGeminiImage({
         prompt: prompts[index],
         imageBase64Array: imageInputs,
         imageModel,
-        apiKey: params.providerApiKey,
+        apiKey: hostedApiKey,
         baseUrl,
       })
       : usesGeminiImageModel
@@ -401,16 +491,33 @@ function buildMockResult(request, extraStructuredData = {}) {
   const scene = request?.params?.scene || 'mock_scene';
   const count = getSceneResultCount(scene, request?.params || {});
   const startIndex = typeof request?.params?.gridItemIndex === 'number' ? request.params.gridItemIndex : 0;
+  const labels =
+    scene === 'multi_view_nine_grid'
+      ? (typeof request?.params?.gridItemIndex === 'number' ? MULTI_VIEW_CAMERA_LABELS : count === 1 ? ['多机位九宫格'] : MULTI_VIEW_CAMERA_LABELS)
+    : scene === 'plot_deduction_four_grid'
+      ? (typeof request?.params?.gridItemIndex === 'number' ? [`剧情 ${startIndex + 1}`] : count === 1 ? ['剧情推演四宫格'] : Array.from({ length: count }, (_, index) => `剧情 ${startIndex + index + 1}`))
+    : scene === 'coherent_storyboard_25'
+        ? (typeof request?.params?.gridItemIndex === 'number' ? [`Shot ${startIndex + 1}`] : count === 1 ? ['25宫格连贯分镜'] : Array.from({ length: count }, (_, index) => `Shot ${startIndex + index + 1}`))
+          : [];
+  const getLabel = (index) => (
+    scene === 'multi_view_nine_grid'
+      ? labels[startIndex + index]
+      : labels[index]
+  );
 
   return {
     textList: [`${scene} mock task completed`],
     imageList: Array.from({ length: count }).map((_, index) => ({
       url: scene === 'character_three_view_generate'
         ? makeThreeViewMockDataUrl(request?.params || {})
-        : makeMockImageDataUrl(`${scene} · Result ${startIndex + index + 1}`, scene === 'coherent_storyboard_25' ? '#7c3aed' : '#2563eb', startIndex + index + 1),
+        : makeMockImageDataUrl(
+          getLabel(index) ? `${scene} · ${getLabel(index)}` : `${scene} · Result ${startIndex + index + 1}`,
+          scene === 'coherent_storyboard_25' ? '#7c3aed' : scene === 'multi_view_nine_grid' ? '#db2777' : '#2563eb',
+          startIndex + index + 1
+        ),
       width: 960,
       height: 540,
-      label: scene === 'character_three_view_generate' ? 'Front / Side / Back' : `Result ${startIndex + index + 1}`,
+      label: scene === 'character_three_view_generate' ? '正 / 侧 / 背' : getLabel(index) || `Result ${startIndex + index + 1}`,
       status: 'succeeded',
     })),
     structuredData: {
@@ -430,24 +537,19 @@ async function buildTaskOutput(request, runtime = {}) {
   }
 
   try {
-    const requiresStoryboardPlan = count > 1;
+    const planningCount = getScenePlanningCount(scene);
+    const requiresStoryboardPlan = planningCount > 1;
     const plan = requiresStoryboardPlan
-      ? await generateStoryboardPlan({ scene, count, params, runtime })
+      ? await generateStoryboardPlan({ scene, count: planningCount, params, runtime })
       : null;
     if (requiresStoryboardPlan && !plan) {
-      return buildMockResult(request, {
-        providerFallback: '真实 storyboard 规划失败或缺少 OPENAI_API_KEY / 文本模型凭证，已回退 mock。',
-        realProviderRequested: true,
-      });
+      throw new Error('真实 storyboard 规划失败或缺少 OPENAI_API_KEY / 文本模型凭证。');
     }
     const storyboard = plan?.storyboard;
     const prompts = buildSceneImagePrompts({ scene, params, count, storyboard });
     const realImageUrls = await generateRealImages({ prompts, params, runtime });
     if (!realImageUrls) {
-      return buildMockResult(request, {
-        providerFallback: '真实图片服务缺少 OPENAI_API_KEY 或 IMAGES_DIR，已回退 mock。',
-        realProviderRequested: true,
-      });
+      throw new Error('真实图片服务缺少 OPENAI_API_KEY / GEMINI_API_KEY 或 IMAGES_DIR。');
     }
 
     const structuredBase = buildStructuredSceneData(scene, request, count);
@@ -457,7 +559,15 @@ async function buildTaskOutput(request, runtime = {}) {
         url,
         width: 960,
         height: 540,
-        label: scene === 'character_three_view_generate' ? 'Front / Side / Back' : `Result ${index + 1}`,
+        label: scene === 'character_three_view_generate'
+          ? '正 / 侧 / 背'
+          : scene === 'multi_view_nine_grid'
+            ? MULTI_VIEW_CAMERA_LABELS[index] || `Angle ${index + 1}`
+            : scene === 'plot_deduction_four_grid'
+              ? `剧情 ${index + 1}`
+              : scene === 'coherent_storyboard_25'
+                ? `Shot ${index + 1}`
+                : `Result ${index + 1}`,
         status: 'succeeded',
       })),
       structuredData: {
@@ -471,10 +581,7 @@ async function buildTaskOutput(request, runtime = {}) {
       },
     };
   } catch (error) {
-    return buildMockResult(request, {
-      providerFallback: error instanceof Error ? error.message : '真实服务执行失败，已回退 mock。',
-      realProviderRequested: true,
-    });
+    throw new Error(error instanceof Error ? error.message : '真实服务执行失败。');
   }
 }
 
@@ -534,6 +641,10 @@ async function executeTask(taskId, request, runtime) {
     if (!task || task.status === 'cancelled') return;
     const nextTask = {
       ...task,
+      status: Array.isArray(task.childTasks) && task.childTasks.length > 0 ? task.status : 'succeeded',
+      progressPercent: Array.isArray(task.childTasks) && task.childTasks.length > 0 ? task.progressPercent : 100,
+      result: Array.isArray(task.childTasks) && task.childTasks.length > 0 ? task.result : output,
+      errorMessage: null,
       output,
     };
     tasks.set(taskId, nextTask);
@@ -597,14 +708,14 @@ export function getTasks(taskIds, runtime = {}) {
       const progress = Math.round(childProgressTotal / task.childTasks.length);
       const allComplete = task.childTasks.every((child) => child.status === 'succeeded');
       task.progressPercent = progress;
-      task.status = allComplete && task.output ? 'succeeded' : allComplete && !task.output ? 'failed' : progress < 8 ? 'pending' : 'running';
-      task.errorMessage = allComplete && !task.output ? '任务执行中断，结果未写入，请重试。' : task.errorMessage;
+      task.status = allComplete && task.output ? 'succeeded' : progress < 8 ? 'pending' : 'running';
+      task.errorMessage = allComplete && task.output ? null : task.errorMessage;
       task.result = allComplete && task.output ? task.output : null;
     } else {
       const progress = Math.min(100, Math.round(((now - task.createdAt) / (task.completionAt - task.createdAt)) * 100));
-      task.progressPercent = progress;
-      task.status = progress >= 100 && task.output ? 'succeeded' : progress >= 100 && !task.output ? 'failed' : progress < 8 ? 'pending' : 'running';
-      task.errorMessage = progress >= 100 && !task.output ? '任务执行中断，结果未写入，请重试。' : task.errorMessage;
+      task.progressPercent = progress >= 100 && !task.output ? 99 : progress;
+      task.status = progress >= 100 && task.output ? 'succeeded' : progress < 8 ? 'pending' : 'running';
+      task.errorMessage = progress >= 100 && task.output ? null : task.errorMessage;
       task.result = task.status === 'succeeded' ? task.output : null;
     }
     tasks.set(taskId, task);

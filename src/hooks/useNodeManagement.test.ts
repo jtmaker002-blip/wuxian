@@ -190,4 +190,51 @@ describe('useNodeManagement connector menu creation', () => {
     expect(onCloseMenu).toHaveBeenCalledOnce();
     expect(randomUuidSpy).toHaveBeenCalledOnce();
   });
+
+  it('lets generated scene image nodes create referenced image nodes from the connector menu', async () => {
+    vi.resetModules();
+    const reactMock = createReactHookMock();
+    vi.doMock('react', () => reactMock.reactModule);
+
+    const nextNodeId = '33333333-3333-4333-8333-333333333333';
+    vi.spyOn(globalThis.crypto, 'randomUUID').mockReturnValue(nextNodeId);
+    const { useNodeManagement } = await import('./useNodeManagement');
+    const sourceNode = createImageNode({
+      id: 'scene-image-1',
+      type: NodeType.STORYBOARD,
+      scene: 'character_three_view_generate',
+    });
+    const viewport: Viewport = { x: 100, y: 50, zoom: 2 };
+    const contextMenu: ContextMenuState = {
+      isOpen: true,
+      x: 520,
+      y: 340,
+      type: 'node-connector',
+      sourceNodeId: sourceNode.id,
+      connectorSide: 'right',
+      sourceNodeType: NodeType.IMAGE,
+      dropCanvasPosition: {
+        x: 210,
+        y: 145,
+      },
+    };
+
+    let hook = reactMock.render(() => useNodeManagement());
+    hook.setNodes([sourceNode]);
+    hook = reactMock.render(() => useNodeManagement());
+
+    const onCloseMenu = vi.fn();
+    hook.handleSelectTypeFromMenu(NodeType.IMAGE, contextMenu, viewport, onCloseMenu);
+
+    hook = reactMock.render(() => useNodeManagement());
+    const createdNode = hook.nodes.find((node) => node.id === nextNodeId);
+
+    expect(createdNode).toMatchObject({
+      id: nextNodeId,
+      type: NodeType.IMAGE,
+      parentIds: [sourceNode.id],
+      prompt: sourceNode.prompt,
+      status: NodeStatus.IDLE,
+    });
+  });
 });

@@ -44,6 +44,7 @@ import {
     getVideoPanelModeByKey,
     getVideoPanelModeReferencePolicy,
     getVideoPanelModeValidation,
+    isVideoPanelModeSupported,
     PRIMARY_VIDEO_PANEL_MODE_KEYS,
     resolveVideoPanelModeKey,
     type VideoPanelMediaType,
@@ -796,6 +797,10 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     const activeVideoPanelMode = isVideoNode ? resolveVideoPanelModeKey(data) : 'text2video';
     const activeVideoPanelDefinition = getVideoPanelModeByKey(activeVideoPanelMode);
     const activeVideoPanelPolicy = getVideoPanelModeReferencePolicy(activeVideoPanelMode);
+    const supportedVideoPanelModeKeys = PRIMARY_VIDEO_PANEL_MODE_KEYS.filter((modeKey) =>
+        isVideoPanelModeSupported(modeKey, currentVideoCapability)
+    );
+    const isActiveVideoPanelModeSupported = !isVideoNode || isVideoPanelModeSupported(activeVideoPanelMode, currentVideoCapability);
     const videoPanelInputCounts = getVideoPanelInputCounts(
         connectedImageNodes.map((node) => ({
             id: node.id,
@@ -852,6 +857,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
     );
 
     const handleVideoPanelModeChange = (mode: typeof activeVideoPanelMode) => {
+        if (!isVideoPanelModeSupported(mode, currentVideoCapability)) return;
         const nextVideoMode = getLegacyVideoModeForPanelMode(mode);
         const updates: Partial<NodeData> = {
             videoPanelMode: mode,
@@ -872,6 +878,29 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
 
         onUpdate(data.id, updates);
     };
+
+    useEffect(() => {
+        if (!isVideoNode || !currentVideoCapability) return;
+        if (isActiveVideoPanelModeSupported) return;
+
+        const fallbackMode = supportedVideoPanelModeKeys[0] || 'text2video';
+        const nextVideoMode = getLegacyVideoModeForPanelMode(fallbackMode);
+        onUpdate(data.id, {
+            videoPanelMode: fallbackMode,
+            videoMode: nextVideoMode,
+            frameInputs: fallbackMode === 'frames2video' ? data.frameInputs : undefined,
+            errorMessage: undefined,
+        });
+    }, [
+        activeVideoPanelMode,
+        currentVideoCapability,
+        data.frameInputs,
+        data.id,
+        isActiveVideoPanelModeSupported,
+        isVideoNode,
+        onUpdate,
+        supportedVideoPanelModeKeys,
+    ]);
 
     useEffect(() => {
         if (!isVideoNode || canUseCameraPresets || selectedCameraPresets.length === 0) return;
@@ -1249,18 +1278,22 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                 {PRIMARY_VIDEO_PANEL_MODE_KEYS.map((modeKey) => {
                                     const mode = getVideoPanelModeByKey(modeKey);
                                     const active = activeVideoPanelMode === mode.key;
+                                    const supported = isVideoPanelModeSupported(mode.key, currentVideoCapability);
 
                                     return (
                                         <button
                                             key={mode.key}
                                             type="button"
+                                            disabled={!supported}
                                             onClick={() => handleVideoPanelModeChange(mode.key)}
                                             className={`h-9 shrink-0 rounded-[12px] border px-3 text-[13px] font-medium transition-all ${
-                                                active
+                                                !supported
+                                                    ? 'cursor-not-allowed border-white/8 text-neutral-700'
+                                                : active
                                                     ? 'border-white/18 bg-white/10 text-white shadow-[0_10px_24px_rgba(255,255,255,0.05)]'
                                                     : 'border-white/14 text-neutral-500 hover:bg-white/6 hover:text-neutral-200'
                                             }`}
-                                            title={mode.description}
+                                            title={supported ? mode.description : '当前模型不支持该模式'}
                                         >
                                             {mode.label}
                                         </button>
@@ -1283,25 +1316,25 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <span className={data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR ? 'text-rose-100' : 'text-blue-100'}>
                                             {data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR
                                                 ? (data.taskInfo?.failedReason || data.errorMessage || '生成失败')
-                                                : data.taskInfo?.taskId
-                                                    ? `生成中 · ${data.taskInfo.taskId.slice(0, 10)}`
-                                                    : '生成中'}
+                                                : '生成中'}
                                         </span>
                                         {typeof data.taskInfo?.progressPercent === 'number' && (
                                             <span className="font-medium text-white">{generationProgress}%</span>
                                         )}
                                     </div>
-                                    <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                                        <div
-                                            className={`h-full rounded-full transition-all ${data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR ? 'bg-rose-300' : 'bg-blue-300'}`}
-                                            style={{ width: `${typeof data.taskInfo?.progressPercent === 'number' ? generationProgress : 38}%` }}
-                                        />
-                                    </div>
+                                    {typeof data.taskInfo?.progressPercent === 'number' && (
+                                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                            <div
+                                                className={`h-full rounded-full transition-all ${data.taskInfo?.status === 'failed' || data.status === NodeStatus.ERROR ? 'bg-rose-300' : 'bg-blue-300'}`}
+                                                style={{ width: `${generationProgress}%` }}
+                                            />
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
                             <div className="space-y-2.5">
-                                <div className="flex flex-wrap gap-2.5">
+                                <div className="flex flex-wrap items-start gap-2.5">
                                     <button
                                         type="button"
                                         onClick={handleVideoMark}
@@ -1310,58 +1343,59 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         <Settings2 size={14} />
                                         <span>标记</span>
                                     </button>
-                                    <button
-                                        type="button"
-                                        disabled={!canUseCameraPresets}
-                                        onClick={() => setShowCameraPresetPanel(true)}
-                                        className={`flex h-[64px] w-[64px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-[12px] border text-[12px] font-medium transition-colors ${
-                                            canUseCameraPresets
-                                                ? 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
-                                                : 'cursor-not-allowed border-white/6 bg-[#242424] text-neutral-600'
-                                        }`}
-                                        title={canUseCameraPresets ? '选择预设运镜' : VIDEO_CAMERA_PRESET_UNSUPPORTED_TOOLTIP}
-                                    >
-                                        <Film size={14} />
-                                        <span>运镜</span>
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={handleCharacterReferenceSelect}
-                                        className={`relative flex h-[64px] w-[64px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-[12px] border text-[12px] font-medium transition-colors ${
-                                            selectedCharacterReferenceUrl
-                                                ? 'border-emerald-300/40 bg-emerald-400/12 text-emerald-100'
-                                                : 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
-                                        }`}
-                                        title={selectedCharacterReferenceUrl ? '已选择角色参考图' : '从已连接图片中选择角色参考；没有图片时会新建图片输入'}
-                                    >
-                                        <Shield size={14} />
-                                        <span>角色库</span>
-                                        {selectedCharacterReferenceUrl && (
-                                            <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-300" />
-                                        )}
-                                    </button>
-                                </div>
-
-                                {activeVideoPanelMode !== 'text2video' && (
-                                    <div className="flex min-h-[54px] items-center gap-2 overflow-x-auto rounded-[12px] border border-white/8 bg-black/16 px-2 py-2">
-                                        {videoPanelReferenceItems.length > 0 ? (
-                                            videoPanelReferenceItems.map((item) => (
+                                    {activeVideoPanelMode !== 'frames2video' && (
+                                        <button
+                                            type="button"
+                                            disabled={!canUseCameraPresets}
+                                            onClick={() => setShowCameraPresetPanel(true)}
+                                            className={`flex h-[64px] w-[64px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-[12px] border text-[12px] font-medium transition-colors ${
+                                                canUseCameraPresets
+                                                    ? 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
+                                                    : 'cursor-not-allowed border-white/6 bg-[#242424] text-neutral-600'
+                                            }`}
+                                            title={canUseCameraPresets ? '选择预设运镜' : VIDEO_CAMERA_PRESET_UNSUPPORTED_TOOLTIP}
+                                        >
+                                            <Film size={14} />
+                                            <span>运镜</span>
+                                        </button>
+                                    )}
+                                    {(activeVideoPanelMode === 'mixed2video' || activeVideoPanelMode === 'text2video') && (
+                                        <button
+                                            type="button"
+                                            onClick={handleCharacterReferenceSelect}
+                                            className={`relative flex h-[64px] w-[64px] shrink-0 flex-col items-center justify-center gap-1.5 rounded-[12px] border text-[12px] font-medium transition-colors ${
+                                                selectedCharacterReferenceUrl
+                                                    ? 'border-emerald-300/40 bg-emerald-400/12 text-emerald-100'
+                                                    : 'border-white/10 bg-[#2a2a2a] text-neutral-100 hover:border-white/18 hover:bg-[#333]'
+                                            }`}
+                                            title={selectedCharacterReferenceUrl ? '已选择角色参考图' : '从已连接图片中选择角色参考；没有图片时会新建图片输入'}
+                                        >
+                                            <Shield size={14} />
+                                            <span>角色库</span>
+                                            {selectedCharacterReferenceUrl && (
+                                                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-emerald-300" />
+                                            )}
+                                        </button>
+                                    )}
+                                    {activeVideoPanelMode !== 'text2video' && (
+                                        videoPanelReferenceItems.length > 0 ? (
+                                            videoPanelReferenceItems.map((item, itemIndex) => (
                                                 <div
                                                     key={`${item.id}-${item.label}`}
-                                                    className="relative h-10 w-16 shrink-0 overflow-hidden rounded-[8px] border border-white/12 bg-black"
+                                                    className="relative h-[64px] w-[76px] shrink-0 overflow-hidden rounded-[10px] border border-white/12 bg-black"
                                                     title={item.label}
                                                 >
                                                     {item.mediaType === 'video' ? (
                                                         <video src={item.url} className="h-full w-full object-cover opacity-85" muted playsInline preload="metadata" />
                                                     ) : item.mediaType === 'audio' ? (
                                                         <div className="flex h-full w-full items-center justify-center bg-[#161616] text-cyan-300">
-                                                            <Sparkles size={16} />
+                                                            <Sparkles size={18} />
                                                         </div>
                                                     ) : (
                                                         <img src={item.url} alt={item.label} className="h-full w-full object-cover" />
                                                     )}
-                                                    <div className="absolute inset-x-0 bottom-0 truncate bg-black/62 px-1 py-0.5 text-center text-[9px] font-medium text-white">
-                                                        {item.label}
+                                                    <div className="absolute right-1 top-1 min-w-5 rounded-full bg-black/68 px-1 text-center text-[10px] font-medium text-white">
+                                                        {activeVideoPanelMode === 'frames2video' ? item.label : itemIndex + 1}
                                                     </div>
                                                 </div>
                                             ))
@@ -1369,14 +1403,14 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                             <button
                                                 type="button"
                                                 onClick={() => onQuickAddInputNode?.(data.id, activeVideoPanelPolicy.acceptsVideo ? 'video' : 'image')}
-                                                className="flex h-10 items-center gap-2 rounded-[8px] border border-dashed border-white/14 px-3 text-[12px] font-medium text-neutral-400 transition-colors hover:border-white/24 hover:text-white"
+                                                className="flex h-[64px] items-center gap-2 rounded-[10px] border border-dashed border-white/14 px-3 text-[12px] font-medium text-neutral-400 transition-colors hover:border-white/24 hover:text-white"
                                             >
                                                 <ImageIcon size={14} />
                                                 添加参考素材
                                             </button>
-                                        )}
-                                    </div>
-                                )}
+                                        )
+                                    )}
+                                </div>
 
                                 <div className="min-h-[112px] rounded-[16px] bg-transparent px-2 py-1">
                                     <textarea
@@ -2326,7 +2360,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                     </div>
 
                     {!isOfflineReadonlyVideoNode && !isLiblibImagePanel && isVideoNode && (
-                        <div className="mt-2.5 flex min-h-[48px] min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-white/8 pt-2.5 text-white">
+	                        <div className="mt-2.5 flex h-12 min-w-0 items-center gap-2 overflow-visible border-t border-white/8 pt-2.5 text-white">
                             <div className="relative min-w-0 max-w-[158px]" ref={modelDropdownRef}>
                                 <button
                                     onClick={() => setShowModelDropdown(!showModelDropdown)}
@@ -2461,7 +2495,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     </div>
                                 )}
                             </div>
-                            <div className="ml-auto whitespace-nowrap text-[13px] font-medium text-white/42">{promptCharCount}</div>
+                            <div className="ml-auto flex h-full items-center whitespace-nowrap text-[13px] font-medium text-white/42">{promptCharCount}</div>
                             {!isLoading && (
                                 <button
                                     onClick={(e) => {
@@ -2801,7 +2835,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                         onGenerate(data.id);
                                     }}
                                     disabled={isGenerateBlocked}
-                                    className={`group ${isVideoNode ? 'h-14 w-14 rounded-[18px]' : isImageToVideoPrimary ? 'h-10 rounded-full px-4 gap-2' : 'w-9 h-9 rounded-full'} flex items-center justify-center transition-all duration-200 ${isGenerateBlocked
+                                    className={`group ${isVideoNode ? 'h-10 w-10 rounded-[12px]' : isImageToVideoPrimary ? 'h-10 rounded-full px-4 gap-2' : 'w-9 h-9 rounded-full'} flex shrink-0 items-center justify-center transition-all duration-200 ${isGenerateBlocked
                                         ? 'bg-neutral-700/50 cursor-not-allowed opacity-50'
                                         : isDark
                                             ? 'bg-white text-neutral-900 hover:bg-neutral-100 active:scale-95'
@@ -2814,7 +2848,7 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
                                     )}
                                     <svg
                                         viewBox="0 0 24 24"
-                                        className={`${isVideoNode ? 'w-7 h-7' : 'w-4 h-4'} transition-transform duration-200`}
+                                        className={`${isVideoNode ? 'w-5 h-5' : 'w-4 h-4'} transition-transform duration-200`}
                                         fill="currentColor"
                                     >
                                         {isVideoNode ? <path d="M12 3 20 11H15V21H9V11H4z" /> : <polygon points="5 3 19 12 5 21 5 3" />}
@@ -2840,22 +2874,8 @@ const NodeControlsComponent: React.FC<NodeControlsProps> = ({
             {/* Advanced Settings Drawer - Only for Video nodes */}
             {
                 isVideoNode && canEditVideoParameters && (
-                    <div className="mt-2 pt-2 border-t border-neutral-800">
-                        <button
-                            onClick={() => setShowAdvanced(!showAdvanced)}
-                            className="w-full flex items-center justify-center gap-1 cursor-pointer"
-                        >
-                            <span className="text-[10px] text-neutral-600 uppercase tracking-widest hover:text-neutral-400">
-                                {t('nodeControls.advancedSettings')}
-                            </span>
-                            {showAdvanced ? (
-                                <ChevronUp size={12} className="text-neutral-600" />
-                            ) : (
-                                <ChevronDown size={12} className="text-neutral-600" />
-                            )}
-                        </button>
-
-                        {/* Advanced Settings Content - Only for Video nodes */}
+	                    <div className={showAdvanced ? "mt-2 border-t border-neutral-800 pt-2" : "hidden"}>
+	                        {/* Advanced Settings Content - Only for Video nodes */}
                         {showAdvanced && isVideoNode && (
                             <div className="mt-3 space-y-3">
                                 {/* Audio Toggle - Capability driven */}

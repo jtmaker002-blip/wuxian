@@ -33,7 +33,7 @@ describe('sceneGridActions', () => {
       resultUrl: 'data:image/png;base64,item',
       title: 'Shot 1',
       parentIds: ['scene-node'],
-      x: 560,
+      x: 570,
       y: 200,
     });
   });
@@ -55,7 +55,7 @@ describe('sceneGridActions', () => {
       scene: 'upscale',
       title: '高清 · Shot 1',
       parentIds: ['scene-node'],
-      x: 560,
+      x: 570,
       y: 460,
       params: {
         imageUrl: 'data:image/png;base64,item',
@@ -63,5 +63,21 @@ describe('sceneGridActions', () => {
         detailMode: 'cinematic',
       },
     });
+  });
+
+  it('places nodes to the right of wide scene results instead of using a fixed offset', () => {
+    const wideSource = {
+      ...sourceNode,
+      resultUrl: 'data:image/png;base64,wide',
+      resultAspectRatio: '21/9',
+    };
+
+    const node = createSceneGridImageNode({
+      id: 'wide-child',
+      sourceNode: wideSource,
+      image: { url: 'data:image/png;base64,item', label: 'Wide child' },
+    });
+
+    expect(node.x).toBe(100 + 817 + 120);
   });
 });

@@ -1,5 +1,6 @@
 import { getDefaultModelForNodeType } from '../config/nodeTypeRegistry';
 import { NodeStatus, NodeType, type NodeData } from '../types';
+import { getCanvasNodeDimensions } from './canvasNodeLayout';
 
 export type SceneGridImage = {
   url: string;
@@ -16,10 +17,11 @@ export function createSceneGridImageNode({
   image: SceneGridImage;
 }): NodeData {
   const label = image.label || '宫格单格';
+  const sourceDimensions = getCanvasNodeDimensions(sourceNode);
   return {
     id,
     type: NodeType.IMAGE,
-    x: sourceNode.x + 460,
+    x: sourceNode.x + sourceDimensions.width + 120,
     y: sourceNode.y,
     prompt: image.label || '来自宫格单格的图片素材',
     status: NodeStatus.SUCCESS,
@@ -43,10 +45,11 @@ export function createSceneGridUpscaleNode({
   image: SceneGridImage;
 }): NodeData {
   const label = image.label || '单格';
+  const sourceDimensions = getCanvasNodeDimensions(sourceNode);
   return {
     id,
     type: NodeType.IMAGE,
-    x: sourceNode.x + 460,
+    x: sourceNode.x + sourceDimensions.width + 120,
     y: sourceNode.y + 260,
     prompt: `高清放大 · ${label}`,
     status: NodeStatus.IDLE,

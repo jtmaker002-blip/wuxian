@@ -63,6 +63,7 @@ interface NodeContentProps {
     onCancelGeneration?: (nodeId: string) => void;
     onSendSceneImageToNode?: (sourceNodeId: string, image: { url: string; label?: string }, action: 'image-node' | 'upscale-node') => void;
     canvasTheme?: 'dark' | 'light';
+    isActivelyDragging?: boolean;
 }
 
 export const NodeContent: React.FC<NodeContentProps> = ({
@@ -88,7 +89,8 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     onGenerate,
     onCancelGeneration,
     onSendSceneImageToNode,
-    canvasTheme = 'dark'
+    canvasTheme = 'dark',
+    isActivelyDragging = false,
 }) => {
     const { t } = useTranslation();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -119,63 +121,6 @@ export const NodeContent: React.FC<NodeContentProps> = ({
     const progressPercent = typeof data.taskInfo?.progressPercent === 'number'
         ? Math.max(0, Math.min(100, Math.round(data.taskInfo.progressPercent)))
         : undefined;
-    const requestedVideoModelLabel = isVideoType ? (data.requestedVideoModel || data.videoModel) : undefined;
-    const actualVideoModelLabel = isVideoType ? data.executedVideoModel : undefined;
-    const executedVideoModeLabel = isVideoType ? data.executedVideoMode : undefined;
-    const executionProviderLabel = isVideoType ? formatExecutionProviderLabel(data.executionProvider) : undefined;
-    const shouldShowVideoModelDiff =
-        Boolean(requestedVideoModelLabel) &&
-        Boolean(actualVideoModelLabel) &&
-        requestedVideoModelLabel !== actualVideoModelLabel;
-
-    const renderVideoModelBadges = (extraClassName = '') => {
-        if (!isVideoType) return null;
-
-        if (shouldShowVideoModelDiff && requestedVideoModelLabel && actualVideoModelLabel) {
-            return (
-                <div className={`absolute left-2 top-2 z-10 flex flex-col gap-1 ${extraClassName}`.trim()}>
-                    <span className="rounded-md bg-black/65 px-2 py-1 text-[10px] font-medium text-white/90">
-                        请求模型：{requestedVideoModelLabel}
-                    </span>
-                    <span className="rounded-md bg-amber-500/85 px-2 py-1 text-[10px] font-medium text-white">
-                        实际执行：{actualVideoModelLabel}
-                    </span>
-                    {executedVideoModeLabel && (
-                        <span className="rounded-md bg-sky-500/85 px-2 py-1 text-[10px] font-medium text-white">
-                            执行档位：{executedVideoModeLabel}
-                        </span>
-                    )}
-                    {executionProviderLabel && (
-                        <span className="rounded-md bg-indigo-500/85 px-2 py-1 text-[10px] font-medium text-white">
-                            执行通道：{executionProviderLabel}
-                        </span>
-                    )}
-                </div>
-            );
-        }
-
-        const singleModelLabel = actualVideoModelLabel || requestedVideoModelLabel;
-        if (!singleModelLabel) return null;
-
-        return (
-            <div className={`absolute left-2 top-2 z-10 flex flex-col gap-1 ${extraClassName}`.trim()}>
-                <span className="rounded-md bg-black/65 px-2 py-1 text-[10px] font-medium text-white/90">
-                    模型：{singleModelLabel}
-                </span>
-                {executedVideoModeLabel && (
-                    <span className="rounded-md bg-sky-500/85 px-2 py-1 text-[10px] font-medium text-white">
-                        执行档位：{executedVideoModeLabel}
-                    </span>
-                )}
-                {executionProviderLabel && (
-                    <span className="rounded-md bg-indigo-500/85 px-2 py-1 text-[10px] font-medium text-white">
-                        执行通道：{executionProviderLabel}
-                    </span>
-                )}
-            </div>
-        );
-    };
-
     // Sync local state ONLY when data.prompt changes externally (not from our own update)
     useEffect(() => {
         if (data.prompt !== lastSentPromptRef.current) {
@@ -239,6 +184,33 @@ export const NodeContent: React.FC<NodeContentProps> = ({
         </div>
     ) : null;
 
+    const dragPreviewUrl = data.scene
+        ? data.outputs?.imageList?.[0]?.url || data.resultUrl
+        : data.resultUrl;
+
+    if (isActivelyDragging && dragPreviewUrl && (isSuccess || isLoading || Boolean(data.scene))) {
+        return (
+            <div className="relative p-0">
+                <div
+                    className="relative w-full overflow-hidden rounded-[18px] bg-black"
+                    style={getAspectRatioStyle()}
+                >
+                    {isVideoType ? (
+                        <video src={dragPreviewUrl} className="h-full w-full object-cover" muted playsInline />
+                    ) : (
+                        <img
+                            src={dragPreviewUrl}
+                            alt={data.title || 'node preview'}
+                            className={`h-full w-full ${data.scene === 'character_three_view_generate' ? 'bg-[#edf3f8] object-contain' : 'object-cover'} pointer-events-none select-none`}
+                            draggable={false}
+                        />
+                    )}
+                    {progressOverlay}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className={`relative transition-all duration-200 ${!selected ? 'p-0 rounded-[28px] overflow-hidden' : 'p-0'}`}>
             {/* Hidden File Input - Always rendered for upload functionality */}
@@ -276,7 +248,6 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                     ) : isVideoType ? (
                         <>
                             <video src={data.resultUrl} controls loop className="w-full h-full object-cover" />
-                            {renderVideoModelBadges()}
                         </>
                     ) : (
                         <>
@@ -502,8 +473,6 @@ export const NodeContent: React.FC<NodeContentProps> = ({
                             图片素材
                         </div>
                     )}
-                    {renderVideoModelBadges()}
-
                     {/* Input Image Preview for Video Nodes */}
                     {isVideoType && effectiveInputUrl && (
                         <div className="absolute inset-0 z-0">

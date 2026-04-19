@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { NodeData, NodeType, NodeStatus, Viewport } from '../types';
 import { getDefaultModelForNodeType, isSwitchableNodeType, type SwitchableNodeType } from '../config/nodeTypeRegistry';
+import { nodeEmitsImageResult } from '../utils/nodeResultTyping';
 import { switchNodeTypeData } from '../utils/nodeTypeSwitch';
 
 const DEFAULT_NODE_X_OFFSET = 170;
@@ -206,7 +207,7 @@ export const useNodeManagement = () => {
                     ? dropCanvasPosition.y - defaultNodeHeight / 2
                     : fallbackY;
                 const sourceFeedsImageFlow =
-                    sourceNode.type === NodeType.IMAGE || sourceNode.type === NodeType.IMAGE_EDITOR;
+                    nodeEmitsImageResult(sourceNode) || sourceNode.type === NodeType.IMAGE_EDITOR;
 
                 let newNode: NodeData;
 

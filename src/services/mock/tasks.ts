@@ -1,14 +1,24 @@
 import type { GenerationRequest, PipelineOutput, SceneId, TaskSnapshot } from '../../types/scene';
 import { SCENES } from '../../types/scene';
-import { makeFrameDeduction, makeMockImageDataUrl, makeStoryboardShots } from './sceneAssets';
+import { makeFrameDeduction, makeMockImageDataUrl, makeMultiViewShots, makeStoryboardShots, MULTI_VIEW_CAMERA_LABELS } from './sceneAssets';
 
-type StoredTask = TaskSnapshot & {
+type StoredChildTask = NonNullable<TaskSnapshot['childTasks']>[number] & {
+  result?: PipelineOutput | null;
+  errorMessage?: string | null;
+  createdAt: number;
+  completionAt: number;
+};
+
+type StoredTask = Omit<TaskSnapshot, 'childTasks'> & {
   createdAt: number;
   completionAt: number;
   output: PipelineOutput;
+  childTasks?: StoredChildTask[];
+  maxConcurrency?: number;
 };
 
 const tasks = new Map<string, StoredTask>();
+const MAX_CHILD_CONCURRENCY = 4;
 
 function makeThreeViewContactSheetDataUrl(params: Record<string, any>) {
   const style = String(params.style || 'realistic').replace(/[<>&]/g, '');
@@ -51,11 +61,13 @@ function buildOutput(scene: SceneId, params: Record<string, any>): PipelineOutpu
   if (scene === SCENES.PLOT_DEDUCTION_FOUR_GRID) {
     const storyboard = makeStoryboardShots(4, storyText);
     return {
-      imageList: storyboard.map((shot) => ({
-        url: makeMockImageDataUrl(`四宫格 · ${shot.plotDescription}`, '#2563eb', shot.shotNumber),
-        label: `镜头 ${shot.shotNumber}`,
-        status: 'succeeded',
-      })),
+      imageList: [
+        {
+          url: makeMockImageDataUrl(`剧情推演四宫格 · ${storyText}`, '#2563eb', 1),
+          label: '剧情推演四宫格',
+          status: 'succeeded',
+        },
+      ],
       structuredData: { storyboard },
     };
   }
@@ -63,11 +75,13 @@ function buildOutput(scene: SceneId, params: Record<string, any>): PipelineOutpu
   if (scene === SCENES.COHERENT_STORYBOARD_25) {
     const storyboard = makeStoryboardShots(25, storyText);
     return {
-      imageList: storyboard.map((shot) => ({
-        url: makeMockImageDataUrl(`25宫格 · ${shot.plotDescription}`, '#7c3aed', shot.shotNumber),
-        label: `Shot ${shot.shotNumber}`,
-        status: 'succeeded',
-      })),
+      imageList: [
+        {
+          url: makeMockImageDataUrl(`25宫格连贯分镜 · ${storyText}`, '#7c3aed', 1),
+          label: '25宫格连贯分镜',
+          status: 'succeeded',
+        },
+      ],
       structuredData: {
         storyboard,
         characterBible: {
@@ -98,7 +112,7 @@ function buildOutput(scene: SceneId, params: Record<string, any>): PipelineOutpu
       imageList: [
         {
           url: makeThreeViewContactSheetDataUrl(params),
-          label: 'Front / Side / Back',
+          label: '正 / 侧 / 背',
           status: 'succeeded',
         },
       ],
@@ -170,24 +184,64 @@ function buildOutput(scene: SceneId, params: Record<string, any>): PipelineOutpu
   }
 
   return {
-    imageList: Array.from({ length: 9 }).map((_, index) => ({
-      url: makeMockImageDataUrl(`多机位九宫格 · 角度 ${index + 1}`, '#db2777', index + 1),
-      label: `Angle ${index + 1}`,
-      status: 'succeeded',
-    })),
+    imageList: [
+      {
+        url: makeMockImageDataUrl(`多机位九宫格 · ${storyText}`, '#db2777', 1),
+        label: '多机位九宫格',
+        status: 'succeeded',
+      },
+    ],
     structuredData: {
       multiView: {
-        cameraAngles: ['wide', 'medium', 'close', 'low', 'high', 'over-shoulder', 'macro', 'dutch', 'hero'],
+        cameraAngles: [...MULTI_VIEW_CAMERA_LABELS],
       },
+      storyboard: makeMultiViewShots(storyText),
     },
   };
 }
 
+function getSceneResultCount(scene: SceneId, output: PipelineOutput) {
+  if (Array.isArray(output.imageList) && output.imageList.length > 0) return output.imageList.length;
+  if (scene === SCENES.CHARACTER_THREE_VIEW_GENERATE) return 1;
+  if (scene === SCENES.CINEMATIC_LIGHT_CORRECTION) return 1;
+  if (scene === SCENES.FRAME_DEDUCTION_PLUS_3S || scene === SCENES.FRAME_DEDUCTION_MINUS_5S) return 1;
+  if (scene === SCENES.UPSCALE) return 1;
+  return 1;
+}
+
+function buildChildTasks(taskId: string, scene: SceneId, output: PipelineOutput, now: number) {
+  const count = getSceneResultCount(scene, output);
+  if (count <= 1) return undefined;
+
+  return Array.from({ length: count }).map((_, index) => {
+    const wave = Math.floor(index / MAX_CHILD_CONCURRENCY);
+    const childStart = now + wave * 900;
+    return {
+      taskId: `${taskId}_child_${index + 1}`,
+      index,
+      status: 'pending' as const,
+      progressPercent: 0,
+      result: null,
+      errorMessage: null,
+      createdAt: childStart,
+      completionAt: childStart + 1200 + (index % MAX_CHILD_CONCURRENCY) * 120,
+    };
+  });
+}
+
+function toPublicTaskSnapshot(task: StoredTask): TaskSnapshot {
+  return {
+    ...task,
+    childTasks: task.childTasks?.map(({ createdAt: _createdAt, completionAt: _completionAt, ...child }) => child),
+  };
+}
+
 export async function createMockTask(request: GenerationRequest): Promise<{ taskId: string }> {
-  const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const taskId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
   const scene = request.params.scene as SceneId;
   const output = buildOutput(scene, request.params);
   const now = Date.now();
+  const childTasks = buildChildTasks(taskId, scene, output, now);
   tasks.set(taskId, {
     taskId,
     requestId: request.requestId,
@@ -198,6 +252,8 @@ export async function createMockTask(request: GenerationRequest): Promise<{ task
     createdAt: now,
     completionAt: now + 1800 + Math.floor(Math.random() * 1200),
     output,
+    childTasks,
+    maxConcurrency: childTasks ? MAX_CHILD_CONCURRENCY : undefined,
   });
   return { taskId };
 }
@@ -207,19 +263,53 @@ export async function getMockTaskStatus(taskIds: string[]): Promise<TaskSnapshot
   return taskIds.flatMap((taskId) => {
     const task = tasks.get(taskId);
     if (!task) return [];
-    if (task.status === 'cancelled') return [task];
-    const progress = Math.min(100, Math.round(((now - task.createdAt) / (task.completionAt - task.createdAt)) * 100));
-    if (progress >= 100) {
-      task.status = 'succeeded';
-      task.progressPercent = 100;
-      task.result = task.output;
+    if (task.status === 'cancelled') return [toPublicTaskSnapshot(task)];
+    if (Array.isArray(task.childTasks) && task.childTasks.length > 0) {
+      task.childTasks = task.childTasks.map((child) => {
+        if (child.status === 'cancelled' || child.status === 'failed') return child;
+        if (now < child.createdAt) {
+          return {
+            ...child,
+            status: 'pending',
+            progressPercent: 0,
+            result: null,
+          };
+        }
+        const progress = Math.min(100, Math.round(((now - child.createdAt) / (child.completionAt - child.createdAt)) * 100));
+        return {
+          ...child,
+          status: progress >= 100 ? 'succeeded' : 'running',
+          progressPercent: progress,
+          result: progress >= 100 && task.output.imageList?.[child.index]
+            ? {
+              imageList: [task.output.imageList[child.index]],
+              structuredData: {
+                storyboard: task.output.structuredData?.storyboard?.[child.index],
+              },
+            }
+            : null,
+        };
+      });
+      const totalProgress = task.childTasks.reduce((sum, child) => sum + child.progressPercent, 0);
+      const progress = Math.round(totalProgress / task.childTasks.length);
+      const allComplete = task.childTasks.every((child) => child.status === 'succeeded');
+      task.progressPercent = progress;
+      task.status = allComplete ? 'succeeded' : progress < 8 ? 'pending' : 'running';
+      task.result = allComplete ? task.output : null;
     } else {
-      task.status = progress < 8 ? 'pending' : 'running';
-      task.progressPercent = Math.max(4, progress);
-      task.result = null;
+      const progress = Math.min(100, Math.round(((now - task.createdAt) / (task.completionAt - task.createdAt)) * 100));
+      if (progress >= 100) {
+        task.status = 'succeeded';
+        task.progressPercent = 100;
+        task.result = task.output;
+      } else {
+        task.status = progress < 8 ? 'pending' : 'running';
+        task.progressPercent = Math.max(4, progress);
+        task.result = null;
+      }
     }
     tasks.set(taskId, task);
-    return [task];
+    return [toPublicTaskSnapshot(task)];
   });
 }
 
@@ -231,6 +321,11 @@ export async function cancelMockTask(taskId: string) {
       status: 'cancelled',
       progressPercent: task.progressPercent,
       errorMessage: '任务已取消',
+      childTasks: task.childTasks?.map((child) => (
+        child.status === 'succeeded'
+          ? child
+          : { ...child, status: 'cancelled', errorMessage: '任务已取消' }
+      )),
     });
   }
 }

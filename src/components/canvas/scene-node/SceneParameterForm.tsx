@@ -30,6 +30,17 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
   const referenceImagesText = Array.isArray(data.params?.referenceImages)
     ? data.params.referenceImages.join('\n')
     : '';
+  const sourceImageUrl = (
+    isLightCorrection
+      ? data.params?.originImage
+      : data.params?.imageUrl || data.params?.characterImageUrl
+  ) as string | undefined;
+  const sourceParamKey =
+    isLightCorrection
+      ? 'originImage'
+      : isThreeView
+        ? 'characterImageUrl'
+        : 'imageUrl';
 
   return (
     <div className="mb-4 rounded-2xl border border-white/10 bg-black/28 p-3">
@@ -88,23 +99,33 @@ export const SceneParameterForm: React.FC<SceneParameterFormProps> = ({ data, on
           </>
         )}
         {(isGridSplit || isLightCorrection || isUpscale || isFrameDeduction || isThreeView) && (
-          <label className="col-span-2 text-xs text-neutral-400">
-            输入图片 URL
-            <input
-              value={(isLightCorrection ? data.params?.originImage : data.params?.imageUrl || data.params?.characterImageUrl) as string || ''}
-              onPointerDown={(event) => event.stopPropagation()}
-              onChange={(event) => {
-                const key = isLightCorrection
-                  ? 'originImage'
-                  : isThreeView
-                    ? 'characterImageUrl'
-                    : 'imageUrl';
-                updateParam(key, event.target.value);
-              }}
-              placeholder="可填 /library/images/... 或 data:image/..."
-              className="mt-1 w-full rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-sm text-white outline-none focus:border-blue-400/70"
-            />
-          </label>
+          <div className="col-span-2 rounded-xl border border-white/10 bg-[#101010] p-2">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-neutral-500">输入素材</div>
+            {sourceImageUrl ? (
+              <div className="flex items-center gap-2">
+                <div className="h-12 w-12 overflow-hidden rounded-lg border border-white/10 bg-black">
+                  <img src={sourceImageUrl} alt="source" className="h-full w-full object-cover" />
+                </div>
+                <div className="min-w-0 flex-1 text-xs text-neutral-400">
+                  <div className="text-neutral-200">来自已连接图片节点</div>
+                  <input
+                    value={sourceImageUrl}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onChange={(event) => updateParam(sourceParamKey, event.target.value)}
+                    className="mt-1 w-full rounded-lg border border-white/10 bg-black/24 px-2 py-1 text-[11px] text-neutral-300 outline-none focus:border-blue-400/70"
+                  />
+                </div>
+              </div>
+            ) : (
+              <input
+                value=""
+                placeholder="粘贴图片 URL，或从图片节点连接后自动带入"
+                onPointerDown={(event) => event.stopPropagation()}
+                onChange={(event) => updateParam(sourceParamKey, event.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/24 px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-600 focus:border-blue-400/70"
+              />
+            )}
+          </div>
         )}
         {isGridSplit && (
           <div className="col-span-2 rounded-xl border border-white/10 bg-[#101010] px-3 py-2 text-xs text-neutral-300">

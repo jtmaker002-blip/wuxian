@@ -20,6 +20,7 @@ export const useNodeDragging = () => {
     const dragNodeRef = useRef<DragNode | null>(null);
     const isPanning = useRef<boolean>(false);
     const [isDragging, setIsDragging] = useState<boolean>(false);
+    const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
 
     // ============================================================================
     // EVENT HANDLERS
@@ -39,6 +40,7 @@ export const useNodeDragging = () => {
         e.stopPropagation();
         dragNodeRef.current = { id };
         setIsDragging(true);
+        setDraggingNodeId(id);
 
         // Select the node
         if (onSelect) {
@@ -87,6 +89,7 @@ export const useNodeDragging = () => {
     const endNodeDrag = () => {
         dragNodeRef.current = null;
         setIsDragging(false);
+        setDraggingNodeId(null);
     };
 
     /**
@@ -150,6 +153,7 @@ export const useNodeDragging = () => {
         updatePanning,
         endPanning,
         isDragging,
+        draggingNodeId,
         isPanning: isPanning.current,
         releasePointerCapture
     };

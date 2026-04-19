@@ -5,7 +5,7 @@
  * Orchestrates NodeContent, NodeControls, and NodeConnectors sub-components.
  */
 
-import React from 'react';
+import React, { memo } from 'react';
 import { NodeData, NodeStatus, NodeType } from '../../types';
 import type { SceneId } from '../../types/scene';
 import { NodeConnectors } from './NodeConnectors';
@@ -93,6 +93,7 @@ interface CanvasNodeProps {
   onCreateNineGridTiles?: (nodeId: string, actionLabel: string) => void;
   onLaunchSceneFromImage?: (sourceNodeId: string, scene: SceneId) => void;
   zoom: number;
+  isActivelyDragging?: boolean;
   // Mouse event callbacks for chat panel drag functionality
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
@@ -104,7 +105,7 @@ interface CanvasNodeProps {
   onSendSceneImageToNode?: (sourceNodeId: string, image: { url: string; label?: string }, action: 'image-node' | 'upscale-node') => void;
 }
 
-export const CanvasNode: React.FC<CanvasNodeProps> = ({
+const CanvasNodeComponent: React.FC<CanvasNodeProps> = ({
   data,
   inputUrl,
   inputMediaType,
@@ -138,6 +139,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   onCreateNineGridTiles,
   onLaunchSceneFromImage,
   zoom,
+  isActivelyDragging = false,
   onMouseEnter,
   onMouseLeave,
   canvasTheme = 'dark',
@@ -159,6 +161,12 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
   const isLoading = data.status === NodeStatus.LOADING;
   const isSuccess = data.status === NodeStatus.SUCCESS;
   const isLiblibImageNode = data.type === NodeType.IMAGE;
+  const isImageResultNode =
+    data.type !== NodeType.VIDEO &&
+    data.type !== NodeType.LOCAL_VIDEO_MODEL &&
+    data.type !== NodeType.AUDIO &&
+    data.type !== NodeType.TEXT &&
+    Boolean(data.resultUrl);
   const isVideoLikeNode = data.type === NodeType.VIDEO || data.type === NodeType.LOCAL_VIDEO_MODEL;
   const isImageToVideoNode = data.type === NodeType.VIDEO && Boolean(inputUrl);
   const imageToolMode = data.imageToolMode || null;
@@ -170,14 +178,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     keyLight: 'front' as const,
     rimLight: false
   };
-  const requestedVideoModelLabel = isVideoLikeNode ? (data.requestedVideoModel || data.videoModel) : undefined;
-  const actualVideoModelLabel = isVideoLikeNode ? data.executedVideoModel : undefined;
-  const executedVideoModeLabel = isVideoLikeNode ? data.executedVideoMode : undefined;
-  const executionProviderLabel = isVideoLikeNode ? formatExecutionProviderLabel(data.executionProvider) : undefined;
-  const shouldShowVideoModelDiff =
-    Boolean(requestedVideoModelLabel) &&
-    Boolean(actualVideoModelLabel) &&
-    requestedVideoModelLabel !== actualVideoModelLabel;
   const titlePositionStyle = data.type === NodeType.VIDEO
     ? { left: 0, right: 'auto', top: '-44px' }
     : { right: 'calc(100% + 8px)' };
@@ -1391,27 +1391,34 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
 
         {/* Main Node Card */}
         <div
-          className={`relative rounded-2xl border transition-all duration-300 flex flex-col shadow-2xl ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${
+          className={`relative rounded-2xl border ${isActivelyDragging ? 'transition-none' : 'transition-all duration-300'} flex flex-col ${isActivelyDragging ? 'shadow-[0_8px_20px_rgba(0,0,0,0.16)]' : 'shadow-2xl'} ${isDark ? 'bg-[#0f0f0f]' : 'bg-white'} ${
             isLiblibImageNode
               ? selected
-                ? 'border-white/60 ring-0 shadow-[0_30px_90px_rgba(0,0,0,0.48)]'
+                ? isActivelyDragging
+                  ? 'border-white/40 ring-0'
+                  : 'border-white/60 ring-0 shadow-[0_30px_90px_rgba(0,0,0,0.48)]'
                 : isDark
                   ? 'border-white/10'
                   : 'border-neutral-200'
               : data.type === NodeType.VIDEO
                 ? selected
-                  ? 'rounded-[30px] border-[2px] border-white/55 bg-[#2b2b2b] ring-0 shadow-[0_30px_90px_rgba(0,0,0,0.48)]'
+                  ? isActivelyDragging
+                    ? 'rounded-[30px] border-[2px] border-white/35 bg-[#2b2b2b] ring-0'
+                    : 'rounded-[30px] border-[2px] border-white/55 bg-[#2b2b2b] ring-0 shadow-[0_30px_90px_rgba(0,0,0,0.48)]'
                   : isDark
                     ? 'rounded-[30px] border-white/18 bg-[#2b2b2b]'
                     : 'rounded-[30px] border-neutral-300'
               : selected
-                ? 'border-blue-500/50 ring-1 ring-blue-500/30'
+                ? isActivelyDragging
+                  ? 'border-blue-400/35 ring-0'
+                  : 'border-blue-500/50 ring-1 ring-blue-500/30'
                 : isDark
                   ? 'border-neutral-800'
                   : 'border-neutral-200'
           }`}
           style={{
             width: nodeDimensions.width,
+            willChange: isActivelyDragging ? 'transform' : undefined,
           }}
         >
           {isImageToVideoDropTarget && (
@@ -1483,35 +1490,6 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             </div>
           )}
 
-          {isVideoLikeNode && (requestedVideoModelLabel || actualVideoModelLabel) && (
-            <div
-              className="absolute top-9 flex flex-col items-end gap-1 whitespace-nowrap"
-              style={{ right: 'calc(100% + 8px)' }}
-            >
-              {shouldShowVideoModelDiff && requestedVideoModelLabel && (
-                <span className="rounded-md bg-neutral-900/85 px-2 py-1 text-[10px] font-medium text-white/90 shadow-lg">
-                  请求模型：{requestedVideoModelLabel}
-                </span>
-              )}
-              <span className={`rounded-md px-2 py-1 text-[10px] font-medium shadow-lg ${shouldShowVideoModelDiff
-                ? 'bg-amber-500/90 text-white'
-                : 'bg-neutral-900/85 text-white/90'
-                }`}>
-                {shouldShowVideoModelDiff ? '实际执行' : '模型'}：{actualVideoModelLabel || requestedVideoModelLabel}
-              </span>
-              {executedVideoModeLabel && (
-                <span className="rounded-md bg-sky-500/90 px-2 py-1 text-[10px] font-medium text-white shadow-lg">
-                  执行档位：{executedVideoModeLabel}
-                </span>
-              )}
-              {executionProviderLabel && (
-                <span className="rounded-md bg-indigo-500/90 px-2 py-1 text-[10px] font-medium text-white shadow-lg">
-                  执行通道：{executionProviderLabel}
-                </span>
-              )}
-            </div>
-          )}
-
           {/* Content Area */}
           <NodeContent
             data={data}
@@ -1537,10 +1515,11 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
             onCancelGeneration={onCancelGeneration}
             onSendSceneImageToNode={onSendSceneImageToNode}
             canvasTheme={canvasTheme}
+            isActivelyDragging={isActivelyDragging}
           />
         </div>
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'grid-split-select' && data.gridSplit && (
+        {selected && showControls && isImageResultNode && imageToolMode === 'grid-split-select' && data.gridSplit && (
           <div className="absolute -top-14 left-1/2 z-[145] -translate-x-1/2">
             <div
               className="flex h-11 items-center gap-3 rounded-[10px] border border-white/10 bg-[#242424]/96 px-3 text-white shadow-[0_20px_60px_rgba(0,0,0,0.55)] backdrop-blur-xl"
@@ -1592,7 +1571,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
         {selected &&
           showControls &&
           data.type !== NodeType.TEXT &&
-          !data.scene &&
+          !isImageResultNode &&
           !(data.prompt && data.prompt.startsWith('Extract panel #')) &&
           imageToolMode !== 'grid-split-select' &&
           !(data.type === NodeType.IMAGE && data.resultUrl && (data.angleMode || imageToolMode === 'lighting')) && (
@@ -1628,7 +1607,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && data.angleMode && (
+        {selected && showControls && isImageResultNode && data.angleMode && (
           <div className="absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 flex justify-center z-[110]">
             <div
               style={{
@@ -1651,7 +1630,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'lighting' && (
+        {selected && showControls && isImageResultNode && imageToolMode === 'lighting' && (
           <div className="absolute top-[calc(100%+12px)] left-1/2 -translate-x-1/2 flex justify-center z-[110]">
             <div
               style={{
@@ -1670,7 +1649,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'enhance' && activeImageDropdownAnchor && (
+        {selected && showControls && isImageResultNode && imageToolMode === 'enhance' && activeImageDropdownAnchor && (
           <div
             className="absolute z-[140]"
             style={{
@@ -1699,7 +1678,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'grid' && activeImageDropdownAnchor && (
+        {selected && showControls && isImageResultNode && imageToolMode === 'grid' && activeImageDropdownAnchor && (
           <div
             className="absolute z-[140]"
             style={{
@@ -1728,7 +1707,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'split' && activeImageDropdownAnchor && (
+        {selected && showControls && isImageResultNode && imageToolMode === 'split' && activeImageDropdownAnchor && (
           <div
             className="absolute z-[140]"
             style={{
@@ -1748,7 +1727,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'style' && activeImageDropdownAnchor && (
+        {selected && showControls && isImageResultNode && imageToolMode === 'style' && activeImageDropdownAnchor && (
           <div
             className="absolute z-[140]"
             style={{
@@ -1777,7 +1756,7 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
           </div>
         )}
 
-        {selected && showControls && data.type === NodeType.IMAGE && data.resultUrl && imageToolMode === 'mark' && activeImageDropdownAnchor && (
+        {selected && showControls && isImageResultNode && imageToolMode === 'mark' && activeImageDropdownAnchor && (
           <div
             className="absolute z-[140]"
             style={{
@@ -1809,3 +1788,37 @@ export const CanvasNode: React.FC<CanvasNodeProps> = ({
     </div >
   );
 };
+
+function sameConnectedSources(
+  prevSources: CanvasNodeProps['connectedImageNodes'],
+  nextSources: CanvasNodeProps['connectedImageNodes']
+) {
+  const prev = prevSources || [];
+  const next = nextSources || [];
+  if (prev.length !== next.length) return false;
+  for (let index = 0; index < prev.length; index += 1) {
+    if (
+      prev[index]?.id !== next[index]?.id ||
+      prev[index]?.url !== next[index]?.url ||
+      prev[index]?.type !== next[index]?.type
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export const CanvasNode = memo(CanvasNodeComponent, (prev, next) => {
+  return (
+    prev.data === next.data &&
+    prev.inputUrl === next.inputUrl &&
+    prev.inputMediaType === next.inputMediaType &&
+    sameConnectedSources(prev.connectedImageNodes, next.connectedImageNodes) &&
+    prev.selected === next.selected &&
+    prev.showControls === next.showControls &&
+    prev.isHoveredForConnection === next.isHoveredForConnection &&
+    prev.isImageToVideoDropTarget === next.isImageToVideoDropTarget &&
+    prev.zoom === next.zoom &&
+    prev.canvasTheme === next.canvasTheme
+  );
+});

@@ -27,7 +27,7 @@ describe('templateClient', () => {
 
     await publishProjectTemplate('project-1', 'Template');
 
-    expect(global.fetch).toHaveBeenCalledWith('http://localhost:3001/api/templates', expect.objectContaining({
+    expect(global.fetch).toHaveBeenCalledWith('/api/templates', expect.objectContaining({
       method: 'POST',
       body: JSON.stringify({ projectId: 'project-1', name: 'Template' }),
     }));

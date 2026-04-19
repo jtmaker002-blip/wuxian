@@ -8,6 +8,7 @@
 import React, { useState, useRef } from 'react';
 import { NodeData, NodeStatus, NodeType, Viewport } from '../types';
 import { getCanvasNodeDimensions } from '../utils/canvasNodeLayout';
+import { nodeEmitsImageResult } from '../utils/nodeResultTyping';
 
 interface ConnectionStart {
     nodeId: string;
@@ -38,7 +39,7 @@ export const useConnectionDragging = () => {
         nextParentIds: string[]
     ): Partial<NodeData> => {
         if (
-            (parentNode.type === NodeType.IMAGE || parentNode.type === NodeType.IMAGE_EDITOR) &&
+            (nodeEmitsImageResult(parentNode) || parentNode.type === NodeType.IMAGE_EDITOR) &&
             childNode.type === NodeType.VIDEO
         ) {
             const inheritedAspectRatio =
@@ -106,7 +107,7 @@ export const useConnectionDragging = () => {
             const centerY = n.y + dimensions.height / 2;
             const sourceFeedsVideo =
                 sourceNode &&
-                (sourceNode.type === NodeType.IMAGE || sourceNode.type === NodeType.IMAGE_EDITOR) &&
+                (nodeEmitsImageResult(sourceNode) || sourceNode.type === NodeType.IMAGE_EDITOR) &&
                 (n.type === NodeType.VIDEO || n.type === NodeType.LOCAL_VIDEO_MODEL);
             return [
                 {
@@ -275,7 +276,7 @@ export const useConnectionDragging = () => {
             }
 
             // IMAGE nodes can connect to IMAGE, VIDEO, or IMAGE_EDITOR
-            if (parentNode.type === NodeType.IMAGE) {
+            if (nodeEmitsImageResult(parentNode) || parentNode.type === NodeType.IMAGE) {
                 return childNode.type === NodeType.IMAGE ||
                     childNode.type === NodeType.VIDEO ||
                     childNode.type === NodeType.IMAGE_EDITOR;

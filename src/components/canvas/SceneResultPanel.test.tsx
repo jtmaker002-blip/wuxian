@@ -60,13 +60,19 @@ function createSceneNode(overrides: Partial<NodeData> = {}): NodeData {
 }
 
 describe('SceneResultPanel', () => {
-  it('renders provider fallback warning instead of silently showing mock success', () => {
+  it('renders real generation failures instead of silently showing mock success', () => {
     const markup = renderToStaticMarkup(
       <SceneResultPanel
         data={createSceneNode({
-          structuredData: {
-            providerFallback: '真实图片服务缺少 OPENAI_API_KEY 或 IMAGES_DIR，已回退 mock。',
-            storyboard: [],
+          status: NodeStatus.ERROR,
+          outputs: undefined,
+          structuredData: undefined,
+          errorMessage: 'OpenAiTeach Gemini 图片生成失败（HTTP 403）：user quota is not enough',
+          taskInfo: {
+            loading: false,
+            status: 'failed',
+            failedReason: 'OpenAiTeach Gemini 图片生成失败（HTTP 403）：user quota is not enough',
+            progressPercent: 0,
           },
         })}
         selected={false}
@@ -74,11 +80,11 @@ describe('SceneResultPanel', () => {
       />
     );
 
-    expect(markup).toContain('真实服务未执行，已回退 Mock');
-    expect(markup).toContain('OPENAI_API_KEY');
+    expect(markup).toContain('真实生成失败');
+    expect(markup).toContain('user quota is not enough');
   });
 
-  it('renders single-cell retry, upscale, new-node, and download actions for grid results', () => {
+  it('renders storyboard results as compact image nodes with hover actions', () => {
     const markup = renderToStaticMarkup(
       <SceneResultPanel
         data={createSceneNode()}
@@ -87,13 +93,14 @@ describe('SceneResultPanel', () => {
       />
     );
 
-    expect(markup).toContain('单格重试');
-    expect(markup).toContain('单格放大');
-    expect(markup).toContain('新节点');
+    expect(markup).toContain('Result 2');
     expect(markup).toContain('下载');
+    expect(markup).toContain('高清');
+    expect(markup).toContain('新节点');
+    expect(markup).not.toContain('单格详情 · #1');
   });
 
-  it('renders a single export label for the 25-grid storyboard button', () => {
+  it('does not render full export controls inside compact 25-grid result nodes', () => {
     const markup = renderToStaticMarkup(
       <SceneResultPanel
         data={createSceneNode({
@@ -104,7 +111,8 @@ describe('SceneResultPanel', () => {
       />
     );
 
-    expect(markup.match(/导出 JSON/g)).toHaveLength(1);
+    expect(markup).not.toContain('导出 JSON');
+    expect(markup).toContain('Result 1');
   });
 
   it('renders a finished-sheet download action for character three-view results', () => {
@@ -123,6 +131,7 @@ describe('SceneResultPanel', () => {
       />
     );
 
-    expect(markup).toContain('下载三视图成品');
+    expect(markup).toContain('Front / Side / Back');
+    expect(markup).toContain('下载');
   });
 });

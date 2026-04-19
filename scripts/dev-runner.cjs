@@ -64,4 +64,4 @@ process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 
 spawnNode('server', path.join('server', 'index.js'), [], '\x1b[35m');
-spawnNode('vite', path.join('node_modules', 'vite', 'bin', 'vite.js'), ['--host', '127.0.0.1', '--port', '5173'], '\x1b[32m');
+spawnNode('vite', path.join('node_modules', 'vite', 'bin', 'vite.js'), ['--host', process.env.HOST || '::', '--port', process.env.PORT || '5173'], '\x1b[32m');

@@ -1,4 +1,5 @@
 import { NodeType, type NodeData, type VideoPanelModeKey } from '../types';
+import type { VideoModelCapability } from '../config/modelCapabilities';
 
 export type VideoPanelListKey = 'imageList' | 'videoList' | 'audioList' | 'mixedList' | null;
 export type VideoPanelMediaType = 'image' | 'video' | 'audio';
@@ -158,6 +159,55 @@ export function getVideoPanelModeReferencePolicy(key: VideoPanelModeKey): VideoP
     acceptsAudio: mode.acceptsAudio,
     canUsePresetCamera: key !== 'frames2video' && key !== 'videoEdit2video',
   };
+}
+
+export function isVideoPanelModeSupported(
+  key: VideoPanelModeKey,
+  capability: VideoModelCapability | undefined
+): boolean {
+  if (!capability) return false;
+
+  const standard = capability.modes.standard;
+  if (key === 'text2video') {
+    return Boolean(standard.enabled && standard.supportsTextToVideo);
+  }
+
+  if (key === 'singleImage2video') {
+    return Boolean(standard.enabled && standard.supportsImageToVideo);
+  }
+
+  if (key === 'image2video') {
+    return Boolean(standard.enabled && (standard.supportsFullReference || standard.supportsMultiImage));
+  }
+
+  if (key === 'frames2video') {
+    const frameToFrame = capability.modes.frameToFrame;
+    return Boolean(frameToFrame.enabled && frameToFrame.supportsStartEndFrames);
+  }
+
+  if (key === 'mixed2video') {
+    const motionControl = capability.modes.motionControl;
+    return Boolean(
+      (motionControl.enabled && motionControl.supportsMotionReference) ||
+      (
+        standard.enabled &&
+        standard.supportsFullReference &&
+        standard.supportsMultiImage &&
+        standard.supportsAudio
+      )
+    );
+  }
+
+  if (key === 'video2video' || key === 'videoEdit2video') {
+    const motionControl = capability.modes.motionControl;
+    return Boolean(motionControl.enabled && motionControl.supportsMotionReference);
+  }
+
+  if (key === 'audio2video') {
+    return Boolean(standard.enabled && standard.supportsAudio);
+  }
+
+  return false;
 }
 
 export function getVideoPanelModeValidation(

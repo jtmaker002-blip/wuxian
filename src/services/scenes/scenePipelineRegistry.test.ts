@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_SCENE_IMAGE_MODEL, FALLBACK_SCENE_IMAGE_MODEL, SCENE_DEFINITIONS, getSceneDefinition } from './registry';
 import { getScenePipeline, pipelineRegistry } from '../pipelines/registry';
-import { createMockTask, getMockTaskStatus } from '../mock/tasks';
+import { cancelMockTask, createMockTask, getMockTaskStatus } from '../mock/tasks';
 import { SCENES } from '../../types/scene';
 
 describe('scene registry and mock task pipelines', () => {
@@ -74,7 +74,29 @@ describe('scene registry and mock task pipelines', () => {
     const [task] = await getMockTaskStatus([taskId]);
 
     expect(task.status).toBe('succeeded');
-    expect(task.result?.imageList).toHaveLength(4);
+    expect(task.result?.imageList).toHaveLength(1);
     expect(task.result?.structuredData?.storyboard).toHaveLength(4);
+  });
+
+  it('local mock scene tasks use a local id and stay cancelled after polling', async () => {
+    const pipeline = getScenePipeline(SCENES.PLOT_DEDUCTION_FOUR_GRID);
+    const request = await pipeline!.buildRequest({
+      nodeId: 'node-cancel',
+      projectId: 'project-1',
+      scene: SCENES.PLOT_DEDUCTION_FOUR_GRID,
+      params: {
+        storyText: '取消中的故事',
+      },
+    });
+    const { taskId } = await createMockTask(Array.isArray(request) ? request[0] : request);
+
+    expect(taskId).toMatch(/^local_/);
+    await cancelMockTask(taskId);
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    const [task] = await getMockTaskStatus([taskId]);
+
+    expect(task.status).toBe('cancelled');
+    expect(task.errorMessage).toBe('任务已取消');
+    expect(task.childTasks || []).toEqual([]);
   });
 });

@@ -487,6 +487,7 @@ export default function App() {
     updatePanning,
     endPanning,
     isDragging,
+    draggingNodeId,
     releasePointerCapture
   } = useNodeDragging();
 
@@ -594,7 +595,7 @@ export default function App() {
     nodes,
     updateNode
   });
-  const { runSceneNode } = useSceneTaskRunner({
+  const { runSceneNode, cancelSceneTasks } = useSceneTaskRunner({
     nodes,
     projectId: workflowId || 'local-draft-project',
     setNodes,
@@ -709,11 +710,13 @@ export default function App() {
       params.prompt = scenePrompt;
     }
 
+    const newNodeX = sourceNode.x + sourceDimensions.width + 120;
+    const newNodeY = sourceNode.y + 24;
     const newNode: NodeData = {
       id: nodeId,
       type: nodeType,
-      x: sourceNode.x,
-      y: sourceNode.y + sourceDimensions.height + 48,
+      x: newNodeX,
+      y: newNodeY,
       prompt: scenePrompt || definition.defaultParams.storyText || definition.defaultParams.prompt || definition.label,
       status: NodeStatus.IDLE,
       model: 'mock-scene-pipeline',
@@ -734,8 +737,8 @@ export default function App() {
     setSelectedNodeIds([nodeId]);
     setViewport((current) => ({
       ...current,
-      x: window.innerWidth / 2 - (newNode.x + 260) * current.zoom,
-      y: window.innerHeight / 2 - (newNode.y + 220) * current.zoom,
+      x: window.innerWidth / 2 - (newNodeX + 260) * current.zoom,
+      y: window.innerHeight / 2 - (newNodeY + 220) * current.zoom,
     }));
     setPendingSceneAutoRunIds((prev) => [...prev, nodeId]);
   }, [nodes, setNodes, setSelectedNodeIds]);
@@ -766,32 +769,16 @@ export default function App() {
   }, [nodes, setNodes, setSelectedNodeIds]);
 
   const handleCancelSelectedSceneTasks = React.useCallback(async (nodeIds: string[]) => {
-    const taskIds = nodes
-      .filter((node) => nodeIds.includes(node.id) && node.scene && node.taskInfo?.loading && node.taskInfo.taskId)
-      .map((node) => node.taskInfo!.taskId!)
-      .filter(Boolean);
-    if (taskIds.length === 0) return;
-    await cancelTasks(taskIds).catch(() => []);
-    setNodes((prev) => prev.map((node) => (
-      nodeIds.includes(node.id) && node.scene && node.taskInfo?.loading
-        ? {
-          ...node,
-          status: NodeStatus.ERROR,
-          taskInfo: {
-            ...node.taskInfo,
-            loading: false,
-            status: 'cancelled',
-            failedReason: '任务已取消',
-          },
-          errorMessage: '任务已取消',
-        }
-        : node
-    )));
-  }, [nodes, setNodes]);
+    await cancelSceneTasks(nodeIds);
+  }, [cancelSceneTasks]);
 
   const handleCancelNodeGeneration = React.useCallback(async (nodeId: string) => {
     const node = nodes.find((candidate) => candidate.id === nodeId);
     if (!node) return;
+    if (node.scene) {
+      const cancelled = await cancelSceneTasks([nodeId]);
+      if (cancelled) return;
+    }
     const taskId = node.taskInfo?.taskId;
     if (taskId && node.taskInfo?.loading) {
       await cancelTasks([taskId]).catch(() => []);
@@ -814,7 +801,7 @@ export default function App() {
       return;
     }
     cancelGeneration(nodeId);
-  }, [cancelGeneration, nodes, setNodes]);
+  }, [cancelGeneration, cancelSceneTasks, nodes, setNodes]);
 
   // Create new canvas
   const handleNewCanvas = () => {
@@ -1986,7 +1973,7 @@ export default function App() {
                 onCreateNineGridTiles={handleCreateNineGridTiles}
                 onLaunchSceneFromImage={handleLaunchSceneFromImage}
                 selected={selectedNodeIds.includes(node.id)}
-                showControls={selectedNodeIds.length === 1 && selectedNodeIds.includes(node.id)}
+                showControls={!isDragging && selectedNodeIds.length === 1 && selectedNodeIds.includes(node.id)}
                 onNodePointerDown={(e) => {
                   // If shift is held, preserve selection for multi-drag/multi-select
                   if (e.shiftKey) {
@@ -2020,6 +2007,7 @@ export default function App() {
                 onImageToVideo={handleImageToVideo}
                 onChangeAngleGenerate={handleChangeAngleGenerate}
                 zoom={viewport.zoom}
+                isActivelyDragging={draggingNodeId === node.id}
                 onMouseEnter={() => setCanvasHoveredNodeId(node.id)}
                 onMouseLeave={() => setCanvasHoveredNodeId(null)}
                 canvasTheme={canvasTheme}

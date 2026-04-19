@@ -23,32 +23,31 @@ describe('scenePromptTemplates', () => {
     expect(prompt).toContain('no text labels');
   });
 
-  it('builds distinct camera prompts for the nine-grid workflow', () => {
+  it('builds one built-in contact-sheet prompt for the nine-grid workflow', () => {
     const prompts = buildSceneImagePrompts({
       scene: 'multi_view_nine_grid',
       params: { prompt: '同一人物站在香港街头' },
-      count: 9,
+      count: 1,
     });
 
-    expect(prompts).toHaveLength(9);
+    expect(prompts).toHaveLength(1);
     expect(prompts[0]).toContain('front establishing wide');
-    expect(prompts[4]).toContain('rear camera angle');
-    expect(prompts[8]).toContain('macro/detail insert');
-    expect(new Set(prompts).size).toBe(9);
+    expect(prompts[0]).toContain('rear camera angle');
+    expect(prompts[0]).toContain('macro/detail insert');
+    expect(prompts[0]).toContain('ONE finished image only');
   });
 
-  it('keeps 25-grid prompts narrative-continuous instead of random variations', () => {
+  it('keeps 25-grid contact-sheet prompts narrative-continuous instead of random variations', () => {
     const prompts = buildSceneImagePrompts({
       scene: 'coherent_storyboard_25',
       params: { storyText: '角色穿越雨夜街区' },
-      count: 25,
+      count: 1,
     });
 
-    expect(prompts).toHaveLength(25);
-    expect(prompts[0]).toContain('Act: opening');
-    expect(prompts[12]).toContain('Act: complication');
-    expect(prompts[24]).toContain('Act: resolution');
-    expect(prompts[10]).toContain('continuous 5x5 storyboard sequence');
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain('single 5x5 coherent storyboard contact sheet');
+    expect(prompts[0]).toContain('5-act progression');
+    expect(prompts[0]).toContain('ONE finished image only');
   });
 
   it('uses scene-specific planner instructions for storyboard JSON', () => {
