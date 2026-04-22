@@ -6,6 +6,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+.curl-login-*.txt
 
 node_modules
 dist
@@ -32,6 +33,7 @@ library/
 
 # docs
 docs/cloud_migration_plan.md
+settings-preview.html
 
 # Python virtual environment (local models)
 venv/
